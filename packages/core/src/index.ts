@@ -1,0 +1,13 @@
+export {
+  BOT_HOMEPAGE_TEMPLATES,
+  DEFAULT_BOT_HOMEPAGE_TEMPLATE_ID,
+  isBotHomepageTemplateId,
+  normalizeBotHomepageTemplateId,
+  type BotHomepageTemplateDefinition,
+  type BotHomepageTemplateId,
+} from './templates/botHomepageTemplates.js';
+export {
+  createUnsupportedResourceEnvelope,
+  normalizeResourceSections,
+  normalizeTrustedActions,
+} from './resource/resourceEnvelope.js';
