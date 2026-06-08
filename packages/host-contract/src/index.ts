@@ -1,0 +1,192 @@
+export type BrowserHostKind = 'standalone' | 'oac' | 'idbots';
+export type BrowserActorKind = 'wallet' | 'oac-bot' | 'idbots-agent' | 'idbots-account';
+
+export type BrowserActorCapability =
+  | 'private-chat'
+  | 'service-call'
+  | 'wallet-sign'
+  | 'payment'
+  | 'template-settings'
+  | 'profile-management'
+  | 'chat-configuration'
+  | 'resource-sharing'
+  | 'message-view';
+
+export interface BrowserCommandSuccess<T> {
+  ok: true;
+  state: 'success';
+  data: T;
+}
+
+export interface BrowserCommandFailure {
+  ok: false;
+  state: 'failed';
+  code: string;
+  message: string;
+}
+
+export type BrowserCommandResult<T> = BrowserCommandSuccess<T> | BrowserCommandFailure;
+
+export interface BrowserActor {
+  id: string;
+  label: string;
+  kind: BrowserActorKind;
+  globalMetaId?: string;
+  address?: string;
+  avatar?: string;
+  isDefault: boolean;
+  capabilities: BrowserActorCapability[];
+}
+
+export type BrowserTrustedActionKind =
+  | 'private-chat'
+  | 'service-call'
+  | 'copy-uri'
+  | 'open-settings'
+  | 'login'
+  | 'wallet-sign'
+  | 'payment'
+  | 'edit-profile'
+  | 'configure-chat'
+  | 'view-messages'
+  | 'share-resource';
+
+export interface BrowserTrustedActionDescriptor {
+  id: string;
+  label: string;
+  kind: BrowserTrustedActionKind;
+  enabled: boolean;
+  payload?: Record<string, unknown>;
+}
+
+export interface BrowserRuntimeLabels {
+  actorChip: string;
+  noActorTitle: string;
+  noActorBody: string;
+  noActorAction?: {
+    label: string;
+    href?: string;
+    actionKind?: BrowserTrustedActionKind;
+  };
+}
+
+export interface BrowserRuntimeSnapshot {
+  host: {
+    kind: BrowserHostKind;
+    name: string;
+    localMode: boolean;
+    publicBaseUrl?: string;
+  };
+  actors: BrowserActor[];
+  defaultActor: BrowserActor | null;
+  defaultUri: string | null;
+  features: {
+    privateChat: boolean;
+    serviceCall: boolean;
+    cacheManagement: boolean;
+    templateSettings: boolean;
+    walletLogin: boolean;
+  };
+  labels: BrowserRuntimeLabels;
+}
+
+export interface BrowserResourceOwner {
+  kind: 'bot' | 'metaapp-publisher' | 'wallet-user' | 'unknown';
+  globalMetaId?: string;
+  address?: string;
+  label: string;
+  avatar?: string;
+  verificationState: 'verified' | 'partial' | 'unverified';
+}
+
+export interface BrowserOwnerAffinity {
+  ownerActorId: string;
+  ownerGlobalMetaId?: string;
+  capabilities: BrowserActorCapability[];
+  actions: BrowserTrustedActionDescriptor[];
+}
+
+export interface BrowserRendererDescriptor {
+  type: 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'unsupported';
+  contentType: string;
+  templateId?: string;
+  url?: string;
+  data?: Record<string, unknown>;
+  error?: string;
+}
+
+export interface BrowserResourceSection {
+  id: string;
+  title: string;
+  kind: 'services' | 'skills' | 'buses' | 'buzzes' | 'apps' | 'activity' | 'generic-list';
+  items: Array<Record<string, unknown>>;
+}
+
+export interface BrowserResourceEnvelope {
+  uri: string;
+  normalizedUri: string;
+  resourceType: 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'unknown';
+  title: string;
+  owner?: BrowserResourceOwner;
+  ownerAffinity?: BrowserOwnerAffinity | null;
+  renderer: BrowserRendererDescriptor;
+  actions: BrowserTrustedActionDescriptor[];
+  sections: BrowserResourceSection[];
+  raw?: unknown;
+}
+
+export interface BrowserSettingsSnapshot {
+  browser: Record<string, unknown>;
+  effectiveBrowser: Record<string, unknown>;
+  defaults: Record<string, unknown>;
+}
+
+export type BrowserCacheSnapshot = Record<string, unknown>;
+export type BrowserCacheClearResult = Record<string, unknown>;
+
+export interface BrowserActorInput {
+  actorId?: string;
+}
+
+export interface BrowserResolveInput extends BrowserActorInput {
+  uri: string;
+}
+
+export interface BrowserSettingsUpdateInput extends BrowserActorInput {
+  browser?: Record<string, unknown>;
+}
+
+export interface BrowserTrustedActionInput extends BrowserActorInput {
+  resourceUri: string;
+  kind: BrowserTrustedActionKind;
+  payload?: Record<string, unknown>;
+}
+
+export interface BrowserTrustedActionResult {
+  kind: BrowserTrustedActionKind;
+  handled: boolean;
+  data?: {
+    href?: string;
+    route?: string;
+    copiedText?: string;
+    message?: string;
+  };
+}
+
+export interface BrowserHostAdapter {
+  getRuntime(input?: BrowserActorInput): Promise<BrowserCommandResult<BrowserRuntimeSnapshot>>;
+  resolveResource(input: BrowserResolveInput): Promise<BrowserCommandResult<BrowserResourceEnvelope>>;
+  getSettings(input?: BrowserActorInput): Promise<BrowserCommandResult<BrowserSettingsSnapshot>>;
+  updateSettings(input: BrowserSettingsUpdateInput): Promise<BrowserCommandResult<BrowserSettingsSnapshot>>;
+  getCache(input?: BrowserActorInput): Promise<BrowserCommandResult<BrowserCacheSnapshot>>;
+  clearCache(input: BrowserActorInput & { scope?: string }): Promise<BrowserCommandResult<BrowserCacheClearResult>>;
+  runTrustedAction(input: BrowserTrustedActionInput): Promise<BrowserCommandResult<BrowserTrustedActionResult>>;
+}
+
+export function browserSuccess<T>(data: T): BrowserCommandSuccess<T> {
+  return { ok: true, state: 'success', data };
+}
+
+export function browserFailure(code: string, message: string): BrowserCommandFailure {
+  return { ok: false, state: 'failed', code, message };
+}

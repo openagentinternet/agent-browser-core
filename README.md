@@ -11,10 +11,15 @@ Open Agent Connect. The goal is to maintain one Browser codebase that can run as
 
 ## Current Status
 
-This repository has been created for planning and extraction work. The first committed artifacts
-are the independent-project architecture spec and the bootstrap/extraction implementation plan.
+This repository contains the first testable Browser foundation:
 
-No Browser runtime code has been migrated yet.
+- host-neutral Browser contract package;
+- core resource and template package;
+- fake-host conformance harness;
+- architecture spec and bootstrap extraction plan.
+
+Full Browser UI migration, standalone Metalet wallet hosting, OAC package consumption, and IDBots
+integration are planned as follow-up implementation phases.
 
 ## Reference Documents
 
