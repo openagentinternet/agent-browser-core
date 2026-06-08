@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -50,6 +50,38 @@ function assertPackIncludes(files, target, workspace) {
   assert.equal(files.includes(packagePath(target)), true, `${workspace} packs ${target}`);
 }
 
+function waitForOutput(child, pattern) {
+  return new Promise((resolve, reject) => {
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+    const finish = (error, value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.off('error', onError);
+      child.off('exit', onExit);
+      if (error) reject(error);
+      else resolve(value);
+    };
+    const onError = (error) => finish(error);
+    const onExit = (code, signal) => finish(new Error(`Command exited before expected output: code=${code} signal=${signal} stdout=${stdout} stderr=${stderr}`));
+    const timer = setTimeout(() => finish(new Error(`Timed out waiting for output. stdout=${stdout} stderr=${stderr}`)), 5000);
+
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk) => {
+      stdout += chunk;
+      if (pattern.test(stdout)) finish(null, stdout);
+    });
+    child.stderr.on('data', (chunk) => {
+      stderr += chunk;
+    });
+    child.on('error', onError);
+    child.on('exit', onExit);
+  });
+}
+
 test('published Browser packages exclude TypeScript build info files', async () => {
   for (const workspace of WORKSPACES) {
     const files = await packFiles(workspace.name);
@@ -73,15 +105,21 @@ test('published Browser packages include declared entrypoints', async () => {
   }
 });
 
-test('standalone package bin runs through a symlinked command path', async () => {
+test('standalone package bin starts through a symlinked command path', async () => {
   const tempDir = await mkdtemp(join(tmpdir(), 'agent-browser-bin-'));
+  let child = null;
   try {
     const commandPath = join(tempDir, 'agent-browser-standalone');
     await symlink(new URL('../../packages/host-standalone/dist/main.js', import.meta.url), commandPath);
 
-    const { stdout } = await execFileAsync(commandPath);
-    assert.equal(stdout, 'Agent Internet Browser standalone server is not implemented yet.\n');
+    child = spawn(commandPath, ['--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const stdout = await waitForOutput(child, /Agent Internet Browser listening at http:\/\/127\.0\.0\.1:\d+\/browser\n/);
+    assert.match(stdout, /Agent Internet Browser listening at http:\/\/127\.0\.0\.1:\d+\/browser\n/);
   } finally {
+    if (child && child.exitCode === null) {
+      child.kill();
+      await new Promise((resolve) => child.once('exit', resolve));
+    }
     await rm(tempDir, { recursive: true, force: true });
   }
 });
