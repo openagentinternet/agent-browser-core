@@ -1,0 +1,107 @@
+import type {
+  BrowserRendererDescriptor,
+  BrowserResourceEnvelope,
+  BrowserResourceSection,
+  BrowserTrustedActionDescriptor,
+} from '@openagentinternet/agent-browser-host-contract';
+
+export function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  })[char] ?? char);
+}
+
+export function safeResourceUrl(rawValue: unknown): string {
+  const value = String(rawValue ?? '').trim();
+  if (!value) return '';
+  if (value.startsWith('/') && !value.startsWith('//')) return value;
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : '';
+  } catch {
+    return '';
+  }
+}
+
+function text(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function sectionItemTitle(item: Record<string, unknown>): string {
+  return text(item.title) || text(item.displayName) || text(item.name) || text(item.id) || 'Untitled';
+}
+
+function sectionItemDescription(item: Record<string, unknown>): string {
+  return text(item.description) || text(item.summary) || text(item.bio);
+}
+
+function renderActions(actions: readonly BrowserTrustedActionDescriptor[]): string {
+  if (actions.length === 0) return '';
+  return `<div class="browser-action-row">${actions.map((action) => (
+    `<button type="button" data-browser-action="${escapeHtml(action.kind)}" data-browser-action-id="${escapeHtml(action.id)}"${action.enabled ? '' : ' disabled'}>${escapeHtml(action.label)}</button>`
+  )).join('')}</div>`;
+}
+
+function renderSection(section: BrowserResourceSection): string {
+  return `<section class="browser-resource-section" data-browser-section="${escapeHtml(section.kind)}">
+    <h3>${escapeHtml(section.title)}</h3>
+    <div class="browser-resource-list">
+      ${section.items.map((item) => `<article class="browser-resource-list-item">
+        <strong>${escapeHtml(sectionItemTitle(item))}</strong>
+        ${sectionItemDescription(item) ? `<p>${escapeHtml(sectionItemDescription(item))}</p>` : ''}
+      </article>`).join('')}
+    </div>
+  </section>`;
+}
+
+export function renderBotPageHtml(resource: BrowserResourceEnvelope): string {
+  const templateId = resource.renderer.templateId === 'compact-list' ? 'compact-list' : 'document';
+  const avatarUrl = safeResourceUrl(resource.owner?.avatar);
+  return `<article class="browser-bot-page browser-bot-template-${escapeHtml(templateId)}">
+    <header class="browser-bot-hero">
+      ${avatarUrl ? `<img class="browser-bot-avatar" src="${escapeHtml(avatarUrl)}" alt="">` : '<span class="browser-bot-avatar browser-avatar-fallback">B</span>'}
+      <div>
+        <h2>${escapeHtml(resource.title)}</h2>
+        ${resource.owner?.globalMetaId ? `<p>${escapeHtml(resource.owner.globalMetaId)}</p>` : ''}
+      </div>
+    </header>
+    ${renderActions(resource.actions)}
+    <div class="browser-resource-sections">
+      ${resource.sections.map(renderSection).join('')}
+    </div>
+  </article>`;
+}
+
+function renderUrlRenderer(renderer: BrowserRendererDescriptor, className: string, tag: 'iframe' | 'img' | 'video'): string {
+  const url = safeResourceUrl(renderer.url);
+  if (!url) {
+    return '<section class="browser-empty-state"><h2>Renderer URL blocked</h2></section>';
+  }
+  if (tag === 'iframe' && className === 'browser-html-frame') {
+    return `<iframe class="${className}" sandbox="allow-scripts" src="${escapeHtml(url)}" title="MetaApp preview"></iframe>`;
+  }
+  if (tag === 'iframe' && className === 'browser-pdf') {
+    return `<iframe class="${className}" sandbox="" src="${escapeHtml(url)}" title="Document preview"></iframe>`;
+  }
+  if (tag === 'iframe') {
+    return `<iframe class="${className}" src="${escapeHtml(url)}" title="Document preview"></iframe>`;
+  }
+  if (tag === 'img') {
+    return `<img class="${className}" src="${escapeHtml(url)}" alt="">`;
+  }
+  return `<video class="${className}" src="${escapeHtml(url)}" controls></video>`;
+}
+
+export function renderResourceHtml(resource: BrowserResourceEnvelope): string {
+  const renderer = resource.renderer;
+  if (renderer.type === 'bot-page') return renderBotPageHtml(resource);
+  if (renderer.type === 'html-iframe') return renderUrlRenderer(renderer, 'browser-html-frame', 'iframe');
+  if (renderer.type === 'pdf') return renderUrlRenderer(renderer, 'browser-pdf', 'iframe');
+  if (renderer.type === 'image') return renderUrlRenderer(renderer, 'browser-image', 'img');
+  if (renderer.type === 'video') return renderUrlRenderer(renderer, 'browser-video', 'video');
+  return `<section class="browser-empty-state"><h2>Unsupported renderer</h2><p>${escapeHtml(renderer.error || renderer.contentType || 'This resource type is not supported yet.')}</p></section>`;
+}
