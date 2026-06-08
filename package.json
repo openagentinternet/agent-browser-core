@@ -1,0 +1,26 @@
+{
+  "name": "agent-browser-core-workspace",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Shared Agent Internet Browser core, UI, host contracts, and standalone web runtime.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/openagentinternet/agent-browser-core.git"
+  },
+  "engines": {
+    "node": ">=20 <25"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -b packages/host-contract packages/core packages/test-harness",
+    "test": "npm run build && node --test tests/**/*.test.mjs",
+    "verify": "npm run build && node --test tests/**/*.test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.7.3"
+  }
+}
