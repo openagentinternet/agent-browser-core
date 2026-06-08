@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import type { BrowserHostAdapter } from '@openagentinternet/agent-browser-host-contract';
+import type { BrowserHostAdapter, BrowserHostKind } from '@openagentinternet/agent-browser-host-contract';
 
 export interface BrowserHostConformanceInput {
   adapter: BrowserHostAdapter;
-  expectedHostKind: 'standalone' | 'oac' | 'idbots';
+  expectedHostKind: BrowserHostKind;
   sampleUri: string;
 }
 
@@ -23,6 +23,20 @@ export async function assertBrowserHostConformance(input: BrowserHostConformance
   assert.equal(typeof settings.data.browser, 'object');
   assert.equal(typeof settings.data.effectiveBrowser, 'object');
   assert.equal(typeof settings.data.defaults, 'object');
+
+  const updatedSettings = await input.adapter.updateSettings({ browser: settings.data.browser });
+  assert.equal(updatedSettings.ok, true);
+  assert.equal(typeof updatedSettings.data.browser, 'object');
+  assert.equal(typeof updatedSettings.data.effectiveBrowser, 'object');
+  assert.equal(typeof updatedSettings.data.defaults, 'object');
+
+  const cache = await input.adapter.getCache();
+  assert.equal(cache.ok, true);
+  assert.equal(typeof cache.data, 'object');
+
+  const clearedCache = await input.adapter.clearCache({});
+  assert.equal(clearedCache.ok, true);
+  assert.equal(typeof clearedCache.data, 'object');
 
   const resolved = await input.adapter.resolveResource({ uri: input.sampleUri });
   assert.equal(resolved.ok, true);

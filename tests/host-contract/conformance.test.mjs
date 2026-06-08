@@ -23,7 +23,7 @@ test('fake standalone host satisfies Browser host conformance', async () => {
         labels: {
           actorChip: 'Wallet',
           noActorTitle: 'Connect Wallet',
-          noActorBody: 'Connect Metalet to use Browser actions.',
+          noActorBody: 'Connect a wallet to use Browser actions.',
           noActorAction: { label: 'Connect Wallet', actionKind: 'login' },
         },
       });
