@@ -15,9 +15,10 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b packages/host-contract packages/core packages/test-harness",
+    "build": "tsc -b packages/host-contract packages/core packages/ui packages/host-standalone packages/test-harness",
     "test": "npm run build && node --test tests/**/*.test.mjs",
-    "verify": "npm run build && node --test tests/**/*.test.mjs"
+    "verify": "npm run build && node --test tests/**/*.test.mjs",
+    "dev:standalone": "node packages/host-standalone/dist/main.js"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

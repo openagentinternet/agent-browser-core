@@ -1,0 +1,47 @@
+{
+  "name": "@openagentinternet/agent-browser-host-standalone",
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "agent-browser-standalone": "./dist/main.js"
+  },
+  "files": [
+    "dist/http.d.ts",
+    "dist/http.d.ts.map",
+    "dist/http.js",
+    "dist/http.js.map",
+    "dist/index.d.ts",
+    "dist/index.d.ts.map",
+    "dist/index.js",
+    "dist/index.js.map",
+    "dist/main.d.ts",
+    "dist/main.d.ts.map",
+    "dist/main.js",
+    "dist/main.js.map",
+    "dist/memoryHost.d.ts",
+    "dist/memoryHost.d.ts.map",
+    "dist/memoryHost.js",
+    "dist/memoryHost.js.map",
+    "dist/server.d.ts",
+    "dist/server.d.ts.map",
+    "dist/server.js",
+    "dist/server.js.map"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@openagentinternet/agent-browser-core": "0.1.0",
+    "@openagentinternet/agent-browser-host-contract": "0.1.0",
+    "@openagentinternet/agent-browser-ui": "0.1.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}

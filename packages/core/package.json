@@ -6,7 +6,14 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist/**"
+    "dist/index.d.ts",
+    "dist/index.d.ts.map",
+    "dist/index.js",
+    "dist/index.js.map",
+    "dist/bot-homepage/**",
+    "dist/resource/**",
+    "dist/templates/**",
+    "dist/uri/**"
   ],
   "exports": {
     ".": {
