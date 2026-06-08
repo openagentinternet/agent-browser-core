@@ -44,6 +44,17 @@ export async function assertBrowserHostConformance(input: BrowserHostConformance
   assert.equal(typeof resolved.data.normalizedUri, 'string');
   assert.equal(Array.isArray(resolved.data.actions), true);
   assert.equal(Array.isArray(resolved.data.sections), true);
+  if (resolved.data.status) {
+    assert.equal(typeof resolved.data.status.state, 'string');
+    assert.equal(typeof resolved.data.status.verificationState, 'string');
+    assert.equal(typeof resolved.data.status.message, 'string');
+  }
+  if (resolved.data.proof) {
+    assert.equal(typeof resolved.data.proof.verificationState, 'string');
+  }
+  if (resolved.data.source) {
+    assert.equal(typeof resolved.data.source.resolver, 'string');
+  }
 
   const unsupported = await input.adapter.runTrustedAction({
     resourceUri: input.sampleUri,

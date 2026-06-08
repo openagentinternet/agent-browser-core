@@ -106,6 +106,36 @@ export interface BrowserOwnerAffinity {
   actions: BrowserTrustedActionDescriptor[];
 }
 
+export type BrowserResolutionState = 'resolved' | 'loading' | 'not_found' | 'error';
+export type BrowserVerificationState = 'verified' | 'partial' | 'unverified';
+
+export interface BrowserResolutionStatus {
+  state: BrowserResolutionState;
+  verificationState: BrowserVerificationState;
+  message: string;
+}
+
+export interface BrowserProofSummary {
+  txid?: string;
+  pinId?: string;
+  protocolPath?: string;
+  contentHash?: string;
+  publisherGlobalMetaId?: string;
+  explorerUrl?: string;
+  verificationState: BrowserVerificationState;
+  details?: Record<string, unknown>;
+}
+
+export interface BrowserSourceSummary {
+  resolver: string;
+  url?: string;
+  fetchedAt?: number;
+  indexedAt?: number;
+  stale?: boolean;
+  schemaVersion?: string;
+  raw?: Record<string, unknown>;
+}
+
 export interface BrowserRendererDescriptor {
   type: 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'unsupported';
   contentType: string;
@@ -132,6 +162,9 @@ export interface BrowserResourceEnvelope {
   renderer: BrowserRendererDescriptor;
   actions: BrowserTrustedActionDescriptor[];
   sections: BrowserResourceSection[];
+  status?: BrowserResolutionStatus;
+  proof?: BrowserProofSummary;
+  source?: BrowserSourceSummary;
   raw?: unknown;
 }
 

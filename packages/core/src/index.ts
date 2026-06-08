@@ -11,3 +11,12 @@ export {
   normalizeResourceSections,
   normalizeTrustedActions,
 } from './resource/resourceEnvelope.js';
+export {
+  parseBrowserUri,
+  type BrowserUriScheme,
+  type ParsedBrowserUri,
+} from './uri/browserUri.js';
+export {
+  buildBotHomepageEnvelope,
+  type BuildBotHomepageEnvelopeInput,
+} from './bot-homepage/botHomepageEnvelope.js';
