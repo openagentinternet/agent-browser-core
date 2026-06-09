@@ -18,6 +18,7 @@
     "build": "tsc -b packages/host-contract packages/core packages/ui packages/host-standalone packages/test-harness",
     "test": "npm run build && node --test tests/**/*.test.mjs",
     "verify": "npm run build && node --test tests/**/*.test.mjs",
+    "verify:release-version": "node scripts/verify-release-version.mjs",
     "dev:standalone": "node packages/host-standalone/dist/main.js"
   },
   "devDependencies": {
