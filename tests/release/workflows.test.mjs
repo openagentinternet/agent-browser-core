@@ -14,6 +14,9 @@ test("release workflow delegates verified package publishing to script", async (
 
   assert.match(workflow, /tags:\s*\n\s*- 'v\*\.\*\.\*'/);
   assert.match(workflow, /id-token:\s*write/);
+  assert.match(workflow, /fetch-depth:\s*0/);
+  assert.match(workflow, /git fetch origin main/);
+  assert.match(workflow, /git merge-base --is-ancestor "\$GITHUB_SHA" origin\/main/);
   assert.match(workflow, /node-version:\s*22\.14\.0/);
   assert.match(workflow, /npm install -g npm@11\.5\.1/);
   assert.match(workflow, /npm --version/);
