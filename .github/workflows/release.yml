@@ -20,8 +20,8 @@ jobs:
 
       - name: Verify tag commit is on main
         run: |
-          git fetch origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          git fetch origin main:refs/remotes/origin/main
+          git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main
 
       - uses: actions/setup-node@v4
         with:
