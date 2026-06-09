@@ -12,7 +12,7 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "agent-browser-standalone": "./dist/main.js"
+    "agent-browser-standalone": "dist/main.js"
   },
   "files": [
     "dist/http.d.ts",
