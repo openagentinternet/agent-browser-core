@@ -11,15 +11,17 @@ Open Agent Connect. The goal is to maintain one Browser codebase that can run as
 
 ## Current Status
 
-This repository contains the first testable Browser foundation:
+This repository contains the first shared Browser foundation:
 
 - host-neutral Browser contract package;
-- core resource and template package;
-- fake-host conformance harness;
-- architecture spec and bootstrap extraction plan.
+- core resource, URI, and Bot homepage envelope package;
+- shared Browser UI package with shell and renderer helpers;
+- memory-backed standalone development host;
+- fake-host and standalone conformance tests;
+- architecture spec plus Phase 1 and Phase 2 implementation plans.
 
-Full Browser UI migration, standalone Metalet wallet hosting, OAC package consumption, and IDBots
-integration are planned as follow-up implementation phases.
+Full OAC package consumption, public Metalet wallet login, production standalone hosting, package
+publishing, and IDBots integration are planned as follow-up implementation phases.
 
 ## Reference Documents
 

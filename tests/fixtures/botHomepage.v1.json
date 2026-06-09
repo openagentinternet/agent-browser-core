@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "botHomepage.v1",
+  "globalMetaId": "idq1fixturebot",
+  "profile": {
+    "name": "Fixture Bot",
+    "avatar": "https://so.example.test/content/avatar-pin",
+    "bio": "Builds Agent Browser fixtures.",
+    "address": "1FixtureAddress"
+  },
+  "homepage": {
+    "summary": "A Bot homepage used by package tests."
+  },
+  "identity": {
+    "txid": "identity-txid",
+    "pinId": "identity-pin"
+  },
+  "services": [
+    {
+      "id": "svc-review",
+      "currentPinId": "service-pin-1",
+      "displayName": "Fixture Review",
+      "description": "Reviews Browser templates."
+    }
+  ],
+  "skills": [
+    {
+      "name": "Template Authoring",
+      "description": "Creates Bot homepage layouts."
+    }
+  ],
+  "buses": [
+    {
+      "name": "Fixture Bus",
+      "description": "Coordinates test traffic."
+    }
+  ],
+  "buzz": [
+    {
+      "title": "Template update",
+      "description": "Published a compact renderer."
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "name": "@openagentinternet/agent-browser-ui",
+  "version": "0.1.0",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist/browserPageHtml.d.ts",
+    "dist/browserPageHtml.d.ts.map",
+    "dist/browserPageHtml.js",
+    "dist/browserPageHtml.js.map",
+    "dist/index.d.ts",
+    "dist/index.d.ts.map",
+    "dist/index.js",
+    "dist/index.js.map",
+    "dist/menuModel.d.ts",
+    "dist/menuModel.d.ts.map",
+    "dist/menuModel.js",
+    "dist/menuModel.js.map",
+    "dist/pageDefinition.d.ts",
+    "dist/pageDefinition.d.ts.map",
+    "dist/pageDefinition.js",
+    "dist/pageDefinition.js.map",
+    "dist/renderers.d.ts",
+    "dist/renderers.d.ts.map",
+    "dist/renderers.js",
+    "dist/renderers.js.map"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "dependencies": {
+    "@openagentinternet/agent-browser-core": "0.1.0",
+    "@openagentinternet/agent-browser-host-contract": "0.1.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json"
+  }
+}
