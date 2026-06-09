@@ -1,0 +1,15 @@
+{
+  "version": "0.1.0",
+  "packages": {
+    "@openagentinternet/agent-browser-host-contract": "0.1.0",
+    "@openagentinternet/agent-browser-core": "0.1.0",
+    "@openagentinternet/agent-browser-ui": "0.1.0",
+    "@openagentinternet/agent-browser-host-standalone": "0.1.0",
+    "@openagentinternet/agent-browser-test-harness": "0.1.0"
+  },
+  "hosts": {
+    "standalone": "development-preview",
+    "oac": "not-integrated",
+    "idbots": "not-integrated"
+  }
+}

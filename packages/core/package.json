@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist-cjs/index.js",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist/index.d.ts",
@@ -13,12 +14,20 @@
     "dist/bot-homepage/**",
     "dist/resource/**",
     "dist/templates/**",
-    "dist/uri/**"
+    "dist/uri/**",
+    "dist-cjs/package.json",
+    "dist-cjs/index.js",
+    "dist-cjs/index.js.map",
+    "dist-cjs/bot-homepage/**",
+    "dist-cjs/resource/**",
+    "dist-cjs/templates/**",
+    "dist-cjs/uri/**"
   ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist-cjs/index.js"
     }
   },
   "dependencies": {

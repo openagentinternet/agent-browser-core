@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
-import { mkdtemp, readFile, rm, symlink } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -36,6 +36,14 @@ async function packFiles(workspace) {
   assert.equal(Array.isArray(parsed), true);
   assert.equal(parsed.length, 1);
   return parsed[0].files.map((file) => file.path);
+}
+
+async function packTarball(workspace, destination) {
+  const { stdout } = await execFileAsync('npm', ['pack', '--workspace', workspace, '--pack-destination', destination]);
+  const tarballName = stdout.trim().split('\n').at(-1);
+  assert.equal(typeof tarballName, 'string', `${workspace} pack prints tarball path`);
+  assert.notEqual(tarballName, '', `${workspace} pack prints tarball path`);
+  return join(destination, tarballName);
 }
 
 async function packageManifest(manifestUrl) {
@@ -82,10 +90,12 @@ function waitForOutput(child, pattern) {
   });
 }
 
-test('published Browser packages exclude TypeScript build info files', async () => {
+test('published Browser packages exclude source and TypeScript build artifact files', async () => {
   for (const workspace of WORKSPACES) {
     const files = await packFiles(workspace.name);
-    assert.equal(files.some((file) => file.endsWith('.tsbuildinfo')), false, workspace.name);
+    assert.equal(files.some((file) => file.endsWith('.tsbuildinfo')), false, `${workspace.name} excludes .tsbuildinfo`);
+    assert.equal(files.some((file) => file === 'src' || file.startsWith('src/')), false, `${workspace.name} excludes src/`);
+    assert.equal(files.some((file) => file.endsWith('.ts') && !file.endsWith('.d.ts')), false, `${workspace.name} excludes TypeScript source`);
   }
 });
 
@@ -95,9 +105,12 @@ test('published Browser packages include declared entrypoints', async () => {
     const manifest = await packageManifest(workspace.manifestUrl);
 
     assertPackIncludes(files, manifest.main, workspace.name);
+    assertPackIncludes(files, manifest.module, workspace.name);
     assertPackIncludes(files, manifest.types, workspace.name);
     assertPackIncludes(files, manifest.exports['.'].import, workspace.name);
+    assertPackIncludes(files, manifest.exports['.'].require, workspace.name);
     assertPackIncludes(files, manifest.exports['.'].types, workspace.name);
+    assertPackIncludes(files, 'dist-cjs/package.json', workspace.name);
 
     for (const target of Object.values(manifest.bin ?? {})) {
       assertPackIncludes(files, target, workspace.name);
@@ -105,13 +118,21 @@ test('published Browser packages include declared entrypoints', async () => {
   }
 });
 
-test('standalone package bin starts through a symlinked command path', async () => {
+test('standalone package bin starts through an installed command path', async () => {
   const tempDir = await mkdtemp(join(tmpdir(), 'agent-browser-bin-'));
   let child = null;
   try {
-    const commandPath = join(tempDir, 'agent-browser-standalone');
-    await symlink(new URL('../../packages/host-standalone/dist/main.js', import.meta.url), commandPath);
+    const tarballs = [];
+    for (const workspace of WORKSPACES) {
+      tarballs.push(await packTarball(workspace.name, tempDir));
+    }
 
+    await writeFile(join(tempDir, 'package.json'), '{"private":true}\n', 'utf8');
+    await execFileAsync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', ...tarballs], {
+      cwd: tempDir,
+    });
+
+    const commandPath = join(tempDir, 'node_modules', '.bin', 'agent-browser-standalone');
     child = spawn(commandPath, ['--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
     const stdout = await waitForOutput(child, /Agent Internet Browser listening at http:\/\/127\.0\.0\.1:\d+\/browser\n/);
     assert.match(stdout, /Agent Internet Browser listening at http:\/\/127\.0\.0\.1:\d+\/browser\n/);
