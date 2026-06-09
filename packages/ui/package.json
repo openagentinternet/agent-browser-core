@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "license": "MIT",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist-cjs/index.js",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
     "dist/browserPageHtml.d.ts",
@@ -25,12 +26,24 @@
     "dist/renderers.d.ts",
     "dist/renderers.d.ts.map",
     "dist/renderers.js",
-    "dist/renderers.js.map"
+    "dist/renderers.js.map",
+    "dist-cjs/package.json",
+    "dist-cjs/browserPageHtml.js",
+    "dist-cjs/browserPageHtml.js.map",
+    "dist-cjs/index.js",
+    "dist-cjs/index.js.map",
+    "dist-cjs/menuModel.js",
+    "dist-cjs/menuModel.js.map",
+    "dist-cjs/pageDefinition.js",
+    "dist-cjs/pageDefinition.js.map",
+    "dist-cjs/renderers.js",
+    "dist-cjs/renderers.js.map"
   ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "require": "./dist-cjs/index.js"
     }
   },
   "dependencies": {

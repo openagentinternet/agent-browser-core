@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.cjs.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist-cjs",
+    "tsBuildInfoFile": "dist-cjs/.tsbuildinfo",
+    "esModuleInterop": true
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}

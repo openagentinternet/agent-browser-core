@@ -82,10 +82,12 @@ function waitForOutput(child, pattern) {
   });
 }
 
-test('published Browser packages exclude TypeScript build info files', async () => {
+test('published Browser packages exclude source and TypeScript build artifact files', async () => {
   for (const workspace of WORKSPACES) {
     const files = await packFiles(workspace.name);
-    assert.equal(files.some((file) => file.endsWith('.tsbuildinfo')), false, workspace.name);
+    assert.equal(files.some((file) => file.endsWith('.tsbuildinfo')), false, `${workspace.name} excludes .tsbuildinfo`);
+    assert.equal(files.some((file) => file === 'src' || file.startsWith('src/')), false, `${workspace.name} excludes src/`);
+    assert.equal(files.some((file) => file.endsWith('.ts') && !file.endsWith('.d.ts')), false, `${workspace.name} excludes TypeScript source`);
   }
 });
 
@@ -95,9 +97,12 @@ test('published Browser packages include declared entrypoints', async () => {
     const manifest = await packageManifest(workspace.manifestUrl);
 
     assertPackIncludes(files, manifest.main, workspace.name);
+    assertPackIncludes(files, manifest.module, workspace.name);
     assertPackIncludes(files, manifest.types, workspace.name);
     assertPackIncludes(files, manifest.exports['.'].import, workspace.name);
+    assertPackIncludes(files, manifest.exports['.'].require, workspace.name);
     assertPackIncludes(files, manifest.exports['.'].types, workspace.name);
+    assertPackIncludes(files, 'dist-cjs/package.json', workspace.name);
 
     for (const target of Object.values(manifest.bin ?? {})) {
       assertPackIncludes(files, target, workspace.name);
