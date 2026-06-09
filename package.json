@@ -22,6 +22,8 @@
     "verify": "npm run build && node --test tests/**/*.test.mjs",
     "verify:packages": "npm run build && node --test tests/package/*.test.mjs",
     "verify:release-version": "node scripts/verify-release-version.mjs",
+    "publish:packages": "node scripts/publish-packages.mjs",
+    "publish:packages:dry-run": "node scripts/publish-packages.mjs --dry-run",
     "dev:standalone": "node packages/host-standalone/dist/main.js"
   },
   "devDependencies": {

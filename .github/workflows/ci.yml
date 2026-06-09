@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "codex/**"
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20.20.0
+
+      - run: npm ci
+      - run: npm run verify
+      - run: npm run verify:packages
+      - run: node scripts/verify-release-version.mjs v0.1.0

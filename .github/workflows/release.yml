@@ -1,0 +1,30 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          registry-url: https://registry.npmjs.org
+
+      - run: npm install -g npm@11.5.1
+      - run: npm --version
+      - run: npm ci
+      - run: npm run verify
+      - run: npm run verify:packages
+      - run: node scripts/verify-release-version.mjs "${{ github.ref_name }}"
+      - run: node scripts/publish-packages.mjs
