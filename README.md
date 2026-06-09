@@ -11,22 +11,48 @@ Open Agent Connect. The goal is to maintain one Browser codebase that can run as
 
 ## Current Status
 
-This repository contains the first shared Browser foundation:
+This repository contains the first pre-1.0 shared Browser package foundation:
 
 - host-neutral Browser contract package;
 - core resource, URI, and Bot homepage envelope package;
 - shared Browser UI package with shell and renderer helpers;
 - memory-backed standalone development host;
 - fake-host and standalone conformance tests;
-- architecture spec plus Phase 1 and Phase 2 implementation plans.
+- ESM and CommonJS package outputs for host compatibility;
+- package export, pack-content, release-version, and workflow verification tests;
+- CI and tag-triggered release workflow scaffolding.
 
-Full OAC package consumption, public Metalet wallet login, production standalone hosting, package
-publishing, and IDBots integration are planned as follow-up implementation phases.
+Full OAC package consumption, public Metalet wallet login, production standalone hosting, and IDBots
+integration are planned as follow-up implementation phases.
 
 ## Reference Documents
 
 - `docs/superpowers/specs/2026-06-08-agent-browser-core-independent-project-design.md`
 - `docs/superpowers/plans/2026-06-08-agent-browser-core-bootstrap-extraction.md`
+
+## Release Process
+
+The first package release is `v0.1.0`. Package publishing is tag-triggered through
+`.github/workflows/release.yml`.
+
+Before pushing a release tag:
+
+```bash
+PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" npm run verify
+PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" npm run verify:packages
+PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" node scripts/verify-release-version.mjs v0.1.0
+PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" npm run publish:packages:dry-run
+git diff --check
+```
+
+Do not run `npm publish` manually for normal releases. Configure npm trusted publishing for each
+publishable package, merge the release-ready branch to `main`, then tag and push the version tag
+from the same `main` commit:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
 
 ## Source Baseline
 

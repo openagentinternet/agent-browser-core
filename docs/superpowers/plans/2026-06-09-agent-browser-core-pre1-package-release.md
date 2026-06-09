@@ -112,7 +112,7 @@ All packages remain version `0.1.0` for the first pre-1.0 release unless the imp
 - Create: `tests/release/verifyReleaseVersion.test.mjs`
 - Modify: `package.json`
 
-- [ ] **Step 1: Write failing release version tests**
+- [x] **Step 1: Write failing release version tests**
 
 Create `tests/release/verifyReleaseVersion.test.mjs`:
 
@@ -206,7 +206,7 @@ test('verifyReleaseVersion rejects mismatched package and internal dependency ve
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -216,7 +216,7 @@ PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" node --test tests/release/ver
 
 Expected: FAIL because `scripts/verify-release-version.mjs` and `release/compatibility.json` do not exist.
 
-- [ ] **Step 3: Add workspace package list**
+- [x] **Step 3: Add workspace package list**
 
 Create `scripts/browser-workspaces.mjs`:
 
@@ -247,7 +247,7 @@ export const BROWSER_WORKSPACES = [
 export const BROWSER_PACKAGE_NAMES = BROWSER_WORKSPACES.map((workspace) => workspace.name);
 ```
 
-- [ ] **Step 4: Add release compatibility metadata**
+- [x] **Step 4: Add release compatibility metadata**
 
 Create `release/compatibility.json`:
 
@@ -269,7 +269,7 @@ Create `release/compatibility.json`:
 }
 ```
 
-- [ ] **Step 5: Add release version verifier**
+- [x] **Step 5: Add release version verifier**
 
 Create `scripts/verify-release-version.mjs`:
 
@@ -375,7 +375,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 ```
 
-- [ ] **Step 6: Add package scripts**
+- [x] **Step 6: Add package scripts**
 
 Modify the root `package.json` `scripts` object to include release verification:
 
@@ -391,7 +391,7 @@ Modify the root `package.json` `scripts` object to include release verification:
 }
 ```
 
-- [ ] **Step 7: Run focused release verification tests**
+- [x] **Step 7: Run focused release verification tests**
 
 Run:
 
@@ -405,7 +405,7 @@ Expected:
 - release test file passes;
 - verifier prints `Agent Browser Core release version verified: 0.1.0`.
 
-- [ ] **Step 8: Commit release metadata**
+- [x] **Step 8: Commit release metadata**
 
 Run:
 
@@ -436,7 +436,7 @@ Then use `metabot-post-buzz` with Bob (`--from bob`) to publish a development-jo
 - Modify: `packages/ui/package.json`
 - Modify: `tests/package/packContents.test.mjs`
 
-- [ ] **Step 1: Write failing package export interop tests**
+- [x] **Step 1: Write failing package export interop tests**
 
 Create `tests/package/exportsInterop.test.mjs`:
 
@@ -478,7 +478,7 @@ test('Browser packages can be required as CommonJS', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify CommonJS fails**
+- [x] **Step 2: Run test to verify CommonJS fails**
 
 Run:
 
@@ -489,7 +489,7 @@ PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" node --test tests/package/exp
 
 Expected: FAIL on the CommonJS `require(...)` test because the packages currently publish only ESM exports.
 
-- [ ] **Step 3: Add CommonJS TypeScript base config**
+- [x] **Step 3: Add CommonJS TypeScript base config**
 
 Create `tsconfig.cjs.base.json`:
 
@@ -508,7 +508,7 @@ Create `tsconfig.cjs.base.json`:
 }
 ```
 
-- [ ] **Step 4: Add per-package CommonJS configs**
+- [x] **Step 4: Add per-package CommonJS configs**
 
 Create `packages/host-contract/tsconfig.cjs.json`:
 
@@ -593,7 +593,7 @@ Create `packages/test-harness/tsconfig.cjs.json`:
 }
 ```
 
-- [ ] **Step 5: Add CommonJS package markers**
+- [x] **Step 5: Add CommonJS package markers**
 
 Create `scripts/write-cjs-package-markers.mjs`:
 
@@ -622,7 +622,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 ```
 
-- [ ] **Step 6: Update root build scripts**
+- [x] **Step 6: Update root build scripts**
 
 Modify the root `package.json` scripts to:
 
@@ -641,7 +641,7 @@ Modify the root `package.json` scripts to:
 }
 ```
 
-- [ ] **Step 7: Update package exports**
+- [x] **Step 7: Update package exports**
 
 For every package manifest in `packages/*/package.json`, keep `"type": "module"` and add:
 
@@ -752,7 +752,7 @@ For `packages/test-harness/package.json`, the `files` list should become:
 ]
 ```
 
-- [ ] **Step 8: Extend pack contents tests**
+- [x] **Step 8: Extend pack contents tests**
 
 Modify `tests/package/packContents.test.mjs` so `published Browser packages include declared entrypoints` also checks:
 
@@ -775,7 +775,7 @@ test('published Browser packages exclude source and TypeScript build artifacts',
 });
 ```
 
-- [ ] **Step 9: Run package build and interop tests**
+- [x] **Step 9: Run package build and interop tests**
 
 Run:
 
@@ -790,7 +790,7 @@ Expected:
 - `exportsInterop.test.mjs` proves `import` and `require` work.
 - `packContents.test.mjs` proves declared ESM/CJS entrypoints are packed and `.tsbuildinfo` is not packed.
 
-- [ ] **Step 10: Commit dual-output package build**
+- [x] **Step 10: Commit dual-output package build**
 
 Run:
 
@@ -812,7 +812,7 @@ Then use `metabot-post-buzz` with Bob (`--from bob`) to publish a development-jo
 - Create: `tests/release/workflows.test.mjs`
 - Modify: `package.json`
 
-- [ ] **Step 1: Write failing publish and workflow tests**
+- [x] **Step 1: Write failing publish and workflow tests**
 
 Create `tests/release/publishPackages.test.mjs`:
 
@@ -869,7 +869,7 @@ test('ci workflow runs package verification on pushes and pull requests', async 
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run:
 
@@ -879,7 +879,7 @@ PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" node --test tests/release/pub
 
 Expected: FAIL because `scripts/publish-packages.mjs` and workflow files do not exist.
 
-- [ ] **Step 3: Add publish script**
+- [x] **Step 3: Add publish script**
 
 Create `scripts/publish-packages.mjs`:
 
@@ -954,7 +954,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
 }
 ```
 
-- [ ] **Step 4: Add CI workflow**
+- [x] **Step 4: Add CI workflow**
 
 Create `.github/workflows/ci.yml`:
 
@@ -991,7 +991,7 @@ jobs:
         run: node scripts/verify-release-version.mjs v0.1.0
 ```
 
-- [ ] **Step 5: Add release workflow**
+- [x] **Step 5: Add release workflow**
 
 Create `.github/workflows/release.yml`:
 
@@ -1035,7 +1035,7 @@ jobs:
 
 The npm organization must configure trusted publishing for each publishable package before a real tag is pushed.
 
-- [ ] **Step 6: Add publish scripts to root package**
+- [x] **Step 6: Add publish scripts to root package**
 
 Modify the root `package.json` scripts to include:
 
@@ -1050,7 +1050,7 @@ Modify the root `package.json` scripts to include:
 
 Keep all scripts added in Task 1 and Task 2.
 
-- [ ] **Step 7: Run workflow and publish tests**
+- [x] **Step 7: Run workflow and publish tests**
 
 Run:
 
@@ -1065,7 +1065,7 @@ Expected:
 - dry run prints the five package names in dependency order;
 - no network publish occurs.
 
-- [ ] **Step 8: Commit publishing scripts and workflows**
+- [x] **Step 8: Commit publishing scripts and workflows**
 
 Run:
 
@@ -1083,7 +1083,7 @@ Then use `metabot-post-buzz` with Bob (`--from bob`) to publish a development-jo
 - Modify: `README.md`
 - Modify: `docs/superpowers/plans/2026-06-09-agent-browser-core-pre1-package-release.md`
 
-- [ ] **Step 1: Update README current status**
+- [x] **Step 1: Update README current status**
 
 Replace the `Current Status` section in `README.md` with:
 
@@ -1105,7 +1105,7 @@ Full OAC package consumption, public Metalet wallet login, production standalone
 integration are planned as follow-up implementation phases.
 ```
 
-- [ ] **Step 2: Add release instructions to README**
+- [x] **Step 2: Add release instructions to README**
 
 Add this section after `Reference Documents`:
 
@@ -1126,8 +1126,8 @@ git diff --check
 ```
 
 Do not run `npm publish` manually for normal releases. Configure npm trusted publishing for each
-publishable package, merge the release-ready branch to `main`, then push the version tag from the
-same commit:
+publishable package, merge the release-ready branch to `main`, then tag and push the version tag
+from the same `main` commit:
 
 ```bash
 git tag v0.1.0
@@ -1135,7 +1135,7 @@ git push origin v0.1.0
 ```
 ````
 
-- [ ] **Step 3: Run full Phase 3 verification**
+- [x] **Step 3: Run full Phase 3 verification**
 
 Run:
 
@@ -1166,15 +1166,17 @@ git commit -m "docs: add browser core phase 3 release plan and status"
 
 Then use `metabot-post-buzz` with Bob (`--from bob`) to publish a development-journal entry for this commit.
 
-- [ ] **Step 5: Push the completed Phase 3 branch**
+- [ ] **Step 5: Report the ready-to-push command**
 
-Run only in the development session after all reviews pass:
+Do not push from this development session. After all reviews pass, report this ready-to-push
+command instead:
 
 ```bash
 git push origin codex/phase3-pre1-package-release
 ```
 
-Do not merge to `main`, push `main`, push `v0.1.0`, or run `npm publish` in the development session.
+Do not merge to `main`, push the feature branch, push `main`, push `v0.1.0`, or run `npm publish`
+in the development session.
 
 ## Review Checklist
 
