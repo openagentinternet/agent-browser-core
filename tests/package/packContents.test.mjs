@@ -115,6 +115,16 @@ test('published Browser packages include declared entrypoints', async () => {
     for (const target of Object.values(manifest.bin ?? {})) {
       assertPackIncludes(files, target, workspace.name);
     }
+
+    if (workspace.name === '@openagentinternet/agent-browser-ui') {
+      assertPackIncludes(files, 'dist/browserClientScript.js', workspace.name);
+      assertPackIncludes(files, 'dist/browserShell.js', workspace.name);
+      assertPackIncludes(files, 'dist/browserStyles.js', workspace.name);
+      assertPackIncludes(files, 'dist/browserTypes.d.ts', workspace.name);
+      assertPackIncludes(files, 'dist-cjs/browserClientScript.js', workspace.name);
+      assertPackIncludes(files, 'dist-cjs/browserShell.js', workspace.name);
+      assertPackIncludes(files, 'dist-cjs/browserStyles.js', workspace.name);
+    }
   }
 });
 

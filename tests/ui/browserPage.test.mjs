@@ -15,9 +15,14 @@ test('Browser page renders fixed chrome, URI input, actor chip, viewport, and st
   assert.match(html, /data-browser-using-selector/);
   assert.match(html, /data-browser-viewport/);
   assert.match(html, /data-browser-status-strip/);
+  assert.match(html, /data-browser-menu-trigger/);
+  assert.match(html, /data-browser-modal-root/);
   assert.match(html, /body:has\(\.browser-shell\) \{ overflow: hidden; \}/);
   assert.match(html, /\.browser-viewport \{ min-height: 0; overflow: auto;/);
   assert.match(html, /TXID: -/);
+  assert.equal(typeof ui.buildBrowserClientScript, 'function');
+  assert.equal(typeof ui.buildBrowserShellHtml, 'function');
+  assert.equal(typeof ui.BROWSER_PAGE_STYLES, 'string');
 });
 
 test('Browser page can include an initial Bot resource render', async () => {
