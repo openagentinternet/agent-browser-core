@@ -36,7 +36,8 @@ test('Browser page can include an initial Bot resource render', async () => {
 
   assert.match(html, /Fixture Bot/);
   assert.match(html, /Fixture Review/);
-  assert.match(html, /\/api\/browser\/resolve/);
+  assert.match(html, /const apiBasePath = "\/api\/browser"/);
+  assert.match(html, /const browserEndpoints = \{/);
 });
 
 test('Browser client script preserves resolved Bot actions and resolve failures', () => {

@@ -17,7 +17,7 @@ export function buildBrowserShellHtml(input: BrowserShellInput): string {
         <button type="button" class="browser-resource-chip" data-browser-resource-chip aria-expanded="false"><span class="browser-chip-title">Resource</span></button>
         <button type="button" class="browser-using-chip" data-browser-using-selector aria-expanded="false"><span class="browser-chip-title">Using</span></button>
         <button type="button" class="browser-icon-button browser-menu-trigger" data-browser-menu-trigger aria-label="Browser menu" aria-haspopup="menu" aria-expanded="false"></button>
-        <div class="browser-chrome-menu" data-browser-menu role="menu" hidden></div>
+        <div class="browser-chrome-menu" data-browser-menu role="menu" aria-label="Browser menu" hidden></div>
       </header>
       <div class="browser-owner-toolbar" data-browser-owner-toolbar hidden></div>
       <div class="browser-viewport-row" data-browser-viewport-row>
@@ -31,6 +31,6 @@ export function buildBrowserShellHtml(input: BrowserShellInput): string {
         <span data-browser-status-renderer>renderer</span>
         <button type="button" data-browser-status-txid>TXID: -</button>
       </footer>
-      <div class="browser-modal" data-browser-modal-root hidden></div>
+      <div class="browser-modal" data-browser-modal-root role="dialog" aria-modal="true" hidden></div>
     </section>`;
 }
