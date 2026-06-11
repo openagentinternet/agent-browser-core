@@ -24,4 +24,5 @@ export interface BrowserShellInput {
 export interface BrowserClientScriptInput {
   apiBasePath: string;
   initialUri: string;
+  initialResource?: BrowserResourceEnvelope | null;
 }

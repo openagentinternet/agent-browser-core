@@ -14,6 +14,6 @@ export function buildBrowserPageDefinition(input: BrowserPageDefinitionInput = {
     apiBasePath,
     initialUri,
     contentHtml: buildBrowserShellHtml({ initialUri, initialResourceHtml }),
-    script: buildBrowserClientScript({ apiBasePath, initialUri }),
+    script: buildBrowserClientScript({ apiBasePath, initialUri, initialResource: input.resource ?? null }),
   };
 }

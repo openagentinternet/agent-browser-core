@@ -65,6 +65,15 @@ test('html iframe renderer is sandboxed and rejects unsafe URLs', () => {
   assert.doesNotMatch(blocked, /javascript:alert/);
 });
 
+test('safeRendererUrl allows local http and https URLs only', () => {
+  assert.equal(ui.safeRendererUrl('/local/path'), '/local/path');
+  assert.equal(ui.safeRendererUrl('https://example.test/app'), 'https://example.test/app');
+  assert.equal(ui.safeRendererUrl('http://127.0.0.1:3000/app'), 'http://127.0.0.1:3000/app');
+  assert.equal(ui.safeRendererUrl('javascript:alert(1)'), '');
+  assert.equal(ui.safeRendererUrl('data:text/html,hi'), '');
+  assert.equal(ui.safeRendererUrl('//example.test/app'), '');
+});
+
 test('pdf image and video render with content-specific elements', () => {
   const pdf = ui.renderResourceHtml({ uri: 'metaapp://pdf', normalizedUri: 'metaapp://pdf', resourceType: 'pdf', title: 'PDF', renderer: { type: 'pdf', contentType: 'application/pdf', url: 'https://files.example/a.pdf' }, actions: [], sections: [] });
   assert.match(pdf, /class="browser-pdf"/);

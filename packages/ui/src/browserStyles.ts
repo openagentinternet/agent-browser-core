@@ -16,9 +16,19 @@ export const BROWSER_PAGE_STYLES = `
     .browser-menu-section button[aria-disabled="true"]:hover { background: transparent; }
     .browser-menu-icon { width: 14px; height: 14px; border: 1px solid #9ca3af; background: #e5e7eb; }
     .browser-owner-toolbar { grid-row: 2; display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; padding: 6px 8px; border-bottom: 1px solid #d1d5db; background: #f3f4f6; }
+    .browser-owner-toolbar[hidden] { display: none; }
+    .browser-owner-toolbar button { border: 1px solid #d1d5db; background: #fff; padding: 6px 10px; white-space: nowrap; }
     .browser-viewport-row { grid-row: 3; position: relative; min-height: 0; display: grid; grid-template-columns: 260px minmax(0, 1fr) 320px; overflow: hidden; }
     .browser-drawer, .browser-inspector { min-height: 0; overflow: auto; border-right: 1px solid #d1d5db; background: #fff; }
+    .browser-drawer[hidden], .browser-inspector[hidden] { display: none; }
     .browser-inspector { border-right: 0; border-left: 1px solid #d1d5db; }
+    .browser-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px; border-bottom: 1px solid #d1d5db; }
+    .browser-panel-header h2 { margin: 0; font-size: 15px; }
+    .browser-panel-header button, .browser-panel-list button { border: 1px solid #d1d5db; background: #fff; padding: 6px 9px; }
+    .browser-panel-list { display: grid; gap: 8px; padding: 12px; }
+    .browser-inspector-list { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 8px 10px; margin: 0; padding: 12px; }
+    .browser-inspector-list dt { color: #4b5563; }
+    .browser-inspector-list dd { margin: 0; overflow-wrap: anywhere; }
     .browser-viewport { min-height: 0; overflow: auto; padding: 18px; }
     .browser-status-strip { grid-row: 4; display: flex; gap: 8px; align-items: center; padding: 0 8px; border-top: 1px solid #d1d5db; background: #fff; }
     .browser-bot-page, .browser-empty-state { max-width: 980px; margin: 0 auto; }
@@ -57,6 +67,14 @@ export const BROWSER_PAGE_STYLES = `
     .browser-cache-panel dt { color: #4b5563; }
     .browser-cache-panel dd { margin: 0; overflow-wrap: anywhere; }
     .browser-cache-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .browser-share-panel { display: flex; flex-wrap: wrap; gap: 8px; }
+    .browser-share-panel button, .browser-action-panel button, .browser-command-panel a, .browser-command-panel button { border: 1px solid #d1d5db; background: #fff; padding: 7px 10px; color: #111827; text-decoration: none; }
+    .browser-action-panel { display: grid; gap: 12px; }
+    .browser-action-panel label { display: grid; gap: 6px; color: #374151; }
+    .browser-action-panel textarea { min-width: 0; resize: vertical; border: 1px solid #d1d5db; padding: 8px; font: inherit; }
+    .browser-action-panel footer { display: flex; justify-content: flex-end; gap: 8px; }
+    .browser-command-panel { display: grid; gap: 10px; }
+    .browser-command-panel p { margin: 0; }
     @media (max-width: 900px) {
       .browser-topbar { grid-template-columns: auto minmax(120px, 1fr) auto; }
       .browser-resource-chip, .browser-using-chip { display: none; }

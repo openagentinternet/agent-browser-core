@@ -23,6 +23,7 @@ export {
   escapeHtml,
   renderBotPageHtml,
   renderResourceHtml,
+  safeRendererUrl,
   safeResourceUrl,
 } from './renderers.js';
 export {

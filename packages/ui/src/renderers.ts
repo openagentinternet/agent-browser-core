@@ -15,16 +15,20 @@ export function escapeHtml(value: unknown): string {
   })[char] ?? char);
 }
 
-export function safeResourceUrl(rawValue: unknown): string {
-  const value = String(rawValue ?? '').trim();
-  if (!value) return '';
-  if (value.startsWith('/') && !value.startsWith('//')) return value;
+export function safeRendererUrl(value: unknown): string {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  if (text.charAt(0) === '/' && text.slice(0, 2) !== '//') return text;
   try {
-    const parsed = new URL(value);
+    const parsed = new URL(text);
     return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : '';
   } catch {
     return '';
   }
+}
+
+export function safeResourceUrl(value: unknown): string {
+  return safeRendererUrl(value);
 }
 
 function text(value: unknown): string {

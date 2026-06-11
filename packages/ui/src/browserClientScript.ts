@@ -14,6 +14,7 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   return `(() => {
   const apiBasePath = ${jsonScript(input.apiBasePath)};
   const initialUri = ${jsonScript(input.initialUri)};
+  const initialResource = ${jsonScript(input.initialResource ?? null)};
   const browserEndpoints = {
     runtime: apiBasePath + '/runtime',
     resolve: apiBasePath + '/resolve',
@@ -27,19 +28,32 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   const browserBotHomepageTemplates = ${jsonScript(BROWSER_BOT_HOMEPAGE_TEMPLATES)};
   const state = {
     runtime: null,
-    resource: null,
+    resource: initialResource,
     selectedActorId: '',
     settingsTab: 'baseUrls',
     settingsData: null,
     cacheData: null,
+    pendingAction: null,
+    history: initialResource && initialResource.uri ? [initialResource.uri] : [],
+    historyIndex: initialResource && initialResource.uri ? 0 : -1,
     error: ''
   };
   const input = document.querySelector('[data-browser-uri-input]');
   const form = document.querySelector('[data-browser-address-form]');
+  const backButton = document.querySelector('[data-browser-back]');
+  const forwardButton = document.querySelector('[data-browser-forward]');
+  const reloadButton = document.querySelector('[data-browser-reload]');
   const viewport = document.querySelector('[data-browser-viewport]');
   const status = document.querySelector('[data-browser-status-state]');
+  const statusProof = document.querySelector('[data-browser-status-proof]');
+  const statusRenderer = document.querySelector('[data-browser-status-renderer]');
+  const statusTxid = document.querySelector('[data-browser-status-txid]');
   const actor = document.querySelector('[data-browser-using-selector]');
   const resourceChip = document.querySelector('[data-browser-resource-chip]');
+  const ownerToolbar = document.querySelector('[data-browser-owner-toolbar]');
+  const drawer = document.querySelector('[data-browser-drawer]');
+  const drawerToggle = document.querySelector('[data-browser-drawer-toggle]');
+  const inspector = document.querySelector('[data-browser-inspector]');
   const menu = document.querySelector('[data-browser-menu]');
   const menuTrigger = document.querySelector('[data-browser-menu-trigger]');
   const modalRoot = document.querySelector('[data-browser-modal-root]');
@@ -51,6 +65,9 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   }
   function closestWithAttribute(target, attribute) {
     return target && target.closest ? target.closest('[' + attribute + ']') : null;
+  }
+  function textValue(value) {
+    return String(value ?? '').trim();
   }
   function safeUrl(value) {
     const text = String(value ?? '').trim();
@@ -68,6 +85,78 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     if (state.selectedActorId) query.set('actorId', state.selectedActorId);
     const suffix = query.toString();
     return suffix ? endpoint + '?' + suffix : endpoint;
+  }
+  async function api(endpoint, options) {
+    const response = await fetch(endpoint, options);
+    return response.json();
+  }
+  function setStatus(label, detail) {
+    if (status) {
+      status.textContent = label;
+      if (label === 'error') status.textContent = 'error';
+    }
+    if (statusRenderer && detail !== undefined) statusRenderer.textContent = detail || 'renderer';
+  }
+  function updateResourceStatus(resource) {
+    const proof = resource && resource.proof || {};
+    const renderer = resource && resource.renderer || {};
+    const statusData = resource && resource.status || {};
+    if (statusProof) statusProof.textContent = proof.verificationState || statusData.verificationState || 'unverified';
+    if (statusRenderer) statusRenderer.textContent = renderer.type || 'renderer';
+    if (statusTxid) statusTxid.textContent = 'TXID: ' + (proof.txid || '-');
+  }
+  function clearResourceChrome(label, detail) {
+    if (resourceChip) {
+      const chipTitle = resourceChip.querySelector('.browser-chip-title');
+      if (chipTitle) chipTitle.textContent = 'Resource';
+    }
+    if (statusProof) statusProof.textContent = 'unverified';
+    if (statusTxid) statusTxid.textContent = 'TXID: -';
+    renderOwnerToolbar(null);
+    if (drawer && !drawer.hidden) renderDrawer();
+    if (inspector && !inspector.hidden) renderInspector();
+    setStatus(label || 'error', detail || 'renderer');
+  }
+  function setButtonDisabled(button, disabled) {
+    if (!button) return;
+    button.disabled = disabled;
+    if (disabled) button.setAttribute('aria-disabled', 'true');
+    else button.removeAttribute('aria-disabled');
+  }
+  function currentResourceUri() {
+    return state.resource && state.resource.uri || input && input.value || initialUri;
+  }
+  function updateHistoryButtons() {
+    setButtonDisabled(backButton, state.historyIndex <= 0);
+    setButtonDisabled(forwardButton, state.historyIndex < 0 || state.historyIndex >= state.history.length - 1);
+    setButtonDisabled(reloadButton, !currentResourceUri());
+  }
+  function recordHistory(uri) {
+    if (!uri) return;
+    if (state.historyIndex >= 0 && state.history[state.historyIndex] === uri) {
+      updateHistoryButtons();
+      return;
+    }
+    state.history = state.history.slice(0, state.historyIndex + 1);
+    state.history.push(uri);
+    state.historyIndex = state.history.length - 1;
+    updateHistoryButtons();
+  }
+  function goHistory(delta) {
+    const nextIndex = state.historyIndex + delta;
+    if (nextIndex < 0 || nextIndex >= state.history.length) {
+      updateHistoryButtons();
+      return;
+    }
+    state.historyIndex = nextIndex;
+    const uri = state.history[state.historyIndex] || '';
+    if (input) input.value = uri;
+    updateHistoryButtons();
+    navigateTo(uri, { recordHistory: false }).catch(() => {});
+  }
+  function reloadCurrentResource() {
+    const uri = currentResourceUri();
+    if (uri) navigateTo(uri, { recordHistory: false }).catch(() => {});
   }
   function selectedActor() {
     const runtime = state.runtime || {};
@@ -100,13 +189,44 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   function showBrowserLoadingModal(title) {
     openBrowserModal(title, '<div class="browser-loading">Loading...</div>');
   }
+  function renderCommandNotice(payload) {
+    const action = payload && payload.action || {};
+    const href = safeUrl(action.href || action.route || action.pollUrl || '');
+    const actionHtml = action.label
+      ? href
+        ? '<a data-browser-command-action href="' + escapeAttribute(href) + '">' + escapeHtml(action.label) + '</a>'
+        : '<button type="button" data-browser-command-action disabled>' + escapeHtml(action.label) + '</button>'
+      : '';
+    openBrowserModal(
+      payload && payload.state === 'waiting' ? 'Waiting' : 'Action Required',
+      '<section class="browser-command-panel"><p>' + escapeHtml(payload && (payload.message || payload.code) || '') + '</p>' +
+      actionHtml + '</section>'
+    );
+  }
+  function applyCommandResult(payload, successMessage) {
+    if (payload && payload.ok) {
+      setStatus(successMessage || 'success', '');
+      return payload.data;
+    }
+    if (payload && payload.state === 'waiting') {
+      setStatus('waiting', payload.message || payload.code || '');
+      renderCommandNotice(payload);
+      return null;
+    }
+    if (payload && payload.state === 'manual_action_required') {
+      setStatus('manual action required', payload.message || payload.code || '');
+      renderCommandNotice(payload);
+      return null;
+    }
+    throw new Error(payload && (payload.message || payload.code) || 'Browser command failed.');
+  }
   function renderBrowserMenu() {
     if (!menu) return;
     menu.innerHTML = browserMenuSections.map((section) =>
       '<section class="browser-menu-section" data-browser-menu-section="' + escapeAttribute(section.id) + '">' +
       '<h2>' + escapeHtml(section.title) + '</h2>' +
       (section.items || []).map((item) => {
-        const menuItemDisabled = item.action !== 'open-settings';
+        const menuItemDisabled = item.action !== 'open-settings' && item.action !== 'toggle-inspector' && item.action !== 'toggle-drawer';
         return '<button type="button" role="menuitem" data-browser-menu-item="' + escapeAttribute(item.id) + '"' +
         ' data-browser-menu-action="' + escapeAttribute(item.action) + '"' +
         (menuItemDisabled ? ' data-browser-menu-disabled aria-disabled="true" disabled' : '') +
@@ -146,6 +266,139 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     return actions && actions.length
       ? '<div class="browser-action-row">' + actions.map(actionHtml).join('') + '</div>'
       : '';
+  }
+  function actionPayload(action) {
+    const payload = action && action.payload;
+    return payload && typeof payload === 'object' && !Array.isArray(payload) ? payload : {};
+  }
+  function findResourceAction(kind, id, ownerOnly) {
+    const resource = state.resource || {};
+    const ownerActions = resource.ownerAffinity && resource.ownerAffinity.actions || [];
+    const resourceActions = resource.actions || [];
+    const actions = ownerOnly ? ownerActions : resourceActions.concat(ownerActions);
+    return actions.find((action) => id && action.id === id) || actions.find((action) => action.kind === kind) || null;
+  }
+  function renderOwnerToolbar(resource) {
+    if (!ownerToolbar) return;
+    const affinity = resource && resource.ownerAffinity;
+    const actions = affinity && affinity.actions || [];
+    if (!actions.length) {
+      ownerToolbar.hidden = true;
+      ownerToolbar.innerHTML = '';
+      return;
+    }
+    ownerToolbar.hidden = false;
+    ownerToolbar.innerHTML = actions.map((action) =>
+      '<button type="button" data-browser-owner-action="' + escapeAttribute(action.kind) +
+      '" data-browser-action-id="' + escapeAttribute(action.id || '') + '"' +
+      (action.enabled ? '' : ' disabled') + '>' + escapeHtml(action.label || action.kind) + '</button>'
+    ).join('');
+  }
+  function renderDrawer() {
+    if (!drawer) return;
+    const runtime = state.runtime || {};
+    const defaultUri = textValue(runtime.defaultUri || initialUri);
+    drawer.innerHTML = '<header class="browser-panel-header"><h2>Resources</h2><button type="button" data-browser-drawer-close aria-label="Close drawer">Close</button></header>' +
+      '<div class="browser-panel-list">' +
+      (defaultUri ? '<button type="button" data-browser-visit-uri="' + escapeAttribute(defaultUri) + '">Default Resource</button>' : '') +
+      (state.resource && state.resource.uri ? '<button type="button" data-browser-visit-uri="' + escapeAttribute(state.resource.uri) + '">Current Resource</button>' : '') +
+      '</div>';
+  }
+  function toggleDrawer(forceOpen) {
+    if (!drawer) return;
+    const open = typeof forceOpen === 'boolean' ? forceOpen : drawer.hidden;
+    if (open) renderDrawer();
+    drawer.hidden = !open;
+    if (drawerToggle) drawerToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  function renderInspector() {
+    if (!inspector) return;
+    const resource = state.resource || {};
+    const proof = resource.proof || {};
+    const source = resource.source || {};
+    const renderer = resource.renderer || {};
+    const statusData = resource.status || {};
+    inspector.innerHTML = '<header class="browser-panel-header"><h2>Inspector</h2><button type="button" data-browser-inspector-close aria-label="Close inspector">Close</button></header>' +
+      '<dl class="browser-inspector-list">' +
+      '<dt>uri</dt><dd>' + escapeHtml(resource.uri || '-') + '</dd>' +
+      '<dt>renderer</dt><dd>' + escapeHtml(renderer.type || '-') + '</dd>' +
+      '<dt>verification</dt><dd>' + escapeHtml(proof.verificationState || statusData.verificationState || 'unverified') + '</dd>' +
+      '<dt>txid</dt><dd>' + escapeHtml(proof.txid || '-') + '</dd>' +
+      '<dt>pin id</dt><dd>' + escapeHtml(proof.pinId || '-') + '</dd>' +
+      '<dt>resolver</dt><dd>' + escapeHtml(source.resolver || '-') + '</dd>' +
+      '</dl>';
+  }
+  function toggleInspector(forceOpen) {
+    if (!inspector) return;
+    const open = typeof forceOpen === 'boolean' ? forceOpen : inspector.hidden;
+    if (open) renderInspector();
+    inspector.hidden = !open;
+    if (resourceChip) resourceChip.setAttribute('aria-expanded', open ? 'true' : 'false');
+  }
+  function openShareModal() {
+    const resource = state.resource || {};
+    const metaidUri = textValue(resource.uri || input && input.value || initialUri);
+    const localUrl = window.location.href;
+    openBrowserModal('Share', '<div class="browser-share-panel">' +
+      '<button type="button" data-browser-share-copy="' + escapeAttribute(metaidUri) + '">Copy resource URI</button>' +
+      '<button type="button" data-browser-share-copy="' + escapeAttribute(localUrl) + '">Copy Browser URL</button>' +
+      '</div>');
+  }
+  function openPrivateChatModal(action) {
+    state.pendingAction = action || null;
+    openBrowserModal(action && action.label || 'Private Chat', '<section class="browser-action-panel">' +
+      '<label><span>Message</span><textarea data-browser-private-chat-message rows="5"></textarea></label>' +
+      '<footer><button type="button" data-browser-modal-close>Cancel</button><button type="button" data-browser-modal-action="private-chat">Send</button></footer>' +
+      '</section>');
+  }
+  function openServiceCallModal(action) {
+    state.pendingAction = action || null;
+    openBrowserModal(action && action.label || 'Service Call', '<section class="browser-action-panel">' +
+      '<label><span>Task</span><textarea data-browser-service-task rows="5"></textarea></label>' +
+      '<footer><button type="button" data-browser-modal-close>Cancel</button><button type="button" data-browser-modal-action="service-call">Send</button></footer>' +
+      '</section>');
+  }
+  async function runTrustedAction(kind, payload) {
+    const command = await api(endpointWithActor(browserEndpoints.actions), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        resourceUri: state.resource && state.resource.uri || input && input.value || initialUri,
+        kind,
+        payload: payload || {}
+      })
+    });
+    const data = applyCommandResult(command, 'action complete');
+    if (command && command.ok) closeBrowserModal();
+    return data;
+  }
+  async function copyShareValue(value) {
+    if (!value) return;
+    if (typeof navigator === 'undefined' || !navigator.clipboard || !navigator.clipboard.writeText) {
+      setStatus('copy unavailable', 'Clipboard API unavailable');
+      return;
+    }
+    await navigator.clipboard.writeText(value);
+    setStatus('copied', '');
+  }
+  function dispatchResourceAction(kind, id, ownerOnly) {
+    const action = findResourceAction(kind, id, ownerOnly);
+    if (!action || !action.enabled) return;
+    if (kind === 'private-chat') {
+      openPrivateChatModal(action);
+      return;
+    }
+    if (kind === 'service-call') {
+      openServiceCallModal(action);
+      return;
+    }
+    if (kind === 'share-resource' || kind === 'copy-uri') {
+      openShareModal();
+      return;
+    }
+    runTrustedAction(kind, actionPayload(action)).catch((error) => {
+      setStatus('error', error && error.message ? error.message : 'Action failed.');
+    });
   }
   function resourceHtml(resource) {
     const renderer = resource.renderer || {};
@@ -356,28 +609,38 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       state.runtime = payload.data;
       if (!state.selectedActorId && payload.data.defaultActor) state.selectedActorId = payload.data.defaultActor.id;
       updateActorChip();
+      if (drawer && !drawer.hidden) renderDrawer();
     }
   }
-  async function navigateTo(uri) {
+  function renderResolveFailure(uri, message, options) {
+    state.resource = null;
+    clearResourceChrome('error', 'renderer');
+    viewport.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(message || 'Unknown error') + '</p></section>';
+    if (!options || options.recordHistory !== false) recordHistory(uri);
+    else updateHistoryButtons();
+  }
+  async function navigateTo(uri, options) {
     if (!uri || !viewport) return;
-    if (status) status.textContent = 'loading';
+    setStatus('loading', 'renderer');
     try {
       const response = await fetch(endpointWithActor(browserEndpoints.resolve, { uri }));
       const payload = await response.json();
       if (!payload.ok) {
-        state.resource = null;
-        viewport.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(payload.message || payload.code || 'Unknown error') + '</p></section>';
-        if (status) status.textContent = 'error';
+        renderResolveFailure(uri, payload.message || payload.code || 'Unknown error', options);
         return;
       }
       state.resource = payload.data;
       viewport.innerHTML = resourceHtml(payload.data);
       if (resourceChip) resourceChip.querySelector('.browser-chip-title').textContent = payload.data.title || 'Resource';
-      if (status) status.textContent = 'resolved';
+      renderOwnerToolbar(payload.data);
+      updateResourceStatus(payload.data);
+      if (drawer && !drawer.hidden) renderDrawer();
+      if (inspector && !inspector.hidden) renderInspector();
+      setStatus('resolved', payload.data.renderer && payload.data.renderer.type || 'renderer');
+      if (!options || options.recordHistory !== false) recordHistory(uri);
+      else updateHistoryButtons();
     } catch (error) {
-      state.resource = null;
-      viewport.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(error && error.message || 'Network error') + '</p></section>';
-      if (status) status.textContent = 'error';
+      renderResolveFailure(uri, error && error.message || 'Network error', options);
     }
   }
   if (form) {
@@ -397,6 +660,12 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       if (item && item.action === 'open-settings') {
         openBrowserSettings(item.settingsTab || 'baseUrls').catch(() => {});
       }
+      if (item && item.action === 'toggle-inspector') {
+        toggleInspector();
+      }
+      if (item && item.action === 'toggle-drawer') {
+        toggleDrawer();
+      }
       return;
     }
     const menuButton = closestWithAttribute(target, 'data-browser-menu-trigger');
@@ -405,16 +674,115 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       toggleBrowserMenu();
       return;
     }
+    const backControl = closestWithAttribute(target, 'data-browser-back');
+    if (backControl) {
+      event.preventDefault();
+      if (!backControl.disabled) goHistory(-1);
+      return;
+    }
+    const forwardControl = closestWithAttribute(target, 'data-browser-forward');
+    if (forwardControl) {
+      event.preventDefault();
+      if (!forwardControl.disabled) goHistory(1);
+      return;
+    }
+    const reloadControl = closestWithAttribute(target, 'data-browser-reload');
+    if (reloadControl) {
+      event.preventDefault();
+      if (!reloadControl.disabled) reloadCurrentResource();
+      return;
+    }
+    const drawerButton = closestWithAttribute(target, 'data-browser-drawer-toggle');
+    if (drawerButton) {
+      event.preventDefault();
+      toggleDrawer();
+      return;
+    }
+    const resourceButton = closestWithAttribute(target, 'data-browser-resource-chip');
+    if (resourceButton) {
+      event.preventDefault();
+      toggleInspector();
+      return;
+    }
     const usingButton = closestWithAttribute(target, 'data-browser-using-selector');
     if (usingButton) {
       event.preventDefault();
       openActorSelector().catch(() => {});
       return;
     }
+    const statusStateButton = closestWithAttribute(target, 'data-browser-status-state');
+    if (statusStateButton) {
+      event.preventDefault();
+      toggleInspector(true);
+      return;
+    }
+    const statusProofButton = closestWithAttribute(target, 'data-browser-status-proof');
+    if (statusProofButton) {
+      event.preventDefault();
+      toggleInspector(true);
+      return;
+    }
+    const statusTxidButton = closestWithAttribute(target, 'data-browser-status-txid');
+    if (statusTxidButton) {
+      event.preventDefault();
+      toggleInspector(true);
+      return;
+    }
     const modalClose = closestWithAttribute(target, 'data-browser-modal-close');
     if (modalClose) {
       event.preventDefault();
       closeBrowserModal();
+      return;
+    }
+    const drawerClose = closestWithAttribute(target, 'data-browser-drawer-close');
+    if (drawerClose) {
+      event.preventDefault();
+      toggleDrawer(false);
+      return;
+    }
+    const inspectorClose = closestWithAttribute(target, 'data-browser-inspector-close');
+    if (inspectorClose) {
+      event.preventDefault();
+      toggleInspector(false);
+      return;
+    }
+    const visitButton = closestWithAttribute(target, 'data-browser-visit-uri');
+    if (visitButton) {
+      event.preventDefault();
+      const uri = visitButton.getAttribute('data-browser-visit-uri') || '';
+      if (input) input.value = uri;
+      toggleDrawer(false);
+      navigateTo(uri).catch(() => {});
+      return;
+    }
+    const shareCopy = closestWithAttribute(target, 'data-browser-share-copy');
+    if (shareCopy) {
+      event.preventDefault();
+      copyShareValue(shareCopy.getAttribute('data-browser-share-copy') || '').catch((error) => {
+        setStatus('error', error && error.message ? error.message : 'Copy failed.');
+      });
+      return;
+    }
+    const modalAction = closestWithAttribute(target, 'data-browser-modal-action');
+    if (modalAction) {
+      event.preventDefault();
+      const action = modalAction.getAttribute('data-browser-modal-action') || '';
+      if (action === 'private-chat') {
+        const message = modalRoot && modalRoot.querySelector('[data-browser-private-chat-message]');
+        const payload = Object.assign({}, actionPayload(state.pendingAction), { content: message && message.value || '' });
+        setStatus('sending', '');
+        runTrustedAction('private-chat', payload).catch((error) => {
+          setStatus('error', error && error.message ? error.message : 'Private chat failed.');
+        });
+      }
+      if (action === 'service-call') {
+        const task = modalRoot && modalRoot.querySelector('[data-browser-service-task]');
+        const payload = Object.assign({}, actionPayload(state.pendingAction), { userTask: task && task.value || '' });
+        setStatus('sending', '');
+        runTrustedAction('service-call', payload).catch((error) => {
+          setStatus('error', error && error.message ? error.message : 'Service call failed.');
+        });
+      }
       return;
     }
     const actorButton = closestWithAttribute(target, 'data-browser-actor-id');
@@ -441,6 +809,28 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       saveBrowserSettings().catch(() => {});
       return;
     }
+    const ownerAction = closestWithAttribute(target, 'data-browser-owner-action');
+    if (ownerAction) {
+      event.preventDefault();
+      if (ownerAction.hasAttribute('disabled')) return;
+      dispatchResourceAction(
+        ownerAction.getAttribute('data-browser-owner-action') || '',
+        ownerAction.getAttribute('data-browser-action-id') || '',
+        true
+      );
+      return;
+    }
+    const resourceAction = closestWithAttribute(target, 'data-browser-action');
+    if (resourceAction) {
+      event.preventDefault();
+      if (resourceAction.hasAttribute('disabled')) return;
+      dispatchResourceAction(
+        resourceAction.getAttribute('data-browser-action') || '',
+        resourceAction.getAttribute('data-browser-action-id') || '',
+        false
+      );
+      return;
+    }
     const settingsTab = closestWithAttribute(target, 'data-browser-settings-tab');
     if (settingsTab && !settingsTab.hasAttribute('data-browser-menu-item')) {
       event.preventDefault();
@@ -449,8 +839,15 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     }
   });
   renderBrowserMenu();
-  loadRuntime().catch(() => {});
   if (input && !input.value) input.value = initialUri;
+  if (state.resource) {
+    if (resourceChip) resourceChip.querySelector('.browser-chip-title').textContent = state.resource.title || 'Resource';
+    renderOwnerToolbar(state.resource);
+    updateResourceStatus(state.resource);
+    setStatus('resolved', state.resource.renderer && state.resource.renderer.type || 'renderer');
+  }
+  updateHistoryButtons();
+  loadRuntime().catch(() => {});
   if (initialUri && viewport && !viewport.innerHTML.trim()) navigateTo(initialUri).catch(() => {});
 })();`;
 }
