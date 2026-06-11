@@ -1,5 +1,7 @@
 # Agent Browser Core 0.2 Shared UI And Contract Implementation Plan
 
+**Implementation Status:** Completed on `codex/abc-0.2-shared-ui-contract`; verified with `npm run verify`, `npm run verify:packages`, `node scripts/verify-release-version.mjs v0.2.0`, `npm run publish:packages:dry-run`, `git diff --check`, and standalone smoke.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Ship Agent Browser Core `0.2.0` as the first shared Browser UI and command-state contract that OAC can consume from published packages.
