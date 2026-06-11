@@ -12,7 +12,7 @@ const JSON_BODY_LIMIT_BYTES = 1024 * 1024;
 class InvalidJsonBodyError extends Error {}
 
 function statusForResult(result: BrowserCommandResult<unknown>): number {
-  if (result.ok) return 200;
+  if (result.ok || result.state === 'waiting' || result.state === 'manual_action_required') return 200;
   if (result.code === 'invalid_browser_uri' || result.code === 'missing_uri' || result.code === 'invalid_argument') return 400;
   if (result.code === 'actor_not_found') return 404;
   return 400;

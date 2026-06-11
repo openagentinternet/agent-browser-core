@@ -42,6 +42,7 @@ const PACKAGES = [
     name: '@openagentinternet/agent-browser-test-harness',
     exports: {
       assertBrowserHostConformance: 'function',
+      assertBrowserCommandResultShape: 'function',
     },
   },
 ];

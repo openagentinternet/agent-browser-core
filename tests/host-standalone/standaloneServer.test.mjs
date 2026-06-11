@@ -76,15 +76,40 @@ test('standalone Browser server exposes runtime resolve settings cache and actio
   assert.equal(cleared.ok, true);
   assert.equal(cleared.data.clearedArtifacts, 0);
 
-  const actionResponse = await fetch(`${baseUrl}/api/browser/actions`, {
+  const serviceCallResponse = await fetch(`${baseUrl}/api/browser/actions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ kind: 'service-call', resourceUri: 'metaid://idq1fixturebot' }),
+  });
+  const serviceCall = await json(serviceCallResponse);
+  assert.equal(serviceCallResponse.status, 200);
+  assert.equal(serviceCall.ok, false);
+  assert.equal(serviceCall.state, 'waiting');
+  assert.equal(serviceCall.code, 'service_call_pending');
+  assert.equal(serviceCall.pollAfterMs, 1000);
+
+  const loginResponse = await fetch(`${baseUrl}/api/browser/actions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ kind: 'login', resourceUri: 'metaid://idq1fixturebot' }),
+  });
+  const login = await json(loginResponse);
+  assert.equal(loginResponse.status, 200);
+  assert.equal(login.ok, false);
+  assert.equal(login.state, 'manual_action_required');
+  assert.equal(login.code, 'wallet_login_required');
+  assert.equal(login.action.label, 'Connect wallet');
+
+  const unsupportedResponse = await fetch(`${baseUrl}/api/browser/actions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ kind: 'private-chat', resourceUri: 'metaid://idq1fixturebot' }),
   });
-  const action = await json(actionResponse);
-  assert.equal(actionResponse.status, 400);
-  assert.equal(action.ok, false);
-  assert.equal(action.code, 'browser_action_not_supported');
+  const unsupported = await json(unsupportedResponse);
+  assert.equal(unsupportedResponse.status, 400);
+  assert.equal(unsupported.ok, false);
+  assert.equal(unsupported.state, 'failed');
+  assert.equal(unsupported.code, 'browser_action_not_supported');
 });
 
 test('standalone Browser server maps bad client requests to explicit failures', async (t) => {
