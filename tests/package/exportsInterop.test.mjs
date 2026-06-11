@@ -10,6 +10,8 @@ const PACKAGES = [
     exports: {
       browserSuccess: 'function',
       browserFailure: 'function',
+      browserWaiting: 'function',
+      browserManualActionRequired: 'function',
     },
   },
   {

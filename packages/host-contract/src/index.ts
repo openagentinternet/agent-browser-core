@@ -12,6 +12,15 @@ export type BrowserActorCapability =
   | 'resource-sharing'
   | 'message-view';
 
+export type BrowserCommandState = 'success' | 'failed' | 'waiting' | 'manual_action_required';
+
+export interface BrowserFollowUpAction {
+  label: string;
+  href?: string;
+  route?: string;
+  pollUrl?: string;
+}
+
 export interface BrowserCommandSuccess<T> {
   ok: true;
   state: 'success';
@@ -23,9 +32,43 @@ export interface BrowserCommandFailure {
   state: 'failed';
   code: string;
   message: string;
+  action?: BrowserFollowUpAction;
+  data?: Record<string, unknown>;
 }
 
-export type BrowserCommandResult<T> = BrowserCommandSuccess<T> | BrowserCommandFailure;
+export interface BrowserCommandWaiting {
+  ok: false;
+  state: 'waiting';
+  code: string;
+  message: string;
+  pollAfterMs?: number;
+  action?: BrowserFollowUpAction;
+  data?: Record<string, unknown>;
+}
+
+export interface BrowserCommandManualActionRequired {
+  ok: false;
+  state: 'manual_action_required';
+  code: string;
+  message: string;
+  action?: BrowserFollowUpAction;
+  data?: Record<string, unknown>;
+}
+
+export type BrowserCommandResult<T> =
+  | BrowserCommandSuccess<T>
+  | BrowserCommandFailure
+  | BrowserCommandWaiting
+  | BrowserCommandManualActionRequired;
+
+export interface BrowserCommandFailureOptions {
+  action?: BrowserFollowUpAction;
+  data?: Record<string, unknown>;
+}
+
+export interface BrowserCommandWaitingOptions extends BrowserCommandFailureOptions {
+  pollAfterMs?: number;
+}
 
 export interface BrowserActor {
   id: string;
@@ -185,8 +228,18 @@ export interface BrowserResolveInput extends BrowserActorInput {
   uri: string;
 }
 
+export interface BrowserSettingsInput extends BrowserActorInput {}
+
 export interface BrowserSettingsUpdateInput extends BrowserActorInput {
   browser?: Record<string, unknown>;
+}
+
+export interface BrowserCacheInput extends BrowserActorInput {}
+
+export interface BrowserCacheClearInput extends BrowserActorInput {
+  scope?: string;
+  pinId?: string;
+  cacheKey?: string;
 }
 
 export interface BrowserTrustedActionInput extends BrowserActorInput {
@@ -209,17 +262,53 @@ export interface BrowserTrustedActionResult {
 export interface BrowserHostAdapter {
   getRuntime(input?: BrowserActorInput): Promise<BrowserCommandResult<BrowserRuntimeSnapshot>>;
   resolveResource(input: BrowserResolveInput): Promise<BrowserCommandResult<BrowserResourceEnvelope>>;
-  getSettings(input?: BrowserActorInput): Promise<BrowserCommandResult<BrowserSettingsSnapshot>>;
+  getSettings(input?: BrowserSettingsInput): Promise<BrowserCommandResult<BrowserSettingsSnapshot>>;
   updateSettings(input: BrowserSettingsUpdateInput): Promise<BrowserCommandResult<BrowserSettingsSnapshot>>;
-  getCache(input?: BrowserActorInput): Promise<BrowserCommandResult<BrowserCacheSnapshot>>;
-  clearCache(input: BrowserActorInput & { scope?: string }): Promise<BrowserCommandResult<BrowserCacheClearResult>>;
+  getCache(input?: BrowserCacheInput): Promise<BrowserCommandResult<BrowserCacheSnapshot>>;
+  clearCache(input: BrowserCacheClearInput): Promise<BrowserCommandResult<BrowserCacheClearResult>>;
   runTrustedAction(input: BrowserTrustedActionInput): Promise<BrowserCommandResult<BrowserTrustedActionResult>>;
+}
+
+export interface BrowserHostClient extends BrowserHostAdapter {}
+
+function optionalCommandFields(options: BrowserCommandFailureOptions): Pick<BrowserCommandFailure, 'action' | 'data'> {
+  return {
+    ...(options.action ? { action: options.action } : {}),
+    ...(options.data ? { data: options.data } : {}),
+  };
 }
 
 export function browserSuccess<T>(data: T): BrowserCommandSuccess<T> {
   return { ok: true, state: 'success', data };
 }
 
-export function browserFailure(code: string, message: string): BrowserCommandFailure {
-  return { ok: false, state: 'failed', code, message };
+export function browserFailure(
+  code: string,
+  message: string,
+  options: BrowserCommandFailureOptions = {},
+): BrowserCommandFailure {
+  return { ok: false, state: 'failed', code, message, ...optionalCommandFields(options) };
+}
+
+export function browserWaiting(
+  code: string,
+  message: string,
+  options: BrowserCommandWaitingOptions = {},
+): BrowserCommandWaiting {
+  return {
+    ok: false,
+    state: 'waiting',
+    code,
+    message,
+    ...(typeof options.pollAfterMs === 'number' ? { pollAfterMs: options.pollAfterMs } : {}),
+    ...optionalCommandFields(options),
+  };
+}
+
+export function browserManualActionRequired(
+  code: string,
+  message: string,
+  options: BrowserCommandFailureOptions = {},
+): BrowserCommandManualActionRequired {
+  return { ok: false, state: 'manual_action_required', code, message, ...optionalCommandFields(options) };
 }
