@@ -121,7 +121,7 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   const html = nodes['[data-browser-viewport]'].innerHTML;
   assert.match(html, /Fixture Bot/);
   assert.match(html, /idq1fixturebot/);
-  assert.match(html, /Builds OAC browser fixtures/);
+  assert.match(html, /Builds Agent Browser fixtures/);
   assert.match(html, /Overview/);
   assert.match(html, /Recent Activity/);
   assert.match(html, /Fixture Review/);
