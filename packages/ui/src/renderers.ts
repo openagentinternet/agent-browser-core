@@ -1,8 +1,8 @@
 import type {
   BrowserRendererDescriptor,
+  BrowserResolveAction,
   BrowserResourceEnvelope,
   BrowserResourceSection,
-  BrowserTrustedActionDescriptor,
 } from '@openagentinternet/agent-browser-host-contract';
 
 export function escapeHtml(value: unknown): string {
@@ -43,7 +43,7 @@ function sectionItemDescription(item: Record<string, unknown>): string {
   return text(item.description) || text(item.summary) || text(item.bio);
 }
 
-function renderActions(actions: readonly BrowserTrustedActionDescriptor[]): string {
+function renderActions(actions: readonly BrowserResolveAction[]): string {
   if (actions.length === 0) return '';
   return `<div class="browser-action-row">${actions.map((action) => (
     `<button type="button" data-browser-action="${escapeHtml(action.kind)}" data-browser-action-id="${escapeHtml(action.id)}"${action.enabled ? '' : ' disabled'}>${escapeHtml(action.label)}</button>`

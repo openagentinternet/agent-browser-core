@@ -137,7 +137,8 @@ export interface BrowserResourceOwner {
   kind: 'bot' | 'metaapp-publisher' | 'wallet-user' | 'unknown';
   globalMetaId?: string;
   address?: string;
-  label: string;
+  name: string;
+  label?: string;
   avatar?: string;
   verificationState: 'verified' | 'partial' | 'unverified';
 }
@@ -151,6 +152,9 @@ export interface BrowserOwnerAffinity {
 
 export type BrowserResolutionState = 'resolved' | 'loading' | 'not_found' | 'error';
 export type BrowserVerificationState = 'verified' | 'partial' | 'unverified';
+export type BrowserResourceType = 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'unsupported' | 'unknown';
+export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'unsupported';
+export type BrowserResolveActionKind = 'private-chat' | 'service-list' | 'service-call' | 'copy' | 'proof' | 'creator';
 
 export interface BrowserResolutionStatus {
   state: BrowserResolutionState;
@@ -180,12 +184,23 @@ export interface BrowserSourceSummary {
 }
 
 export interface BrowserRendererDescriptor {
-  type: 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'unsupported';
+  type: BrowserRendererType;
   contentType: string;
   templateId?: string;
   url?: string;
   data?: Record<string, unknown>;
   error?: string;
+}
+
+export interface BrowserResolveAction {
+  id: string;
+  label: string;
+  kind: BrowserResolveActionKind;
+  enabled?: boolean;
+  requiresUsingIdentity?: boolean;
+  uri?: string;
+  serviceId?: string;
+  payload?: Record<string, unknown>;
 }
 
 export interface BrowserResourceSection {
@@ -198,17 +213,32 @@ export interface BrowserResourceSection {
 export interface BrowserResourceEnvelope {
   uri: string;
   normalizedUri: string;
-  resourceType: 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'unknown';
+  resourceType: BrowserResourceType;
   title: string;
-  owner?: BrowserResourceOwner;
+  owner: BrowserResourceOwner;
   ownerAffinity?: BrowserOwnerAffinity | null;
   renderer: BrowserRendererDescriptor;
-  actions: BrowserTrustedActionDescriptor[];
+  actions: BrowserResolveAction[];
   sections: BrowserResourceSection[];
-  status?: BrowserResolutionStatus;
+  status: BrowserResolutionStatus;
   proof?: BrowserProofSummary;
-  source?: BrowserSourceSummary;
+  source: BrowserSourceSummary;
   raw?: unknown;
+}
+
+// Duplicated from core for this milestone because core currently depends on host-contract.
+// Move shared Browser resource types to a no-dependency package before tightening this boundary further.
+export interface BrowserResolveResult {
+  uri: string;
+  normalizedUri: string;
+  resourceType: BrowserResourceType;
+  title: string;
+  owner: BrowserResourceOwner;
+  renderer: BrowserRendererDescriptor;
+  status: BrowserResolutionStatus;
+  proof?: BrowserProofSummary;
+  source: BrowserSourceSummary;
+  actions: BrowserResolveAction[];
 }
 
 export interface BrowserSettingsSnapshot {
@@ -224,6 +254,8 @@ export interface BrowserActorInput {
   actorId?: string;
 }
 
+export interface BrowserRuntimeInput extends BrowserActorInput {}
+
 export interface BrowserResolveInput extends BrowserActorInput {
   uri: string;
 }
@@ -237,6 +269,7 @@ export interface BrowserSettingsUpdateInput extends BrowserActorInput {
 export interface BrowserCacheInput extends BrowserActorInput {}
 
 export interface BrowserCacheClearInput extends BrowserActorInput {
+  all?: boolean;
   scope?: string;
   pinId?: string;
   cacheKey?: string;
@@ -260,8 +293,8 @@ export interface BrowserTrustedActionResult {
 }
 
 export interface BrowserHostAdapter {
-  getRuntime(input?: BrowserActorInput): Promise<BrowserCommandResult<BrowserRuntimeSnapshot>>;
-  resolveResource(input: BrowserResolveInput): Promise<BrowserCommandResult<BrowserResourceEnvelope>>;
+  getRuntime(input?: BrowserRuntimeInput): Promise<BrowserCommandResult<BrowserRuntimeSnapshot>>;
+  resolveResource(input: BrowserResolveInput): Promise<BrowserCommandResult<BrowserResolveResult>>;
   getSettings(input?: BrowserSettingsInput): Promise<BrowserCommandResult<BrowserSettingsSnapshot>>;
   updateSettings(input: BrowserSettingsUpdateInput): Promise<BrowserCommandResult<BrowserSettingsSnapshot>>;
   getCache(input?: BrowserCacheInput): Promise<BrowserCommandResult<BrowserCacheSnapshot>>;

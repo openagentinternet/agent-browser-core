@@ -121,6 +121,7 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
       owner: {
         kind: 'metaapp-publisher',
         globalMetaId: 'idq1fixturebot',
+        name: 'Fixture Publisher',
         label: 'Fixture Publisher',
         verificationState: 'partial',
       },

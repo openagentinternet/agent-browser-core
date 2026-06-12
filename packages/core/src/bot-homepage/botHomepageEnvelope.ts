@@ -1,7 +1,7 @@
 import type {
   BrowserResourceEnvelope,
   BrowserResourceSection,
-  BrowserTrustedActionDescriptor,
+  BrowserResolveAction,
 } from '@openagentinternet/agent-browser-host-contract';
 import {
   DEFAULT_BOT_HOMEPAGE_TEMPLATE_ID,
@@ -71,8 +71,8 @@ function sectionsFromHomepage(homepage: Record<string, unknown>): BrowserResourc
   ].filter((item): item is BrowserResourceSection => Boolean(item));
 }
 
-function actionsFromHomepage(globalMetaId: string, homepage: Record<string, unknown>): BrowserTrustedActionDescriptor[] {
-  const actions: BrowserTrustedActionDescriptor[] = [];
+function actionsFromHomepage(globalMetaId: string, homepage: Record<string, unknown>): BrowserResolveAction[] {
+  const actions: BrowserResolveAction[] = [];
   if (globalMetaId) {
     actions.push({
       id: 'private-chat',
@@ -117,6 +117,7 @@ export function buildBotHomepageEnvelope(input: BuildBotHomepageEnvelopeInput): 
       kind: 'bot',
       globalMetaId,
       address: text(profile.address) || undefined,
+      name: title,
       label: title,
       avatar: text(profile.avatar) || undefined,
       verificationState: 'partial',
