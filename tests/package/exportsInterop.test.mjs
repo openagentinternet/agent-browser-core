@@ -31,6 +31,15 @@ const PACKAGES = [
     },
   },
   {
+    name: '@openagentinternet/agent-browser-ui/browser',
+    exports: {
+      BROWSER_INDEX_HTML: 'string',
+      BROWSER_MENU_SECTIONS: 'object',
+      buildBrowserPageDefinition: 'function',
+      renderBrowserPageHtml: 'function',
+    },
+  },
+  {
     name: '@openagentinternet/agent-browser-host-standalone',
     exports: {
       createMemoryStandaloneBrowserHost: 'function',

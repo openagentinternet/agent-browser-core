@@ -1,5 +1,5 @@
 import http from 'node:http';
-import type { BrowserHostAdapter, BrowserResourceEnvelope, BrowserRuntimeSnapshot } from '@openagentinternet/agent-browser-host-contract';
+import type { BrowserHostAdapter } from '@openagentinternet/agent-browser-host-contract';
 import { buildBrowserPageDefinition, renderBrowserPageHtml } from '@openagentinternet/agent-browser-ui';
 import { handleStandaloneBrowserApiRoute, sendHtml, sendJson } from './http.js';
 import { createMemoryStandaloneBrowserHost } from './memoryHost.js';
@@ -9,18 +9,15 @@ export interface CreateStandaloneBrowserServerInput {
   defaultUri?: string;
 }
 
-async function loadInitialPage(adapter: BrowserHostAdapter, defaultUri: string): Promise<string> {
-  const runtime = await adapter.getRuntime();
-  const resource = await adapter.resolveResource({ uri: defaultUri });
-  return renderBrowserPageHtml(buildBrowserPageDefinition({
-    initialUri: defaultUri,
-    runtime: runtime.ok ? runtime.data as BrowserRuntimeSnapshot : null,
-    resource: resource.ok ? resource.data as BrowserResourceEnvelope : null,
-  }));
+async function loadInitialPage(): Promise<string> {
+  return renderBrowserPageHtml(buildBrowserPageDefinition());
 }
 
 function isBrowserPage(pathname: string): boolean {
-  return pathname === '/' || pathname === '/browser' || pathname === '/ui/browser';
+  return pathname === '/' ||
+    pathname === '/browser' ||
+    pathname === '/ui/browser' ||
+    /^\/browser\/(?:metaid|metaapp)\/[^/?#]+$/.test(pathname);
 }
 
 export function createStandaloneBrowserServer(input: CreateStandaloneBrowserServerInput = {}): http.Server {
@@ -39,7 +36,7 @@ export function createStandaloneBrowserServer(input: CreateStandaloneBrowserServ
           sendJson(res, 405, { ok: false, code: 'method_not_allowed', message: 'Expected GET.' });
           return;
         }
-        sendHtml(res, 200, await loadInitialPage(adapter, url.searchParams.get('uri') ?? defaultUri));
+        sendHtml(res, 200, await loadInitialPage());
         return;
       }
       if (await handleStandaloneBrowserApiRoute(req, res, url, adapter)) {

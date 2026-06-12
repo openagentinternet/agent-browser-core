@@ -4,7 +4,10 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 
 const require = createRequire(import.meta.url);
-const template = readFileSync(new URL('../../packages/ui/src/browser/indexHtml.ts', import.meta.url), 'utf8');
+const templateSource = readFileSync(new URL('../../packages/ui/src/browser/indexHtml.ts', import.meta.url), 'utf8');
+const templateMatch = templateSource.match(/export const BROWSER_INDEX_HTML = (.*);\n?$/s);
+assert.ok(templateMatch, 'missing BROWSER_INDEX_HTML export');
+const template = JSON.parse(templateMatch[1]);
 const { buildBrowserPageDefinition } = require('../../packages/ui/dist/browser/app.js');
 const { renderBrowserPageHtml } = require('../../packages/ui/dist/browser/page.js');
 
