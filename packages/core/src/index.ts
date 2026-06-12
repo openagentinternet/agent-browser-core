@@ -20,3 +20,12 @@ export {
   buildBotHomepageEnvelope,
   type BuildBotHomepageEnvelopeInput,
 } from './bot-homepage/botHomepageEnvelope.js';
+export * from './browser/types.js';
+export * from './browser/uri.js';
+export * from './browser/config.js';
+export * from './browser/settings.js';
+export * from './browser/botHomepageClient.js';
+export * from './browser/botPageResolver.js';
+export * from './browser/browserResolver.js';
+export * from './browser/metaAppResolver.js';
+export * from './browser/metaAppPinResolver.js';

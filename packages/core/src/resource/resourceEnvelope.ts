@@ -1,7 +1,7 @@
 import type {
   BrowserResourceEnvelope,
   BrowserResourceSection,
-  BrowserTrustedActionDescriptor,
+  BrowserResolveAction,
 } from '@openagentinternet/agent-browser-host-contract';
 
 export function normalizeResourceSections(value: unknown): BrowserResourceSection[] {
@@ -25,15 +25,15 @@ export function normalizeResourceSections(value: unknown): BrowserResourceSectio
   });
 }
 
-export function normalizeTrustedActions(value: unknown): BrowserTrustedActionDescriptor[] {
+export function normalizeTrustedActions(value: unknown): BrowserResolveAction[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((action): BrowserTrustedActionDescriptor[] => {
+  return value.flatMap((action): BrowserResolveAction[] => {
     if (!action || typeof action !== 'object') return [];
     const raw = action as Record<string, unknown>;
     const id = typeof raw.id === 'string' && raw.id.trim() ? raw.id.trim() : '';
     const label = typeof raw.label === 'string' && raw.label.trim() ? raw.label.trim() : '';
     const kind = typeof raw.kind === 'string' && raw.kind.trim() ? raw.kind.trim() : '';
-    if (!id || !label || !isTrustedActionKind(kind)) return [];
+    if (!id || !label || !isResolveActionKind(kind)) return [];
     return [{
       id,
       label,
@@ -50,6 +50,11 @@ export function createUnsupportedResourceEnvelope(uri: string, message: string):
     normalizedUri: uri,
     resourceType: 'unknown',
     title: 'Unsupported resource',
+    owner: {
+      kind: 'unknown',
+      name: 'Unknown owner',
+      verificationState: 'unverified',
+    },
     renderer: {
       type: 'unsupported',
       contentType: 'text/plain',
@@ -57,6 +62,14 @@ export function createUnsupportedResourceEnvelope(uri: string, message: string):
     },
     actions: [],
     sections: [],
+    status: {
+      state: 'error',
+      verificationState: 'unverified',
+      message,
+    },
+    source: {
+      resolver: 'unsupported-resource',
+    },
   };
 }
 
@@ -64,18 +77,13 @@ function isResourceSectionKind(value: string): value is BrowserResourceSection['
   return ['services', 'skills', 'buses', 'buzzes', 'apps', 'activity', 'generic-list'].includes(value);
 }
 
-function isTrustedActionKind(value: string): value is BrowserTrustedActionDescriptor['kind'] {
+function isResolveActionKind(value: string): value is BrowserResolveAction['kind'] {
   return [
     'private-chat',
+    'service-list',
     'service-call',
-    'copy-uri',
-    'open-settings',
-    'login',
-    'wallet-sign',
-    'payment',
-    'edit-profile',
-    'configure-chat',
-    'view-messages',
-    'share-resource',
+    'copy',
+    'proof',
+    'creator',
   ].includes(value);
 }

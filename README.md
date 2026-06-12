@@ -32,7 +32,7 @@ integration are planned as follow-up implementation phases.
 
 ## Release Process
 
-The first package release is `v0.1.0`. Package publishing is tag-triggered through
+The next package release is `v0.2.0`. Package publishing is tag-triggered through
 `.github/workflows/release.yml`.
 
 Before pushing a release tag:
@@ -40,7 +40,7 @@ Before pushing a release tag:
 ```bash
 PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" npm run verify
 PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" npm run verify:packages
-PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" node scripts/verify-release-version.mjs v0.1.0
+PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" node scripts/verify-release-version.mjs v0.2.0
 PATH="$HOME/.nvm/versions/node/v20.20.0/bin:$PATH" npm run publish:packages:dry-run
 git diff --check
 ```
@@ -50,9 +50,16 @@ publishable package, merge the release-ready branch to `main`, then tag and push
 from the same `main` commit:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.2.0
+git push origin v0.2.0
 ```
+
+## 0.1.0 To 0.2.0 Host Migration
+
+Host adapters that only return `success` and `failed` command results remain valid.
+Hosts may now return `waiting` and `manual_action_required` for long-running or human-confirmed actions.
+UI hosts should consume `@openagentinternet/agent-browser-ui@0.2.0` only when they want the shared Browser shell.
+OAC integration remains a separate pinned-package consumption step and should be implemented in a dedicated OAC worktree.
 
 ## Source Baseline
 

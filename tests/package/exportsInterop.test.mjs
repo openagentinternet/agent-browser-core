@@ -10,6 +10,8 @@ const PACKAGES = [
     exports: {
       browserSuccess: 'function',
       browserFailure: 'function',
+      browserWaiting: 'function',
+      browserManualActionRequired: 'function',
     },
   },
   {
@@ -29,17 +31,30 @@ const PACKAGES = [
     },
   },
   {
+    name: '@openagentinternet/agent-browser-ui/browser',
+    exports: {
+      BROWSER_INDEX_HTML: 'string',
+      BROWSER_MENU_SECTIONS: 'object',
+      buildBrowserPageDefinition: 'function',
+      renderBrowserPageHtml: 'function',
+    },
+  },
+  {
     name: '@openagentinternet/agent-browser-host-standalone',
     exports: {
+      createStandaloneBrowserHostAdapter: 'function',
       createMemoryStandaloneBrowserHost: 'function',
       createStandaloneBrowserServer: 'function',
       handleStandaloneBrowserApiRoute: 'function',
+      sendHtml: 'function',
+      sendJson: 'function',
     },
   },
   {
     name: '@openagentinternet/agent-browser-test-harness',
     exports: {
       assertBrowserHostConformance: 'function',
+      assertBrowserCommandResultShape: 'function',
     },
   },
 ];

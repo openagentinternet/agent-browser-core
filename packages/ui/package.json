@@ -1,6 +1,6 @@
 {
   "name": "@openagentinternet/agent-browser-ui",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -12,48 +12,28 @@
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist/browserPageHtml.d.ts",
-    "dist/browserPageHtml.d.ts.map",
-    "dist/browserPageHtml.js",
-    "dist/browserPageHtml.js.map",
-    "dist/index.d.ts",
-    "dist/index.d.ts.map",
-    "dist/index.js",
-    "dist/index.js.map",
-    "dist/menuModel.d.ts",
-    "dist/menuModel.d.ts.map",
-    "dist/menuModel.js",
-    "dist/menuModel.js.map",
-    "dist/pageDefinition.d.ts",
-    "dist/pageDefinition.d.ts.map",
-    "dist/pageDefinition.js",
-    "dist/pageDefinition.js.map",
-    "dist/renderers.d.ts",
-    "dist/renderers.d.ts.map",
-    "dist/renderers.js",
-    "dist/renderers.js.map",
-    "dist-cjs/package.json",
-    "dist-cjs/browserPageHtml.js",
-    "dist-cjs/browserPageHtml.js.map",
-    "dist-cjs/index.js",
-    "dist-cjs/index.js.map",
-    "dist-cjs/menuModel.js",
-    "dist-cjs/menuModel.js.map",
-    "dist-cjs/pageDefinition.js",
-    "dist-cjs/pageDefinition.js.map",
-    "dist-cjs/renderers.js",
-    "dist-cjs/renderers.js.map"
+    "dist/**",
+    "!dist/.tsbuildinfo",
+    "dist-cjs/**",
+    "!dist-cjs/.tsbuildinfo",
+    "package.json",
+    "README.md"
   ],
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist-cjs/index.js"
+    },
+    "./browser": {
+      "types": "./dist/browser/index.d.ts",
+      "import": "./dist/browser/index.js",
+      "require": "./dist-cjs/browser/index.js"
     }
   },
   "dependencies": {
-    "@openagentinternet/agent-browser-core": "0.1.0",
-    "@openagentinternet/agent-browser-host-contract": "0.1.0"
+    "@openagentinternet/agent-browser-core": "0.3.0",
+    "@openagentinternet/agent-browser-host-contract": "0.3.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"

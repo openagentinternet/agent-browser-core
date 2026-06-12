@@ -1,7 +1,7 @@
 # Agent Browser Core 0.2 Shared UI And Contract Design
 
 Date: 2026-06-11
-Status: Draft for user review
+Status: Implemented in ABC 0.2.0 branch
 
 ## Context
 

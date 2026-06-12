@@ -1,0 +1,54 @@
+import {
+  DEFAULT_BOT_HOMEPAGE_TEMPLATE_ID,
+  normalizeBotHomepageTemplateId,
+} from './botHomepageTemplates.js';
+import type { BrowserBaseConfig, BrowserConfigContainer } from './types.js';
+
+const DEFAULT_METASO_P2P_BASE_URL = 'https://so.metaid.io';
+const DEFAULT_METAFILE_CONTENT_BASE_URL = 'https://so.metaid.io/content';
+const DEFAULT_MANAPI_BASE_URL = 'https://manapi.metaid.io';
+const DEFAULT_BLOCK_EXPLORER_BASE_URL = 'https://www.mvcscan.com/tx';
+
+function normalizeUrl(value: unknown): string {
+  const text = typeof value === 'string' ? value.trim() : '';
+  return text.replace(/\/+$/, '');
+}
+
+export function createDefaultBrowserConfig(): BrowserBaseConfig {
+  return {
+    metasoP2PBaseUrl: DEFAULT_METASO_P2P_BASE_URL,
+    metafileContentBaseUrl: DEFAULT_METAFILE_CONTENT_BASE_URL,
+    manApiBaseUrl: DEFAULT_MANAPI_BASE_URL,
+    blockExplorerBaseUrl: DEFAULT_BLOCK_EXPLORER_BASE_URL,
+    walletApiBaseUrl: '',
+    botHomepageTemplateId: DEFAULT_BOT_HOMEPAGE_TEMPLATE_ID,
+    localMode: false,
+  };
+}
+
+export function resolveBrowserConfig(
+  config: BrowserConfigContainer = {},
+  env: Record<string, string | undefined> = {},
+): BrowserBaseConfig {
+  const defaults = createDefaultBrowserConfig();
+  const browser = config.browser ?? {};
+  return {
+    metasoP2PBaseUrl: normalizeUrl(env.METABOT_BROWSER_METASO_P2P_BASE_URL)
+      || normalizeUrl(browser.metasoP2PBaseUrl)
+      || defaults.metasoP2PBaseUrl,
+    metafileContentBaseUrl: normalizeUrl(env.METABOT_BROWSER_METAFILE_CONTENT_BASE_URL)
+      || normalizeUrl(browser.metafileContentBaseUrl)
+      || defaults.metafileContentBaseUrl,
+    manApiBaseUrl: normalizeUrl(env.METABOT_BROWSER_MANAPI_BASE_URL)
+      || normalizeUrl(browser.manApiBaseUrl)
+      || defaults.manApiBaseUrl,
+    blockExplorerBaseUrl: normalizeUrl(env.METABOT_BROWSER_BLOCK_EXPLORER_BASE_URL)
+      || normalizeUrl(browser.blockExplorerBaseUrl)
+      || defaults.blockExplorerBaseUrl,
+    walletApiBaseUrl: normalizeUrl(env.METABOT_BROWSER_WALLET_API_BASE_URL)
+      || normalizeUrl(browser.walletApiBaseUrl)
+      || defaults.walletApiBaseUrl,
+    botHomepageTemplateId: normalizeBotHomepageTemplateId(browser.botHomepageTemplateId),
+    localMode: typeof browser.localMode === 'boolean' ? browser.localMode : defaults.localMode,
+  };
+}

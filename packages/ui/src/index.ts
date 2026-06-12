@@ -1,15 +1,30 @@
 export {
-  renderBrowserPageHtml,
-} from './browserPageHtml.js';
+  BROWSER_PAGE_STYLES,
+} from './browserStyles.js';
+export {
+  buildBrowserClientScript,
+} from './browserClientScript.js';
+export {
+  buildBrowserShellHtml,
+} from './browserShell.js';
+export type {
+  BrowserClientScriptInput,
+  BrowserPageDefinitionInput,
+  BrowserShellInput,
+} from './browserTypes.js';
 export {
   buildBrowserPageDefinition,
   type BrowserPageDefinition,
-  type BrowserPageDefinitionInput,
-} from './pageDefinition.js';
+  type BrowserPagePanelDefinition,
+} from './browser/app.js';
+export {
+  renderBrowserPageHtml,
+} from './browser/page.js';
 export {
   escapeHtml,
   renderBotPageHtml,
   renderResourceHtml,
+  safeRendererUrl,
   safeResourceUrl,
 } from './renderers.js';
 export {
@@ -21,4 +36,4 @@ export {
   type BrowserMenuItemDefinition,
   type BrowserMenuSectionDefinition,
   type BrowserSettingsTabDefinition,
-} from './menuModel.js';
+} from './browser/menuModel.js';

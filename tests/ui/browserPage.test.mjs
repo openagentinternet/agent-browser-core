@@ -1,48 +1,76 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
-const core = await import('../../packages/core/dist/index.js');
 const ui = await import('../../packages/ui/dist/index.js');
 
-test('Browser page renders fixed chrome, URI input, actor chip, viewport, and status strip', () => {
-  const definition = ui.buildBrowserPageDefinition({ initialUri: 'metaid://idq1fixturebot' });
-  const html = ui.renderBrowserPageHtml(definition);
+const templateSource = readFileSync(new URL('../../packages/ui/src/browser/indexHtml.ts', import.meta.url), 'utf8');
+const templateMatch = templateSource.match(/export const BROWSER_INDEX_HTML = (.*);\n?$/s);
+assert.ok(templateMatch, 'missing BROWSER_INDEX_HTML export');
+const template = JSON.parse(templateMatch[1]);
+
+test('Browser root API renders the mature fixed chrome shell asynchronously', async () => {
+  const definition = ui.buildBrowserPageDefinition();
+  const html = await ui.renderBrowserPageHtml(definition);
 
   assert.match(html, /Agent Internet Browser/);
   assert.match(html, /data-browser-shell/);
+  assert.match(html, /class="browser-titlebar"/);
+  assert.match(html, /class="browser-topbar"/);
   assert.match(html, /data-browser-uri-input/);
   assert.match(html, /data-browser-using-selector/);
+  assert.match(html, /data-browser-resource-chip/);
+  assert.match(html, /data-browser-menu-trigger/);
+  assert.match(html, /data-browser-owner-toolbar/);
   assert.match(html, /data-browser-viewport/);
+  assert.match(html, /data-browser-inspector/);
   assert.match(html, /data-browser-status-strip/);
-  assert.match(html, /body:has\(\.browser-shell\) \{ overflow: hidden; \}/);
-  assert.match(html, /\.browser-viewport \{ min-height: 0; overflow: auto;/);
+  assert.match(html, /data-browser-modal-root/);
   assert.match(html, /TXID: -/);
 });
 
-test('Browser page can include an initial Bot resource render', async () => {
-  const homepage = JSON.parse(await readFile(new URL('../fixtures/botHomepage.v1.json', import.meta.url), 'utf8'));
-  const resource = core.buildBotHomepageEnvelope({
-    uri: 'metaid://idq1fixturebot',
-    normalizedUri: 'metaid://idq1fixturebot',
-    homepage,
-  });
-  const html = ui.renderBrowserPageHtml(ui.buildBrowserPageDefinition({ resource }));
+test('Browser root API uses the generated mature inline CSS template', async () => {
+  const html = await ui.renderBrowserPageHtml();
 
-  assert.match(html, /Fixture Bot/);
-  assert.match(html, /Fixture Review/);
-  assert.match(html, /\/api\/browser\/resolve/);
+  assert.match(template, /body:has\(\.browser-shell\) \{\n        height: 100vh;\n        min-height: 100vh;\n        overflow: hidden;/);
+  assert.match(template, /\.browser-shell \{\n        --browser-bg: #f4f6f9;/);
+  assert.match(template, /\.browser-viewport \{\n        grid-row: 1;\n        grid-column: 1;/);
+  assert.match(template, /\.browser-owner-toolbar \{/);
+  assert.match(template, /\.browser-modal-panel \{/);
+  assert.match(html, /body:has\(\.browser-shell\)/);
+  assert.doesNotMatch(html, /__PAGE_CONTENT__|__PAGE_TITLE__|__PAGE_SCRIPT__/);
 });
 
-test('Browser client script preserves resolved Bot actions and resolve failures', () => {
+test('Browser client script exposes mature endpoints and path/default URI boot logic', () => {
   const definition = ui.buildBrowserPageDefinition();
 
-  assert.match(definition.script, /function actionHtml\(action\)/);
-  assert.match(definition.script, /data-browser-action=/);
-  assert.match(definition.script, /actionsHtml\(resource\.actions \|\| \[\]\)/);
-  assert.match(definition.script, /class="browser-pdf" sandbox=""/);
-  assert.match(definition.script, /try \{/);
-  assert.match(definition.script, /catch \(error\)/);
-  assert.match(definition.script, /status\.textContent = 'error'/);
-  assert.match(definition.script, /navigateTo\(input && input\.value \|\| ''\)\.catch\(\(\) => \{\}\)/);
+  assert.match(definition.script, /var browserEndpoints = \{/);
+  assert.match(definition.script, /runtime: '\/api\/browser\/runtime'/);
+  assert.match(definition.script, /resolve: '\/api\/browser\/resolve'/);
+  assert.match(definition.script, /settings: '\/api\/browser\/settings'/);
+  assert.match(definition.script, /cache: '\/api\/browser\/cache'/);
+  assert.match(definition.script, /actions: '\/api\/browser\/actions'/);
+  assert.match(definition.script, /function browserUriFromPath\(pathname\)/);
+  assert.match(definition.script, /var queryUri = new URLSearchParams\(window\.location\.search \|\| ''\)\.get\('uri'\) \|\| '';/);
+  assert.match(definition.script, /var pathUri = queryUri \? '' : browserUriFromPath\(window\.location && window\.location\.pathname\);/);
+  assert.match(definition.script, /if \(runtime && runtime\.defaultUri\) \{/);
+  assert.match(definition.script, /globalThis\.browserUriFromPath = browserUriFromPath;/);
+  assert.match(definition.script, /globalThis\.browserEndpoints = browserEndpoints;/);
+});
+
+test('Browser client script includes mature renderer, modal, owner, and share flows', () => {
+  const definition = ui.buildBrowserPageDefinition();
+
+  assert.match(definition.script, /function renderBotHomepageDocumentTemplate\(payload, current\)/);
+  assert.match(definition.script, /function renderBotHomepageCompactListTemplate\(payload, current\)/);
+  assert.match(definition.script, /function renderRenderer\(current\)/);
+  assert.match(definition.script, /function openUsingIdentitySelector\(\)/);
+  assert.match(definition.script, /async function selectBotHomepageTemplate\(templateId\)/);
+  assert.match(definition.script, /state\.pendingPrivateChat = \{/);
+  assert.match(definition.script, /state\.pendingServiceCall = \{/);
+  assert.match(definition.script, /data-browser-owner-action="share"/);
+  assert.match(definition.script, /data-browser-share-copy=/);
+  assert.match(definition.script, /browser-drawer/);
+  assert.match(definition.script, /browser-inspector/);
+  assert.match(definition.script, /browser-html-frame" sandbox="allow-scripts"/);
 });

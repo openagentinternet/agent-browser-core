@@ -4,7 +4,9 @@ import {
 } from '@openagentinternet/agent-browser-core';
 import {
   browserFailure,
+  browserManualActionRequired,
   browserSuccess,
+  browserWaiting,
   type BrowserActor,
   type BrowserHostAdapter,
   type BrowserResourceEnvelope,
@@ -119,6 +121,7 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
       owner: {
         kind: 'metaapp-publisher',
         globalMetaId: 'idq1fixturebot',
+        name: 'Fixture Publisher',
         label: 'Fixture Publisher',
         verificationState: 'partial',
       },
@@ -219,6 +222,18 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
     async runTrustedAction(input) {
       const failure = ensureActor(input.actorId);
       if (failure) return failure;
+      if (input.kind === 'login') {
+        return browserManualActionRequired('wallet_login_required', 'Connect a wallet in the standalone host.', {
+          action: { label: 'Connect wallet', route: '/browser/login' },
+        });
+      }
+      if (input.kind === 'service-call') {
+        return browserWaiting('service_call_pending', 'Standalone service call is queued in the development host.', {
+          pollAfterMs: 1000,
+          action: { label: 'Open request status', route: '/browser/requests/dev-service-call' },
+          data: { requestId: 'dev-service-call' },
+        });
+      }
       return browserFailure('browser_action_not_supported', `Standalone Browser does not support trusted action: ${input.kind}`);
     },
   };

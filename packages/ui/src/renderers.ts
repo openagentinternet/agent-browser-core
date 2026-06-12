@@ -1,8 +1,8 @@
 import type {
   BrowserRendererDescriptor,
+  BrowserResolveAction,
   BrowserResourceEnvelope,
   BrowserResourceSection,
-  BrowserTrustedActionDescriptor,
 } from '@openagentinternet/agent-browser-host-contract';
 
 export function escapeHtml(value: unknown): string {
@@ -15,16 +15,20 @@ export function escapeHtml(value: unknown): string {
   })[char] ?? char);
 }
 
-export function safeResourceUrl(rawValue: unknown): string {
-  const value = String(rawValue ?? '').trim();
-  if (!value) return '';
-  if (value.startsWith('/') && !value.startsWith('//')) return value;
+export function safeRendererUrl(value: unknown): string {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  if (text.charAt(0) === '/' && text.slice(0, 2) !== '//') return text;
   try {
-    const parsed = new URL(value);
+    const parsed = new URL(text);
     return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : '';
   } catch {
     return '';
   }
+}
+
+export function safeResourceUrl(value: unknown): string {
+  return safeRendererUrl(value);
 }
 
 function text(value: unknown): string {
@@ -39,7 +43,7 @@ function sectionItemDescription(item: Record<string, unknown>): string {
   return text(item.description) || text(item.summary) || text(item.bio);
 }
 
-function renderActions(actions: readonly BrowserTrustedActionDescriptor[]): string {
+function renderActions(actions: readonly BrowserResolveAction[]): string {
   if (actions.length === 0) return '';
   return `<div class="browser-action-row">${actions.map((action) => (
     `<button type="button" data-browser-action="${escapeHtml(action.kind)}" data-browser-action-id="${escapeHtml(action.id)}"${action.enabled ? '' : ' disabled'}>${escapeHtml(action.label)}</button>`

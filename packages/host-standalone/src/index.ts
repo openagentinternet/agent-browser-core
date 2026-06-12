@@ -1,4 +1,11 @@
 export {
+  createStandaloneBrowserHostAdapter,
+  type CreateStandaloneBrowserHostAdapterInput,
+  type StandaloneBrowserHostAdapter,
+  type StandaloneBrowserPreviewAsset,
+  type StandaloneBrowserPreviewAssetInput,
+} from './adapter.js';
+export {
   createMemoryStandaloneBrowserHost,
   type MemoryStandaloneHostInput,
 } from './memoryHost.js';

@@ -34,7 +34,7 @@ function isDirectCliInvocation(): boolean {
 export async function main(argv: string[] = process.argv.slice(2), env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const host = readOption(argv, '--host') ?? env.BROWSER_HOST ?? '127.0.0.1';
   const port = parsePort(readOption(argv, '--port') ?? env.BROWSER_PORT ?? '8787');
-  const server = createStandaloneBrowserServer();
+  const server = createStandaloneBrowserServer({ env });
 
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => {

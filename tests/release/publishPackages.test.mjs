@@ -12,10 +12,10 @@ test("dry run logs Browser packages in publish order", async () => {
   });
 
   assert.deepEqual(logs, [
-    "DRY RUN publish @openagentinternet/agent-browser-host-contract@0.1.0",
-    "DRY RUN publish @openagentinternet/agent-browser-core@0.1.0",
-    "DRY RUN publish @openagentinternet/agent-browser-ui@0.1.0",
-    "DRY RUN publish @openagentinternet/agent-browser-host-standalone@0.1.0",
-    "DRY RUN publish @openagentinternet/agent-browser-test-harness@0.1.0",
+    "DRY RUN publish @openagentinternet/agent-browser-host-contract@0.3.0",
+    "DRY RUN publish @openagentinternet/agent-browser-core@0.3.0",
+    "DRY RUN publish @openagentinternet/agent-browser-ui@0.3.0",
+    "DRY RUN publish @openagentinternet/agent-browser-host-standalone@0.3.0",
+    "DRY RUN publish @openagentinternet/agent-browser-test-harness@0.3.0",
   ]);
 });

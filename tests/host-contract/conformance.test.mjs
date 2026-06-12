@@ -1,11 +1,34 @@
 import { test } from 'node:test';
+import assert from 'node:assert/strict';
 import {
   browserFailure,
+  browserManualActionRequired,
   browserSuccess,
+  browserWaiting,
 } from '../../packages/host-contract/dist/index.js';
 import { assertBrowserHostConformance } from '../../packages/test-harness/dist/index.js';
 
-test('fake standalone host satisfies Browser host conformance', async () => {
+function createResolveResult(uri, overrides = {}) {
+  return {
+    uri,
+    normalizedUri: uri,
+    resourceType: 'bot',
+    title: 'Fake Bot',
+    owner: {
+      kind: 'bot',
+      globalMetaId: 'idq1fake',
+      name: 'Fake Bot',
+      verificationState: 'verified',
+    },
+    renderer: { type: 'bot-page', contentType: 'application/json', templateId: 'document' },
+    status: { state: 'resolved', verificationState: 'verified', message: 'Resolved fake bot.' },
+    source: { resolver: 'fake-conformance' },
+    actions: [],
+    ...overrides,
+  };
+}
+
+function createConformantAdapter(overrides = {}) {
   const adapter = {
     async getRuntime() {
       return browserSuccess({
@@ -29,22 +52,7 @@ test('fake standalone host satisfies Browser host conformance', async () => {
       });
     },
     async resolveResource(input) {
-      return browserSuccess({
-        uri: input.uri,
-        normalizedUri: input.uri,
-        resourceType: 'bot',
-        title: 'Fake Bot',
-        owner: {
-          kind: 'bot',
-          globalMetaId: 'idq1fake',
-          label: 'Fake Bot',
-          verificationState: 'verified',
-        },
-        ownerAffinity: null,
-        renderer: { type: 'bot-page', contentType: 'application/json', templateId: 'document' },
-        actions: [],
-        sections: [],
-      });
+      return browserSuccess(createResolveResult(input.uri));
     },
     async getSettings() {
       return browserSuccess({
@@ -54,6 +62,7 @@ test('fake standalone host satisfies Browser host conformance', async () => {
       });
     },
     async updateSettings(input) {
+      assert.equal(input.browser.botHomepageTemplateId, 'document');
       return browserSuccess({
         browser: input.browser ?? {},
         effectiveBrowser: input.browser ?? {},
@@ -63,13 +72,145 @@ test('fake standalone host satisfies Browser host conformance', async () => {
     async getCache() {
       return browserSuccess({ cacheRoot: 'fake', artifactCount: 0 });
     },
-    async clearCache() {
+    async clearCache(input) {
+      assert.equal(input.all, true);
       return browserSuccess({ cacheRoot: 'fake', clearedArtifacts: 0 });
     },
     async runTrustedAction(input) {
       return browserFailure('browser_action_not_supported', `Unsupported action: ${input.kind}`);
     },
   };
+
+  return { ...adapter, ...overrides };
+}
+
+test('fake standalone host satisfies Browser host conformance', async () => {
+  const adapter = createConformantAdapter();
+
+  await assertBrowserHostConformance({
+    adapter,
+    expectedHostKind: 'standalone',
+    sampleUri: 'metaid://idq1fake',
+  });
+});
+
+test('host conformance rejects resolve results missing mature Browser fields', async () => {
+  const adapter = createConformantAdapter({
+    async resolveResource(input) {
+      return browserSuccess({
+        uri: input.uri,
+        normalizedUri: input.uri,
+        resourceType: 'bot',
+        title: 'Fake Bot',
+        renderer: { type: 'bot-page', contentType: 'application/json', templateId: 'document' },
+        actions: [],
+      });
+    },
+  });
+
+  await assert.rejects(
+    () => assertBrowserHostConformance({
+      adapter,
+      expectedHostKind: 'standalone',
+      sampleUri: 'metaid://idq1fake',
+    }),
+    /resolveResource owner/,
+  );
+});
+
+test('host conformance rejects invalid mature Browser enum values', async () => {
+  const cases = [
+    {
+      label: 'resourceType',
+      overrides: { resourceType: 'host-login' },
+      pattern: /resolveResource resourceType/,
+    },
+    {
+      label: 'owner.kind',
+      overrides: { owner: { kind: 'person', name: 'Fake Bot', verificationState: 'verified' } },
+      pattern: /resolveResource owner kind/,
+    },
+    {
+      label: 'renderer.type',
+      overrides: { renderer: { type: 'native-view', contentType: 'application/json' } },
+      pattern: /resolveResource renderer type/,
+    },
+    {
+      label: 'status.state',
+      overrides: { status: { state: 'done', verificationState: 'verified', message: 'Resolved fake bot.' } },
+      pattern: /resolveResource status state/,
+    },
+    {
+      label: 'status.verificationState',
+      overrides: { status: { state: 'resolved', verificationState: 'trusted', message: 'Resolved fake bot.' } },
+      pattern: /resolveResource status verificationState/,
+    },
+    {
+      label: 'proof.verificationState',
+      overrides: { proof: { verificationState: 'trusted' } },
+      pattern: /resolveResource proof verificationState/,
+    },
+    {
+      label: 'actions.kind',
+      overrides: { actions: [{ id: 'login', label: 'Login', kind: 'login' }] },
+      pattern: /resolveResource action kind/,
+    },
+  ];
+
+  for (const { label, overrides, pattern } of cases) {
+    const adapter = createConformantAdapter({
+      async resolveResource(input) {
+        return browserSuccess(createResolveResult(input.uri, overrides));
+      },
+    });
+
+    await assert.rejects(
+      () => assertBrowserHostConformance({
+        adapter,
+        expectedHostKind: 'standalone',
+        sampleUri: `metaid://idq1fake-${label}`,
+      }),
+      pattern,
+    );
+  }
+});
+
+test('host conformance accepts successful trusted actions', async () => {
+  const adapter = createConformantAdapter({
+    async runTrustedAction(input) {
+      return browserSuccess({ kind: input.kind, handled: true });
+    },
+  });
+
+  await assertBrowserHostConformance({
+    adapter,
+    expectedHostKind: 'standalone',
+    sampleUri: 'metaid://idq1fake',
+  });
+});
+
+test('host conformance accepts waiting trusted actions', async () => {
+  const adapter = createConformantAdapter({
+    async runTrustedAction() {
+      return browserWaiting('payment_pending', 'Payment is pending.', { pollAfterMs: 1000 });
+    },
+  });
+
+  await assertBrowserHostConformance({
+    adapter,
+    expectedHostKind: 'standalone',
+    sampleUri: 'metaid://idq1fake',
+  });
+});
+
+test('host conformance accepts manual-action trusted actions', async () => {
+  const adapter = createConformantAdapter({
+    async runTrustedAction() {
+      return browserManualActionRequired('wallet_required', 'Connect a wallet.', {
+        action: { label: 'Connect wallet', route: '/browser/login' },
+      });
+    },
+  });
 
   await assertBrowserHostConformance({
     adapter,
