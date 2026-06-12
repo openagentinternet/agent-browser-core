@@ -30,11 +30,23 @@ test('standalone Browser server serves Browser shell and health route', async (t
   assert.equal(response.status, 200);
   assert.match(html, /Agent Internet Browser/);
   assert.match(html, /data-browser-shell/);
-  assert.match(html, /Fixture Bot/);
 
   const runtime = await json(await fetch(`${baseUrl}/api/browser/runtime`));
   assert.equal(runtime.ok, true);
   assert.equal(runtime.data.host.kind, 'standalone');
+  assert.deepEqual(runtime.data.defaultActor, {
+    id: 'standalone-wallet',
+    label: 'Standalone Wallet',
+    kind: 'wallet',
+    isDefault: true,
+    capabilities: ['template-settings'],
+  });
+  assert.equal(runtime.data.defaultUri, 'metaid://idq1fixturebot');
+  assert.deepEqual(runtime.data.labels, {
+    actorChip: 'Wallet',
+    noActorTitle: 'No Wallet',
+    noActorBody: 'Standalone Browser is running with a development wallet actor.',
+  });
 });
 
 test('standalone Browser server exposes runtime resolve settings cache and action routes', async (t) => {
@@ -51,6 +63,7 @@ test('standalone Browser server exposes runtime resolve settings cache and actio
   assert.equal(resolved.ok, true);
   assert.equal(resolved.data.resourceType, 'bot');
   assert.equal(resolved.data.renderer.type, 'bot-page');
+  assert.equal(resolved.data.title, 'Fixture Bot');
 
   const settings = await json(await fetch(`${baseUrl}/api/browser/settings`));
   assert.equal(settings.ok, true);
@@ -76,18 +89,6 @@ test('standalone Browser server exposes runtime resolve settings cache and actio
   assert.equal(cleared.ok, true);
   assert.equal(cleared.data.clearedArtifacts, 0);
 
-  const serviceCallResponse = await fetch(`${baseUrl}/api/browser/actions`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ kind: 'service-call', resourceUri: 'metaid://idq1fixturebot' }),
-  });
-  const serviceCall = await json(serviceCallResponse);
-  assert.equal(serviceCallResponse.status, 200);
-  assert.equal(serviceCall.ok, false);
-  assert.equal(serviceCall.state, 'waiting');
-  assert.equal(serviceCall.code, 'service_call_pending');
-  assert.equal(serviceCall.pollAfterMs, 1000);
-
   const loginResponse = await fetch(`${baseUrl}/api/browser/actions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -98,18 +99,23 @@ test('standalone Browser server exposes runtime resolve settings cache and actio
   assert.equal(login.ok, false);
   assert.equal(login.state, 'manual_action_required');
   assert.equal(login.code, 'wallet_login_required');
+  assert.equal(login.message, 'Connect a wallet in the standalone host.');
   assert.equal(login.action.label, 'Connect wallet');
+  assert.equal(login.action.route, '/browser/login');
 
-  const unsupportedResponse = await fetch(`${baseUrl}/api/browser/actions`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ kind: 'private-chat', resourceUri: 'metaid://idq1fixturebot' }),
-  });
-  const unsupported = await json(unsupportedResponse);
-  assert.equal(unsupportedResponse.status, 400);
-  assert.equal(unsupported.ok, false);
-  assert.equal(unsupported.state, 'failed');
-  assert.equal(unsupported.code, 'browser_action_not_supported');
+  for (const kind of ['service-call', 'private-chat']) {
+    const unsupportedResponse = await fetch(`${baseUrl}/api/browser/actions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ kind, resourceUri: 'metaid://idq1fixturebot' }),
+    });
+    const unsupported = await json(unsupportedResponse);
+    assert.equal(unsupportedResponse.status, 400);
+    assert.equal(unsupported.ok, false);
+    assert.equal(unsupported.state, 'failed');
+    assert.equal(unsupported.code, 'browser_action_not_supported');
+    assert.equal(unsupported.message, `Standalone Browser does not support trusted action: ${kind}`);
+  }
 });
 
 test('standalone Browser server maps bad client requests to explicit failures', async (t) => {

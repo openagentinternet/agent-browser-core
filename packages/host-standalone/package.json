@@ -15,6 +15,10 @@
     "agent-browser-standalone": "dist/main.js"
   },
   "files": [
+    "dist/adapter.d.ts",
+    "dist/adapter.d.ts.map",
+    "dist/adapter.js",
+    "dist/adapter.js.map",
     "dist/http.d.ts",
     "dist/http.d.ts.map",
     "dist/http.js",
@@ -36,6 +40,8 @@
     "dist/server.js",
     "dist/server.js.map",
     "dist-cjs/package.json",
+    "dist-cjs/adapter.js",
+    "dist-cjs/adapter.js.map",
     "dist-cjs/http.js",
     "dist-cjs/http.js.map",
     "dist-cjs/index.js",

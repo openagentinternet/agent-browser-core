@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const { createStandaloneBrowserServer } = require('../../packages/host-standalone/dist/server.js');
 const { createStandaloneBrowserHostAdapter } = require('../../packages/host-standalone/dist/adapter.js');
 
 const METAAPP_PIN_ID = '8544d8a15126296abe36a0bad740a4f293580575b5b00d345029bf99b74c78eci0';
-const ZIP_PIN_ID = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
 
 async function listen(server) {
   await new Promise((resolve) => {
@@ -25,31 +25,12 @@ async function readJson(response) {
   return response.json();
 }
 
-async function makeZipBuffer(title = 'Standalone Preview') {
-  const projectDir = await mkdtemp(path.join(os.tmpdir(), 'oac-standalone-metaapp-project-'));
-  await mkdir(path.join(projectDir, 'app'), { recursive: true });
-  await writeFile(path.join(projectDir, 'app', 'index.html'), `<!doctype html><title>${title}</title>`);
-  await writeFile(path.join(projectDir, 'app', 'app.js'), 'window.__standalonePreviewLoaded = true;');
-  const archivePath = path.join(await mkdtemp(path.join(os.tmpdir(), 'oac-standalone-metaapp-archive-')), 'metaapp.zip');
-  await writeMetaAppZipArchive({ sourceDir: projectDir, outFile: archivePath });
-  return readFile(archivePath);
-}
-
 function jsonResponse(body, status = 200) {
   return {
     ok: status >= 200 && status < 300,
     status,
     headers: { get: () => 'application/json' },
     json: async () => body,
-  };
-}
-
-function bufferResponse(buffer, status = 200) {
-  return {
-    ok: status >= 200 && status < 300,
-    status,
-    headers: { get: () => 'application/zip' },
-    arrayBuffer: async () => buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength),
   };
 }
 
@@ -81,7 +62,19 @@ test('standalone Browser server exposes runtime, settings, cache, and action rou
   const runtime = await readJson(await fetch(`${baseUrl}/api/browser/runtime`));
   assert.equal(runtime.ok, true);
   assert.equal(runtime.data.host.kind, 'standalone');
-  assert.equal(runtime.data.defaultActor.kind, 'wallet');
+  assert.deepEqual(runtime.data.defaultActor, {
+    id: 'standalone-wallet',
+    label: 'Standalone Wallet',
+    kind: 'wallet',
+    isDefault: true,
+    capabilities: ['template-settings'],
+  });
+  assert.equal(runtime.data.defaultUri, 'metaid://idq1fixturebot');
+  assert.deepEqual(runtime.data.labels, {
+    actorChip: 'Wallet',
+    noActorTitle: 'No Wallet',
+    noActorBody: 'Standalone Browser is running with a development wallet actor.',
+  });
 
   const settings = await readJson(await fetch(`${baseUrl}/api/browser/settings?actorId=standalone-wallet`));
   assert.equal(settings.ok, true);
@@ -120,16 +113,29 @@ test('standalone Browser server exposes runtime, settings, cache, and action rou
   assert.equal(actionResponse.status, 400);
   assert.equal(action.ok, false);
   assert.equal(action.code, 'browser_action_not_supported');
+  assert.equal(action.message, 'Standalone Browser does not support trusted action: private-chat');
+
+  const loginResponse = await fetch(`${baseUrl}/api/browser/actions?actorId=standalone-wallet`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      kind: 'login',
+      resourceUri: 'metaid://idq1fixturebot',
+    }),
+  });
+  const login = await readJson(loginResponse);
+  assert.equal(loginResponse.status, 200);
+  assert.equal(login.ok, false);
+  assert.equal(login.state, 'manual_action_required');
+  assert.equal(login.code, 'wallet_login_required');
+  assert.equal(login.action.label, 'Connect wallet');
 });
 
-test('standalone Browser server resolves metaid resources through adapter fetch', async (t) => {
-  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v1.json', import.meta.url), 'utf8'));
+test('standalone Browser server falls back to the fixture bot homepage when network resolution fails', async (t) => {
   const adapter = createStandaloneBrowserHostAdapter({
-    fetch: async () => ({
-      ok: true,
-      status: 200,
-      json: async () => ({ code: 0, message: '', data: fixture }),
-    }),
+    fetch: async () => {
+      throw new Error('network unavailable');
+    },
   });
   const server = createStandaloneBrowserServer({ adapter });
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -140,12 +146,48 @@ test('standalone Browser server resolves metaid resources through adapter fetch'
   assert.equal(response.status, 200);
   assert.equal(payload.ok, true);
   assert.equal(payload.data.resourceType, 'bot');
+  assert.equal(payload.data.title, 'Fixture Bot');
   assert.equal(payload.data.renderer.type, 'bot-page');
 });
 
-// Task 4 must either port the host-neutral ZIP helper or replace this with a fixture-backed preview asset test.
-test.skip('standalone Browser server resolves MetaApps and serves preview assets', async (t) => {
-  const zipBuffer = await makeZipBuffer();
+test('standalone Browser server resolves non-fixture metaid resources through adapter fetch', async (t) => {
+  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v1.json', import.meta.url), 'utf8'));
+  fixture.globalMetaId = 'idq1fetchedbot';
+  fixture.canonical.globalMetaId = 'idq1fetchedbot';
+  fixture.profile.name = 'Fetched Bot';
+  fixture.homepage.title = 'Fetched Bot';
+  const fetchUrls = [];
+  const adapter = createStandaloneBrowserHostAdapter({
+    fetch: async (url) => {
+      fetchUrls.push(String(url));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ code: 0, message: '', data: fixture }),
+      };
+    },
+  });
+  const server = createStandaloneBrowserServer({ adapter });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const response = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaid%3A%2F%2Fidq1fetchedbot`);
+  const payload = await readJson(response);
+  assert.equal(response.status, 200);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data.resourceType, 'bot');
+  assert.equal(payload.data.title, 'Fetched Bot');
+  assert.equal(payload.data.renderer.type, 'bot-page');
+  assert.equal(fetchUrls.length, 1);
+  assert.match(fetchUrls[0], /idq1fetchedbot/);
+});
+
+test('standalone Browser server resolves MetaApps, serves preview assets, and reports preview cache', async (t) => {
+  const projectDir = await mkdtemp(path.join(os.tmpdir(), 'abc-standalone-metaapp-project-'));
+  t.after(() => rm(projectDir, { recursive: true, force: true }));
+  await writeFile(path.join(projectDir, 'index.html'), '<!doctype html><title>Standalone Preview</title>');
+  await writeFile(path.join(projectDir, 'app.js'), 'window.__standalonePreviewLoaded = true;');
+  const projectUrl = pathToFileURL(projectDir).href;
   const adapter = createStandaloneBrowserHostAdapter({
     fetch: async (url) => {
       const textUrl = String(url);
@@ -161,15 +203,12 @@ test.skip('standalone Browser server resolves MetaApps and serves preview assets
               appName: 'standalone-metaapp',
               version: '1.0.0',
               runtime: 'browser',
-              content: `metafile://${ZIP_PIN_ID}.zip`,
-              contentType: 'application/zip',
+              content: projectUrl,
+              contentType: 'text/html',
               indexFile: 'index.html',
             }),
           },
         });
-      }
-      if (textUrl.includes(`/content/${ZIP_PIN_ID}`)) {
-        return bufferResponse(zipBuffer);
       }
       throw new Error(`Unexpected fetch URL: ${textUrl}`);
     },
@@ -190,4 +229,64 @@ test.skip('standalone Browser server resolves MetaApps and serves preview assets
   assert.equal(previewResponse.status, 200);
   assert.match(previewResponse.headers.get('content-type'), /text\/html/);
   assert.match(await previewResponse.text(), /Standalone Preview/);
+
+  const scriptResponse = await fetch(`${baseUrl}${resolved.data.renderer.url.replace(/index\.html$/, 'app.js')}`);
+  assert.equal(scriptResponse.status, 200);
+  assert.match(scriptResponse.headers.get('content-type'), /text\/javascript/);
+  assert.match(await scriptResponse.text(), /__standalonePreviewLoaded/);
+
+  const traversalResponse = await fetch(`${baseUrl}${resolved.data.renderer.url.replace(/index\.html$/, '..%2Foutside.html')}`);
+  const traversal = await readJson(traversalResponse);
+  assert.equal(traversalResponse.status, 400);
+  assert.equal(traversal.ok, false);
+  assert.equal(traversal.code, 'invalid_argument');
+
+  const missingResponse = await fetch(`${baseUrl}${resolved.data.renderer.url.replace(/index\.html$/, 'missing.html')}`);
+  const missing = await readJson(missingResponse);
+  assert.equal(missingResponse.status, 404);
+  assert.equal(missing.ok, false);
+  assert.equal(missing.code, 'browser_resource_not_found');
+
+  const cache = await adapter.getCache({ actorId: 'standalone-wallet' });
+  assert.equal(cache.ok, true);
+  assert.equal(cache.data.artifactCount, 1);
+  assert.equal(cache.data.pinRecordCount, 0);
+
+  const clearPin = await adapter.clearCache({ actorId: 'standalone-wallet', scope: 'pin', pinId: METAAPP_PIN_ID });
+  assert.equal(clearPin.ok, true);
+  assert.equal(clearPin.data.clearedArtifacts, 0);
+  const cacheAfterPinClear = await adapter.getCache({ actorId: 'standalone-wallet' });
+  assert.equal(cacheAfterPinClear.ok, true);
+  assert.equal(cacheAfterPinClear.data.artifactCount, 1);
+
+  const clearArtifacts = await adapter.clearCache({ actorId: 'standalone-wallet', scope: 'artifact' });
+  assert.equal(clearArtifacts.ok, true);
+  assert.equal(clearArtifacts.data.clearedArtifacts, 1);
+  assert.equal(clearArtifacts.data.clearedPinRecords, 0);
+  const cacheAfterArtifactClear = await adapter.getCache({ actorId: 'standalone-wallet' });
+  assert.equal(cacheAfterArtifactClear.ok, true);
+  assert.equal(cacheAfterArtifactClear.data.artifactCount, 0);
+
+  const afterClearResponse = await fetch(`${baseUrl}${resolved.data.renderer.url}`);
+  const afterClear = await readJson(afterClearResponse);
+  assert.equal(afterClearResponse.status, 404);
+  assert.equal(afterClear.ok, false);
+  assert.equal(afterClear.code, 'browser_resource_not_found');
+
+  const secondResolveResponse = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaapp%3A%2F%2F${METAAPP_PIN_ID}`);
+  const secondResolved = await readJson(secondResolveResponse);
+  assert.equal(secondResolveResponse.status, 200);
+  assert.equal(secondResolved.ok, true);
+  assert.match(secondResolved.data.renderer.url, /^\/api\/browser\/preview-assets\/standalone-/);
+  const cacheBeforeAllClear = await adapter.getCache({ actorId: 'standalone-wallet' });
+  assert.equal(cacheBeforeAllClear.ok, true);
+  assert.equal(cacheBeforeAllClear.data.artifactCount, 1);
+
+  const clearAll = await adapter.clearCache({ actorId: 'standalone-wallet', scope: 'all' });
+  assert.equal(clearAll.ok, true);
+  assert.equal(clearAll.data.clearedArtifacts, 1);
+  assert.equal(clearAll.data.clearedPinRecords, 0);
+  const cacheAfterAllClear = await adapter.getCache({ actorId: 'standalone-wallet' });
+  assert.equal(cacheAfterAllClear.ok, true);
+  assert.equal(cacheAfterAllClear.data.artifactCount, 0);
 });

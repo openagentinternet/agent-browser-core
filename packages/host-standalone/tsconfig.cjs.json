@@ -7,6 +7,7 @@
     "esModuleInterop": true
   },
   "include": [
+    "src/adapter.ts",
     "src/http.ts",
     "src/index.ts",
     "src/memoryHost.ts",

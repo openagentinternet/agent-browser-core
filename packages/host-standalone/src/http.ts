@@ -11,10 +11,10 @@ const JSON_BODY_LIMIT_BYTES = 1024 * 1024;
 
 class InvalidJsonBodyError extends Error {}
 
-function statusForResult(result: BrowserCommandResult<unknown>): number {
+export function statusForBrowserResult(result: BrowserCommandResult<unknown>): number {
   if (result.ok || result.state === 'waiting' || result.state === 'manual_action_required') return 200;
   if (result.code === 'invalid_browser_uri' || result.code === 'missing_uri' || result.code === 'invalid_argument') return 400;
-  if (result.code === 'actor_not_found') return 404;
+  if (result.code === 'actor_not_found' || result.code === 'browser_resource_not_found' || result.code === 'not_found') return 404;
   return 400;
 }
 
@@ -80,6 +80,20 @@ export function sendHtml(res: http.ServerResponse, status: number, html: string)
   res.end(html);
 }
 
+export function sendText(
+  res: http.ServerResponse,
+  status: number,
+  body: string | Buffer,
+  contentType = 'text/plain; charset=utf-8',
+): void {
+  res.writeHead(status, {
+    'content-type': contentType,
+    'content-length': Buffer.byteLength(body),
+    'cache-control': 'no-store',
+  });
+  res.end(body);
+}
+
 export async function handleStandaloneBrowserApiRoute(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -95,7 +109,7 @@ export async function handleStandaloneBrowserApiRoute(
       return true;
     }
     const result = await adapter.getRuntime(actorId ? { actorId } : {});
-    sendJson(res, statusForResult(result), result);
+    sendJson(res, statusForBrowserResult(result), result);
     return true;
   }
 
@@ -110,14 +124,14 @@ export async function handleStandaloneBrowserApiRoute(
       return true;
     }
     const result = await adapter.resolveResource({ uri, ...(actorId ? { actorId } : {}) });
-    sendJson(res, statusForResult(result), result);
+    sendJson(res, statusForBrowserResult(result), result);
     return true;
   }
 
   if (url.pathname === '/api/browser/settings') {
     if (method === 'GET') {
       const result = await adapter.getSettings(actorId ? { actorId } : {});
-      sendJson(res, statusForResult(result), result);
+      sendJson(res, statusForBrowserResult(result), result);
       return true;
     }
     if (method === 'PUT') {
@@ -127,7 +141,7 @@ export async function handleStandaloneBrowserApiRoute(
         ? body.browser as Record<string, unknown>
         : {};
       const result = await adapter.updateSettings({ browser, ...(actorId ? { actorId } : {}) });
-      sendJson(res, statusForResult(result), result);
+      sendJson(res, statusForBrowserResult(result), result);
       return true;
     }
     sendJson(res, 405, browserFailure('method_not_allowed', 'Expected GET or PUT.'));
@@ -137,7 +151,7 @@ export async function handleStandaloneBrowserApiRoute(
   if (url.pathname === '/api/browser/cache') {
     if (method === 'GET') {
       const result = await adapter.getCache(actorId ? { actorId } : {});
-      sendJson(res, statusForResult(result), result);
+      sendJson(res, statusForBrowserResult(result), result);
       return true;
     }
     if (method === 'DELETE') {
@@ -147,7 +161,7 @@ export async function handleStandaloneBrowserApiRoute(
         scope: text(body.scope) || 'all',
         ...(actorId ? { actorId } : {}),
       });
-      sendJson(res, statusForResult(result), result);
+      sendJson(res, statusForBrowserResult(result), result);
       return true;
     }
     sendJson(res, 405, browserFailure('method_not_allowed', 'Expected GET or DELETE.'));
@@ -167,7 +181,7 @@ export async function handleStandaloneBrowserApiRoute(
       ...(actorId ? { actorId } : {}),
       ...(body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload) ? { payload: body.payload as Record<string, unknown> } : {}),
     });
-    sendJson(res, statusForResult(result), result);
+    sendJson(res, statusForBrowserResult(result), result);
     return true;
   }
 

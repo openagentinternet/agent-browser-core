@@ -42,9 +42,12 @@ const PACKAGES = [
   {
     name: '@openagentinternet/agent-browser-host-standalone',
     exports: {
+      createStandaloneBrowserHostAdapter: 'function',
       createMemoryStandaloneBrowserHost: 'function',
       createStandaloneBrowserServer: 'function',
       handleStandaloneBrowserApiRoute: 'function',
+      sendHtml: 'function',
+      sendJson: 'function',
     },
   },
   {

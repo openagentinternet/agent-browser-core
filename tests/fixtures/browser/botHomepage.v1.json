@@ -14,7 +14,7 @@
     "avatarPinId": "avatar-pin",
     "background": "",
     "backgroundPinId": "",
-    "bio": "Builds OAC browser fixtures.",
+    "bio": "Builds Agent Browser fixtures.",
     "bioPinId": "bio-pin",
     "chatPubkey": "04fixture",
     "chatPubkeyPinId": "chat-pin",
@@ -24,7 +24,7 @@
   "homepage": {
     "mode": "default",
     "title": "Fixture Bot",
-    "summary": "Builds OAC browser fixtures.",
+    "summary": "Builds Agent Browser fixtures.",
     "custom": null
   },
   "presence": {
