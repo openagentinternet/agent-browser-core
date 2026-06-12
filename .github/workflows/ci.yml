@@ -19,6 +19,7 @@ jobs:
           node-version: 20.20.0
 
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - run: npm run verify
       - run: npm run verify:packages
       - run: node scripts/verify-release-version.mjs v0.3.0
