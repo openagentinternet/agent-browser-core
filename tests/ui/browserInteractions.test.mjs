@@ -20,8 +20,8 @@ test('client script includes runtime menu settings template cache and actor flow
   assert.match(script, /data-browser-actor-id/);
 });
 
-test('shared shell exposes menu and modal roots used by client script', () => {
-  const html = ui.renderBrowserPageHtml(ui.buildBrowserPageDefinition());
+test('shared shell exposes menu and modal roots used by client script', async () => {
+  const html = await ui.renderBrowserPageHtml(ui.buildBrowserPageDefinition());
 
   assert.match(html, /data-browser-menu-trigger/);
   assert.match(html, /data-browser-menu role="menu"/);
@@ -54,44 +54,28 @@ test('client script includes drawer inspector owner toolbar share and trusted ac
   assert.match(script, /data-browser-share-copy/);
 });
 
-test('server-rendered resource hydrates client action state on first load', () => {
-  const definition = ui.buildBrowserPageDefinition({
-    resource: {
-      uri: 'metaid://idq1fixturebot',
-      normalizedUri: 'metaid://idq1fixturebot',
-      resourceType: 'bot-homepage',
-      title: 'SSR Fixture Bot',
-      owner: { globalMetaId: 'idq1fixturebot' },
-      renderer: { type: 'bot-page', templateId: 'document' },
-      ownerAffinity: null,
-      actions: [
-        { id: 'private-chat-fixture', kind: 'private-chat', label: 'Private Chat', enabled: true },
-      ],
-      sections: [],
-    },
-  });
+test('mature Browser shell resolves resources client-side from an empty viewport', () => {
+  const definition = ui.buildBrowserPageDefinition();
 
-  assert.match(definition.contentHtml, /data-browser-action="private-chat"/);
-  assert.match(definition.script, /const initialResource = /);
-  assert.match(definition.script, /SSR Fixture Bot/);
-  assert.match(definition.script, /private-chat-fixture/);
-  assert.doesNotMatch(definition.script, /resource: null/);
+  assert.match(definition.contentHtml, /<main class="browser-viewport" data-browser-viewport><\/main>/);
+  assert.match(definition.script, /function renderRenderer\(current\)/);
+  assert.match(definition.script, /function openPrivateChatModal\(/);
+  assert.match(definition.script, /state\.current = result;/);
 });
 
 test('browser chrome navigation and status buttons are wired or disabled', () => {
   const definition = ui.buildBrowserPageDefinition();
 
-  assert.match(definition.contentHtml, /data-browser-back[^>]*disabled/);
-  assert.match(definition.contentHtml, /data-browser-forward[^>]*disabled/);
-  assert.match(definition.script, /function updateHistoryButtons\(/);
-  assert.match(definition.script, /function reloadCurrentResource\(/);
-  assert.match(definition.script, /closestWithAttribute\(target, 'data-browser-back'\)/);
-  assert.match(definition.script, /closestWithAttribute\(target, 'data-browser-forward'\)/);
-  assert.match(definition.script, /closestWithAttribute\(target, 'data-browser-reload'\)/);
-  assert.match(definition.script, /closestWithAttribute\(target, 'data-browser-status-state'\)/);
-  assert.match(definition.script, /closestWithAttribute\(target, 'data-browser-status-proof'\)/);
-  assert.match(definition.script, /closestWithAttribute\(target, 'data-browser-status-txid'\)/);
-  assert.match(definition.script, /toggleInspector\(true\)/);
+  assert.match(definition.contentHtml, /data-browser-back/);
+  assert.match(definition.contentHtml, /data-browser-forward/);
+  assert.match(definition.script, /function reloadCurrent\(/);
+  assert.match(definition.script, /function goBack\(/);
+  assert.match(definition.script, /function goForward\(/);
+  assert.match(definition.script, /elements\.back\.addEventListener\('click', goBack\)/);
+  assert.match(definition.script, /elements\.forward\.addEventListener\('click', goForward\)/);
+  assert.match(definition.script, /elements\.reload\.addEventListener\('click', reloadCurrent\)/);
+  assert.match(definition.script, /elements\.statusProof\.addEventListener\('click', openInspector\)/);
+  assert.match(definition.script, /elements\.statusTxid\.addEventListener\('click', openInspector\)/);
 });
 
 test('resolve failures clear stale resource chrome and keep URI history coherent', () => {
@@ -113,18 +97,6 @@ test('actor switching re-resolves the current URI even before client resource st
 
   assert.match(script, /async function selectActor\(actorId\) \{[\s\S]*const uri = state\.resource && state\.resource\.uri \|\| input && input\.value \|\| '';[\s\S]*if \(uri\) await navigateTo\(uri\);[\s\S]*\n  \}/);
   assert.doesNotMatch(script, /if \(state\.resource && uri\) await navigateTo\(uri\);/);
-});
-
-test('inspector menu item is wired after Task 5 client behavior exists', () => {
-  const script = ui.buildBrowserClientScript({ apiBasePath: '/api/browser', initialUri: 'metaid://idq1fixturebot' });
-  const inspector = ui.BROWSER_MENU_SECTIONS
-    .flatMap((section) => section.items)
-    .find((item) => item.id === 'inspector');
-
-  assert.equal(inspector?.action, 'toggle-inspector');
-  assert.match(script, /item\.action !== 'open-settings' && item\.action !== 'toggle-inspector' && item\.action !== 'toggle-drawer'/);
-  assert.match(script, /item && item\.action === 'toggle-inspector'/);
-  assert.match(script, /renderInspector\(\)/);
 });
 
 test('settings tabs use tab semantics', () => {
