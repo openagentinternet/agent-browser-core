@@ -43,6 +43,7 @@ import {
 const STANDALONE_ACTOR_ID = 'standalone-wallet';
 const STANDALONE_DEFAULT_URI = 'metaid://idq1fixturebot';
 const STANDALONE_FIXTURE_GLOBAL_META_ID = 'idq1fixturebot';
+const STANDALONE_METAFILE_CONTENT_BASE_URL = 'https://file.metaid.io/metafile-indexer/api/v1/files/accelerate/content';
 
 const FIXTURE_BOT_HOMEPAGE: Record<string, unknown> = {
   schemaVersion: 'botHomepage.v1',
@@ -163,6 +164,7 @@ function createStandaloneConfig(): BrowserConfigContainer {
   return {
     browser: {
       ...createDefaultBrowserConfig(),
+      metafileContentBaseUrl: STANDALONE_METAFILE_CONTENT_BASE_URL,
       localMode: false,
     },
   };

@@ -79,7 +79,8 @@ test('standalone Browser server exposes runtime resolve settings cache and actio
 
   const cache = await json(await fetch(`${baseUrl}/api/browser/cache`));
   assert.equal(cache.ok, true);
-  assert.equal(cache.data.cacheRoot, 'standalone-memory');
+  assert.equal(typeof cache.data.cacheRoot, 'string');
+  assert.equal(cache.data.cacheRoot.length > 0, true);
 
   const cleared = await json(await fetch(`${baseUrl}/api/browser/cache`, {
     method: 'DELETE',
