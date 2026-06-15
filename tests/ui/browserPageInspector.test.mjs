@@ -6,6 +6,9 @@ import vm from 'node:vm';
 const require = createRequire(import.meta.url);
 const { buildBrowserPageDefinition } = require('../../packages/ui/dist/browser/app.js');
 
+const DERIVED_TXID = 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
+const DERIVED_PIN_ID = `${DERIVED_TXID}i0`;
+
 class FakeElement {
   constructor() {
     this.value = '';
@@ -91,6 +94,17 @@ function createContext() {
       resourceType: 'metaapp',
       title: 'Fixture MetaApp',
       owner: { kind: 'metaapp-publisher', globalMetaId: 'idq1publisher', name: 'Publisher', verificationState: 'partial' },
+    })],
+    [`metaapp://${DERIVED_PIN_ID}`, browserResult(`metaapp://${DERIVED_PIN_ID}`, {
+      resourceType: 'metaapp',
+      title: 'Derived TXID MetaApp',
+      owner: { kind: 'metaapp-publisher', globalMetaId: 'idq1publisher', name: 'Publisher', verificationState: 'partial' },
+      proof: {
+        pinId: DERIVED_PIN_ID,
+        protocolPath: '/protocols/metaapp',
+        publisherGlobalMetaId: 'idq1publisher',
+        verificationState: 'partial',
+      },
     })],
   ]);
   const context = {
@@ -202,4 +216,17 @@ test('Inspector proof labels use TXID and include proof details', async () => {
   assert.match(html, /publisher GlobalMetaId/);
   assert.match(html, /block explorer action/);
   assert.match(html, /View on Block Explorer/);
+});
+
+test('Inspector TXID falls back to the proof pin transaction id', async () => {
+  const { context, nodes } = createContext();
+  await waitFor(() => context.state.current, 'initial resource');
+
+  await context.navigateTo(`metaapp://${DERIVED_PIN_ID}`);
+  nodes['[data-browser-status-txid]'].click();
+
+  assert.match(
+    nodes['[data-browser-inspector]'].innerHTML,
+    new RegExp(`<dt>TXID</dt><dd>${DERIVED_TXID}</dd>`),
+  );
 });

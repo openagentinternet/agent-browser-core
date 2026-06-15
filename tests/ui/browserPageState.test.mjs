@@ -293,6 +293,32 @@ test('Browser MetaApp deep link path is decoded into the address bar and resolve
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metaapp%3A%2F%2F${pinId}&actorId=worker`);
 });
 
+test('Browser status TXID falls back to the proof pin transaction id', async () => {
+  const txid = '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
+  const pinId = `${txid}i0`;
+  const { elements, fetchCalls } = createBrowserContext({
+    resolveResponse: (uri) => ({
+      ok: true,
+      data: {
+        uri,
+        normalizedUri: uri.toLowerCase(),
+        resourceType: 'metaapp',
+        title: 'Fixture MetaApp',
+        owner: { kind: 'metaapp-publisher', globalMetaId: 'idq1publisher', name: 'Publisher', verificationState: 'partial' },
+        renderer: { type: 'unsupported', contentType: 'application/zip', error: 'Unsupported MetaApp content type.' },
+        status: { state: 'resolved', verificationState: 'partial', message: '' },
+        proof: { pinId, protocolPath: '/protocols/metaapp', verificationState: 'partial' },
+        source: { resolver: 'test' },
+        actions: [],
+      },
+    }),
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'MetaApp render with pin proof');
+
+  assert.equal(elements['[data-browser-status-txid]'].textContent, 'TXID: 1234567890...abcdef');
+});
+
 test('Browser loads runtime and resolves default URI when no query URI is present', async () => {
   const { context, elements, fetchCalls } = createBrowserContext();
 
