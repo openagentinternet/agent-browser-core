@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 const standalone = await import('../../packages/host-standalone/dist/index.js');
@@ -50,7 +53,14 @@ test('standalone Browser server serves Browser shell and health route', async (t
 });
 
 test('standalone Browser server exposes runtime resolve settings cache and action routes', async (t) => {
-  const server = standalone.createStandaloneBrowserServer();
+  const cacheDir = await mkdtemp(join(tmpdir(), 'abc-host-standalone-cache-'));
+  t.after(() => rm(cacheDir, { recursive: true, force: true }));
+
+  const server = standalone.createStandaloneBrowserServer({
+    env: {
+      AGENT_BROWSER_CACHE_DIR: cacheDir,
+    },
+  });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const baseUrl = await listen(server);
 
@@ -79,7 +89,7 @@ test('standalone Browser server exposes runtime resolve settings cache and actio
 
   const cache = await json(await fetch(`${baseUrl}/api/browser/cache`));
   assert.equal(cache.ok, true);
-  assert.equal(cache.data.cacheRoot, 'standalone-memory');
+  assert.equal(cache.data.cacheRoot, cacheDir);
 
   const cleared = await json(await fetch(`${baseUrl}/api/browser/cache`, {
     method: 'DELETE',

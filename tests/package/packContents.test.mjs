@@ -133,6 +133,10 @@ test('published Browser packages include declared entrypoints', async () => {
     if (workspace.name === '@openagentinternet/agent-browser-host-standalone') {
       assertPackIncludes(files, 'dist/adapter.js', workspace.name);
       assertPackIncludes(files, 'dist/server.js', workspace.name);
+      assertPackIncludes(files, 'dist/metaapp/artifactCache.js', workspace.name);
+      assertPackIncludes(files, 'dist/metaapp/zipArchive.js', workspace.name);
+      assertPackIncludes(files, 'dist-cjs/metaapp/artifactCache.js', workspace.name);
+      assertPackIncludes(files, 'dist-cjs/metaapp/zipArchive.js', workspace.name);
     }
   }
 });

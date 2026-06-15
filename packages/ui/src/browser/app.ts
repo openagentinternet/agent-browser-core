@@ -219,6 +219,17 @@ function shortId(value) {
   return text.slice(0, 10) + '...' + text.slice(-6);
 }
 
+function txidFromPinId(value) {
+  var text = textValue(value);
+  var match = text.match(/^([0-9a-f]{64})i[0-9]+$/i);
+  return match ? match[1] : '';
+}
+
+function proofTxid(proof) {
+  if (!proof) return '';
+  return textValue(proof.txid) || txidFromPinId(proof.pinId);
+}
+
 function compactText(value, limit) {
   var text = textValue(value).replace(/\\s+/g, ' ');
   var maxLength = limit || 260;
@@ -851,12 +862,12 @@ function pushHistory(uri) {
 function renderCurrent() {
   var current = state.current;
   if (!current) return;
-  var ownerName = textValue(current.title) || textValue(current.owner && current.owner.name) || 'Resource';
+  var ownerName = textValue(current.owner && current.owner.name) || textValue(current.title) || 'Resource';
   var ownerId = textValue(current.owner && (current.owner.globalMetaId || current.owner.metaid || current.owner.address)) || textValue(current.normalizedUri || current.uri);
   var ownerAvatar = textValue(current.owner && current.owner.avatar);
   var rendererType = textValue(current.renderer && current.renderer.type) || 'unsupported';
   var proofState = textValue(current.status && current.status.verificationState) || 'unverified';
-  var txid = textValue(current.proof && current.proof.txid);
+  var txid = proofTxid(current.proof);
   if (elements.resourceChip) {
     elements.resourceChip.innerHTML = avatarHtml(ownerAvatar, ownerName, 'browser-chip-avatar') +
       '<span class="browser-chip-copy"><span class="browser-chip-title">' + escapeHtml(ownerName) + '</span>' +
@@ -1017,7 +1028,7 @@ function renderInspector() {
     keyValue('address', owner.address) +
     keyValue('verification', owner.verificationState) +
     '</dl><h3>' + proofHeading + '</h3><dl>' +
-    requiredKeyValue('TXID', proof.txid) +
+    requiredKeyValue('TXID', proofTxid(proof)) +
     requiredKeyValue('pin id', proof.pinId) +
     requiredKeyValue('protocol path', proof.protocolPath) +
     requiredKeyValue('content hash', proof.contentHash) +
@@ -1560,6 +1571,9 @@ async function resolveUri(uri, options) {
   setStatus('loading', '');
   try {
     var result = await api(resolveUrl(normalizedUri));
+    var resolvedUri = textValue(result && (result.normalizedUri || result.uri)) || normalizedUri;
+    if (elements.input) elements.input.value = resolvedUri;
+    if (shouldRecord && state.historyIndex >= 0) state.history[state.historyIndex] = resolvedUri;
     state.current = result;
     recordVisit(result);
     setStatus('resolved', '');

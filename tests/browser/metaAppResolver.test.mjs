@@ -115,3 +115,63 @@ test('resolveMetaAppPinToRecord renders metafile content URL instead of ManAPI m
   assert.equal(result.renderer.url, `${metafileContentBaseUrl}/${contentPinId}`);
   assert.notEqual(result.renderer.url, `${manApiBaseUrl}/pin/${pinId}`);
 });
+
+test('resolveMetaAppPinToRecord returns HTML content when the host creates a ZIP preview URL', async () => {
+  const pinId = 'e1'.repeat(32) + 'i0';
+  const contentPinId = 'f2'.repeat(32) + 'i0';
+  const resolved = await resolveMetaAppPinToRecord({
+    pinId,
+    manApiBaseUrl: 'https://man.example.test',
+    metafileContentBaseUrl: 'https://content.example.test/files',
+    fetch: async (url) => {
+      assert.equal(String(url), `https://man.example.test/pin/${pinId}`);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            pin: {
+              path: '/protocols/metaapp',
+              ownerGlobalMetaId: 'idq1publisher',
+              address: '18Publisher',
+              timestamp: 1781450015,
+              contentSummary: JSON.stringify({
+                title: 'ZIP Preview MetaApp',
+                appName: 'zip-preview-metaapp',
+                version: '1.0.0',
+                content: `metafile://${contentPinId}.zip`,
+                contentType: 'application/zip',
+                codeType: 'application/zip',
+                indexFile: 'index.html',
+              }),
+            },
+          },
+        }),
+      };
+    },
+    createPreviewSession: ({ contentReference, contentType, indexFile }) => {
+      assert.equal(contentReference, `metafile://${contentPinId}.zip`);
+      assert.equal(contentType, 'application/zip');
+      assert.equal(indexFile, 'index.html');
+      return {
+        previewId: 'zip-preview',
+        localPreviewUrl: '/api/browser/preview-assets/zip-preview/index.html',
+      };
+    },
+    now: () => 1781450015615,
+  });
+
+  assert.equal(resolved.ok, true);
+  assert.equal(resolved.data.contentType, 'text/html');
+  assert.equal(resolved.data.codeType, 'application/zip');
+  assert.equal(resolved.data.localUiUrl, '/api/browser/preview-assets/zip-preview/index.html');
+  assert.equal(resolved.data.runUrl, '/api/browser/preview-assets/zip-preview/index.html');
+
+  const result = buildMetaAppResolveResult({
+    uri: `metaapp://${pinId}`,
+    normalizedUri: `metaapp://${pinId}`,
+    record: resolved.data,
+  });
+  assert.equal(result.renderer.type, 'html-iframe');
+  assert.equal(result.renderer.url, '/api/browser/preview-assets/zip-preview/index.html');
+});

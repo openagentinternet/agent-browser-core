@@ -94,7 +94,9 @@ export function createStandaloneBrowserServer(input: CreateStandaloneBrowserServ
           sendJson(res, statusForBrowserResult(result), result);
           return;
         }
-        sendText(res, 200, result.data.body, result.data.contentType);
+        sendText(res, 200, result.data.body, result.data.contentType, {
+          'access-control-allow-origin': '*',
+        });
         return;
       }
       if (await handleStandaloneBrowserApiRoute(req, res, url, adapter)) {

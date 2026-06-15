@@ -85,11 +85,13 @@ export function sendText(
   status: number,
   body: string | Buffer,
   contentType = 'text/plain; charset=utf-8',
+  headers: http.OutgoingHttpHeaders = {},
 ): void {
   res.writeHead(status, {
     'content-type': contentType,
     'content-length': Buffer.byteLength(body),
     'cache-control': 'no-store',
+    ...headers,
   });
   res.end(body);
 }
@@ -157,8 +159,13 @@ export async function handleStandaloneBrowserApiRoute(
     if (method === 'DELETE') {
       const body = await readJsonBodyOrSendFailure(req, res);
       if (!body) return true;
+      const pinId = text(body.pinId);
+      const cacheKey = text(body.cacheKey);
       const result = await adapter.clearCache({
         scope: text(body.scope) || 'all',
+        ...(typeof body.all === 'boolean' ? { all: body.all } : {}),
+        ...(pinId ? { pinId } : {}),
+        ...(cacheKey ? { cacheKey } : {}),
         ...(actorId ? { actorId } : {}),
       });
       sendJson(res, statusForBrowserResult(result), result);

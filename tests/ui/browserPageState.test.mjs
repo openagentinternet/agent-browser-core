@@ -197,6 +197,7 @@ function createBrowserContext(options = {}) {
   };
   const context = {
     console,
+    URL,
     URLSearchParams,
     encodeURIComponent,
     decodeURIComponent,
@@ -290,6 +291,58 @@ test('Browser MetaApp deep link path is decoded into the address bar and resolve
 
   assert.equal(elements['[data-browser-uri-input]'].value, `metaapp://${pinId}`);
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metaapp%3A%2F%2F${pinId}&actorId=worker`);
+});
+
+test('Browser address input displays the resolver-normalized URI for a bare Global MetaID', async () => {
+  const globalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
+  const canonicalUri = `metaid://${globalMetaId}`;
+  const { context, elements, fetchCalls } = createBrowserContext({
+    runtimeResponse: runtimePayload({ defaultUri: null }),
+    resolveResponse: (uri) => ({
+      ...resolvedBot(canonicalUri, 'Global MetaID Bot'),
+      data: {
+        ...resolvedBot(canonicalUri, 'Global MetaID Bot').data,
+        uri,
+        normalizedUri: canonicalUri,
+      },
+    }),
+  });
+
+  await waitFor(() => context.state.actorId === 'worker', 'runtime actor load');
+
+  elements['[data-browser-uri-input]'].value = globalMetaId;
+  elements['[data-browser-address-form]'].submit();
+  await waitFor(() => elements['[data-browser-uri-input]'].value === canonicalUri, 'bare Global MetaID canonical URI');
+
+  assert.equal(fetchCalls[1], `/api/browser/resolve?uri=${encodeURIComponent(globalMetaId)}&actorId=worker`);
+  assert.equal(elements['[data-browser-uri-input]'].value, canonicalUri);
+  assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
+});
+
+test('Browser status TXID falls back to the proof pin transaction id', async () => {
+  const txid = '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
+  const pinId = `${txid}i0`;
+  const { elements, fetchCalls } = createBrowserContext({
+    resolveResponse: (uri) => ({
+      ok: true,
+      data: {
+        uri,
+        normalizedUri: uri.toLowerCase(),
+        resourceType: 'metaapp',
+        title: 'Fixture MetaApp',
+        owner: { kind: 'metaapp-publisher', globalMetaId: 'idq1publisher', name: 'Publisher', verificationState: 'partial' },
+        renderer: { type: 'unsupported', contentType: 'application/zip', error: 'Unsupported MetaApp content type.' },
+        status: { state: 'resolved', verificationState: 'partial', message: '' },
+        proof: { pinId, protocolPath: '/protocols/metaapp', verificationState: 'partial' },
+        source: { resolver: 'test' },
+        actions: [],
+      },
+    }),
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'MetaApp render with pin proof');
+
+  assert.equal(elements['[data-browser-status-txid]'].textContent, 'TXID: 1234567890...abcdef');
 });
 
 test('Browser loads runtime and resolves default URI when no query URI is present', async () => {
@@ -547,7 +600,7 @@ test('Browser resolve errors clear visible Owner Mode toolbar', async () => {
   assert.equal(ownerToolbar.innerHTML, '');
 });
 
-test('Browser resource chip prefers MetaApp title over publisher identity', async () => {
+test('Browser resource chip uses publisher identity for MetaApp resources', async () => {
   const { elements, fetchCalls } = createBrowserContext({
     resolveResponse: (uri) => ({
       ok: true,
@@ -556,7 +609,13 @@ test('Browser resource chip prefers MetaApp title over publisher identity', asyn
         normalizedUri: uri.toLowerCase(),
         resourceType: 'metaapp',
         title: 'Fixture MetaApp',
-        owner: { kind: 'metaapp-publisher', globalMetaId: 'idq1publisher', name: 'idq1publisher', verificationState: 'partial' },
+        owner: {
+          kind: 'metaapp-publisher',
+          globalMetaId: 'idq1publisher',
+          name: 'Publisher Bot',
+          avatar: 'https://so.example.test/content/publisher-avatar',
+          verificationState: 'partial',
+        },
         renderer: { type: 'unsupported', contentType: 'application/zip', error: 'Unsupported MetaApp content type.' },
         status: { state: 'resolved', verificationState: 'partial', message: '' },
         source: { resolver: 'test' },
@@ -567,7 +626,11 @@ test('Browser resource chip prefers MetaApp title over publisher identity', asyn
 
   await waitFor(() => fetchCalls.length === 2, 'MetaApp resource render');
 
-  assert.match(elements['[data-browser-resource-chip]'].innerHTML, /Fixture MetaApp/);
+  const resourceChip = elements['[data-browser-resource-chip]'].innerHTML;
+  assert.match(resourceChip, /Publisher Bot/);
+  assert.match(resourceChip, /idq1publisher/);
+  assert.match(resourceChip, /https:\/\/so\.example\.test\/content\/publisher-avatar/);
+  assert.doesNotMatch(resourceChip, /Fixture MetaApp/);
 });
 
 test('Browser using identity selector switches identity and reloads current URI without history entry', async () => {
