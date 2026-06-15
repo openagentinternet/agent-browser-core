@@ -851,7 +851,7 @@ function pushHistory(uri) {
 function renderCurrent() {
   var current = state.current;
   if (!current) return;
-  var ownerName = textValue(current.title) || textValue(current.owner && current.owner.name) || 'Resource';
+  var ownerName = textValue(current.owner && current.owner.name) || textValue(current.title) || 'Resource';
   var ownerId = textValue(current.owner && (current.owner.globalMetaId || current.owner.metaid || current.owner.address)) || textValue(current.normalizedUri || current.uri);
   var ownerAvatar = textValue(current.owner && current.owner.avatar);
   var rendererType = textValue(current.renderer && current.renderer.type) || 'unsupported';

@@ -197,6 +197,7 @@ function createBrowserContext(options = {}) {
   };
   const context = {
     console,
+    URL,
     URLSearchParams,
     encodeURIComponent,
     decodeURIComponent,
@@ -547,7 +548,7 @@ test('Browser resolve errors clear visible Owner Mode toolbar', async () => {
   assert.equal(ownerToolbar.innerHTML, '');
 });
 
-test('Browser resource chip prefers MetaApp title over publisher identity', async () => {
+test('Browser resource chip uses publisher identity for MetaApp resources', async () => {
   const { elements, fetchCalls } = createBrowserContext({
     resolveResponse: (uri) => ({
       ok: true,
@@ -556,7 +557,13 @@ test('Browser resource chip prefers MetaApp title over publisher identity', asyn
         normalizedUri: uri.toLowerCase(),
         resourceType: 'metaapp',
         title: 'Fixture MetaApp',
-        owner: { kind: 'metaapp-publisher', globalMetaId: 'idq1publisher', name: 'idq1publisher', verificationState: 'partial' },
+        owner: {
+          kind: 'metaapp-publisher',
+          globalMetaId: 'idq1publisher',
+          name: 'Publisher Bot',
+          avatar: 'https://so.example.test/content/publisher-avatar',
+          verificationState: 'partial',
+        },
         renderer: { type: 'unsupported', contentType: 'application/zip', error: 'Unsupported MetaApp content type.' },
         status: { state: 'resolved', verificationState: 'partial', message: '' },
         source: { resolver: 'test' },
@@ -567,7 +574,11 @@ test('Browser resource chip prefers MetaApp title over publisher identity', asyn
 
   await waitFor(() => fetchCalls.length === 2, 'MetaApp resource render');
 
-  assert.match(elements['[data-browser-resource-chip]'].innerHTML, /Fixture MetaApp/);
+  const resourceChip = elements['[data-browser-resource-chip]'].innerHTML;
+  assert.match(resourceChip, /Publisher Bot/);
+  assert.match(resourceChip, /idq1publisher/);
+  assert.match(resourceChip, /https:\/\/so\.example\.test\/content\/publisher-avatar/);
+  assert.doesNotMatch(resourceChip, /Fixture MetaApp/);
 });
 
 test('Browser using identity selector switches identity and reloads current URI without history entry', async () => {
