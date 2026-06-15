@@ -293,6 +293,32 @@ test('Browser MetaApp deep link path is decoded into the address bar and resolve
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metaapp%3A%2F%2F${pinId}&actorId=worker`);
 });
 
+test('Browser address input displays the resolver-normalized URI for a bare Global MetaID', async () => {
+  const globalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
+  const canonicalUri = `metaid://${globalMetaId}`;
+  const { context, elements, fetchCalls } = createBrowserContext({
+    runtimeResponse: runtimePayload({ defaultUri: null }),
+    resolveResponse: (uri) => ({
+      ...resolvedBot(canonicalUri, 'Global MetaID Bot'),
+      data: {
+        ...resolvedBot(canonicalUri, 'Global MetaID Bot').data,
+        uri,
+        normalizedUri: canonicalUri,
+      },
+    }),
+  });
+
+  await waitFor(() => context.state.actorId === 'worker', 'runtime actor load');
+
+  elements['[data-browser-uri-input]'].value = globalMetaId;
+  elements['[data-browser-address-form]'].submit();
+  await waitFor(() => elements['[data-browser-uri-input]'].value === canonicalUri, 'bare Global MetaID canonical URI');
+
+  assert.equal(fetchCalls[1], `/api/browser/resolve?uri=${encodeURIComponent(globalMetaId)}&actorId=worker`);
+  assert.equal(elements['[data-browser-uri-input]'].value, canonicalUri);
+  assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
+});
+
 test('Browser status TXID falls back to the proof pin transaction id', async () => {
   const txid = '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
   const pinId = `${txid}i0`;

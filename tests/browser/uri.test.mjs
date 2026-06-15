@@ -5,6 +5,8 @@ import test from 'node:test';
 const require = createRequire(import.meta.url);
 const { parseBrowserUri } = require('../../packages/core/dist/browser/uri.js');
 
+const validGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
+
 test('parseBrowserUri normalizes metaid and metaapp schemes', () => {
   assert.deepEqual(parseBrowserUri('  METAID://idqABC  '), {
     originalUri: 'METAID://idqABC',
@@ -20,8 +22,18 @@ test('parseBrowserUri normalizes metaid and metaapp schemes', () => {
   });
 });
 
+test('parseBrowserUri treats a bare valid Global MetaID as a metaid URI', () => {
+  assert.deepEqual(parseBrowserUri(`  ${validGlobalMetaId.toUpperCase()}  `), {
+    originalUri: validGlobalMetaId.toUpperCase(),
+    normalizedUri: `metaid://${validGlobalMetaId}`,
+    scheme: 'metaid',
+    id: validGlobalMetaId,
+  });
+});
+
 test('parseBrowserUri rejects missing, empty, and unsupported schemes', () => {
   assert.throws(() => parseBrowserUri('idqABC'), /complete Agent Internet URI/i);
+  assert.throws(() => parseBrowserUri('idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8p'), /valid Global MetaID/i);
   assert.throws(() => parseBrowserUri('metaid://'), /empty resource id/i);
   assert.throws(() => parseBrowserUri('https://example.com'), /unsupported URI scheme/i);
 });

@@ -1571,6 +1571,9 @@ async function resolveUri(uri, options) {
   setStatus('loading', '');
   try {
     var result = await api(resolveUrl(normalizedUri));
+    var resolvedUri = textValue(result && (result.normalizedUri || result.uri)) || normalizedUri;
+    if (elements.input) elements.input.value = resolvedUri;
+    if (shouldRecord && state.historyIndex >= 0) state.history[state.historyIndex] = resolvedUri;
     state.current = result;
     recordVisit(result);
     setStatus('resolved', '');
