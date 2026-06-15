@@ -85,11 +85,13 @@ export function sendText(
   status: number,
   body: string | Buffer,
   contentType = 'text/plain; charset=utf-8',
+  headers: http.OutgoingHttpHeaders = {},
 ): void {
   res.writeHead(status, {
     'content-type': contentType,
     'content-length': Buffer.byteLength(body),
     'cache-control': 'no-store',
+    ...headers,
   });
   res.end(body);
 }

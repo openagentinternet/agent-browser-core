@@ -56,7 +56,14 @@ test('standalone Browser server serves Browser pages and shared CSS', async (t) 
 });
 
 test('standalone Browser server exposes runtime, settings, cache, and action routes', async (t) => {
-  const server = createStandaloneBrowserServer();
+  const cacheDir = await mkdtemp(join(tmpdir(), 'abc-standalone-runtime-cache-'));
+  t.after(() => rm(cacheDir, { recursive: true, force: true }));
+
+  const server = createStandaloneBrowserServer({
+    env: {
+      AGENT_BROWSER_CACHE_DIR: cacheDir,
+    },
+  });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const baseUrl = await listen(server);
 
@@ -91,8 +98,7 @@ test('standalone Browser server exposes runtime, settings, cache, and action rou
 
   const cache = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`));
   assert.equal(cache.ok, true);
-  assert.equal(typeof cache.data.cacheRoot, 'string');
-  assert.equal(cache.data.cacheRoot.length > 0, true);
+  assert.equal(cache.data.cacheRoot, cacheDir);
 
   const cleared = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`, {
     method: 'DELETE',
@@ -359,12 +365,14 @@ test('standalone Browser server downloads ZIP MetaApp content into artifact cach
   const htmlResponse = await fetch(`${baseUrl}${first.data.renderer.url}`);
   assert.equal(htmlResponse.status, 200);
   assert.match(htmlResponse.headers.get('content-type'), /text\/html/);
+  assert.equal(htmlResponse.headers.get('access-control-allow-origin'), '*');
   assert.match(await htmlResponse.text(), /ZIP Preview/);
 
   const scriptUrl = first.data.renderer.url.replace(/index\.html$/, 'assets/app.js');
   const scriptResponse = await fetch(`${baseUrl}${scriptUrl}`);
   assert.equal(scriptResponse.status, 200);
   assert.match(scriptResponse.headers.get('content-type'), /text\/javascript/);
+  assert.equal(scriptResponse.headers.get('access-control-allow-origin'), '*');
   assert.match(await scriptResponse.text(), /__abcZipPreviewLoaded/);
 
   const cache = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`));
