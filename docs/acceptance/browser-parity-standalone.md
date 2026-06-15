@@ -38,3 +38,12 @@ Standalone Wallet actor chip, Fixture Bot homepage content, and styled status st
 ## OAC Consumption
 
 OAC consumption was not performed in this phase.
+
+## Standalone ZIP MetaApp Preview
+
+Verification date: 2026-06-15
+
+- `metaapp://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0` resolves to `html-iframe`.
+- The resolved renderer URL is served from `/api/browser/preview-assets/...`.
+- The MetaApp record keeps `codeType: application/zip` while exposing `contentType: text/html` for rendering.
+- `GET /api/browser/cache` reports the configured standalone cache root, one artifact, and one pin record after resolution.
