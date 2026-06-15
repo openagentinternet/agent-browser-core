@@ -40,3 +40,18 @@ test("package source stays free of host internals", async () => {
 
   assert.deepEqual(violations, []);
 });
+
+test('core and ui do not import standalone host packages', async () => {
+  const { stdout } = await execFileAsync('git', ['ls-files', 'packages/core/src', 'packages/ui/src']);
+  const sourceFiles = stdout.split('\n').filter((file) => file.endsWith('.ts'));
+  const violations = [];
+
+  for (const filePath of sourceFiles) {
+    const contents = await readFile(path.join(repoRoot, filePath), 'utf8');
+    if (contents.includes('agent-browser-host-standalone') || contents.includes('host-standalone')) {
+      violations.push(`${filePath} imports standalone host code`);
+    }
+  }
+
+  assert.deepEqual(violations, []);
+});
