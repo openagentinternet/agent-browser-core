@@ -26,7 +26,7 @@ function isBrowserPage(pathname: string): boolean {
   return pathname === '/' ||
     pathname === '/browser' ||
     pathname === '/ui/browser' ||
-    /^\/browser\/(?:metaid|metaapp)\/[^/?#]+$/.test(pathname);
+    /^\/browser\/(?:metaid|metaapp|metafile)\/[^/?#]+$/.test(pathname);
 }
 
 const PREVIEW_ASSET_PREFIX = '/api/browser/preview-assets/';

@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 const core = await import('../../packages/core/dist/index.js');
 
-test('parseBrowserUri normalizes metaid and metaapp schemes', () => {
+test('parseBrowserUri normalizes supported Browser URI schemes', () => {
   assert.deepEqual(core.parseBrowserUri('  METAID://idqABC  '), {
     originalUri: 'METAID://idqABC',
     normalizedUri: 'metaid://idqABC',
@@ -15,6 +15,12 @@ test('parseBrowserUri normalizes metaid and metaapp schemes', () => {
     normalizedUri: 'metaapp://abcdef123i0',
     scheme: 'metaapp',
     id: 'abcdef123i0',
+  });
+  assert.deepEqual(core.parseBrowserUri(' METAFILE://abcdef123i0.pdf '), {
+    originalUri: 'METAFILE://abcdef123i0.pdf',
+    normalizedUri: 'metafile://abcdef123i0.pdf',
+    scheme: 'metafile',
+    id: 'abcdef123i0.pdf',
   });
 });
 

@@ -5,7 +5,7 @@ import test from 'node:test';
 const require = createRequire(import.meta.url);
 const { parseBrowserUri } = require('../../packages/core/dist/browser/uri.js');
 
-test('parseBrowserUri normalizes metaid and metaapp schemes', () => {
+test('parseBrowserUri normalizes supported Browser URI schemes', () => {
   assert.deepEqual(parseBrowserUri('  METAID://idqABC  '), {
     originalUri: 'METAID://idqABC',
     normalizedUri: 'metaid://idqABC',
@@ -17,6 +17,12 @@ test('parseBrowserUri normalizes metaid and metaapp schemes', () => {
     normalizedUri: 'metaapp://abcdef123i0',
     scheme: 'metaapp',
     id: 'abcdef123i0',
+  });
+  assert.deepEqual(parseBrowserUri(' METAFILE://abcdef123i0.pdf '), {
+    originalUri: 'METAFILE://abcdef123i0.pdf',
+    normalizedUri: 'metafile://abcdef123i0.pdf',
+    scheme: 'metafile',
+    id: 'abcdef123i0.pdf',
   });
 });
 

@@ -1,4 +1,4 @@
-export type BrowserUriScheme = 'metaid' | 'metaapp';
+export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile';
 
 export interface ParsedBrowserUri {
   originalUri: string;
@@ -7,7 +7,7 @@ export interface ParsedBrowserUri {
   id: string;
 }
 
-const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp']);
+const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'metafile']);
 
 export function parseBrowserUri(input: string): ParsedBrowserUri {
   const originalUri = String(input ?? '').trim();

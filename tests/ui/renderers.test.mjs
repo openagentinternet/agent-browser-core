@@ -82,3 +82,39 @@ test('pdf image and video render with content-specific elements', () => {
   assert.match(ui.renderResourceHtml({ uri: 'metaapp://image', normalizedUri: 'metaapp://image', resourceType: 'image', title: 'Image', renderer: { type: 'image', contentType: 'image/png', url: 'https://files.example/a.png' }, actions: [], sections: [] }), /class="browser-image"/);
   assert.match(ui.renderResourceHtml({ uri: 'metaapp://video', normalizedUri: 'metaapp://video', resourceType: 'metaapp', title: 'Video', renderer: { type: 'video', contentType: 'video/mp4', url: 'https://files.example/a.mp4' }, actions: [], sections: [] }), /class="browser-video"/);
 });
+
+test('unsupported renderer exposes a safe download link when available', () => {
+  const html = ui.renderResourceHtml({
+    uri: 'metafile://zip',
+    normalizedUri: 'metafile://zip',
+    resourceType: 'unsupported',
+    title: 'Archive',
+    renderer: {
+      type: 'unsupported',
+      contentType: 'application/zip',
+      url: 'https://files.example/archive.zip',
+      error: 'This file can be downloaded.',
+    },
+    actions: [],
+    sections: [],
+  });
+  assert.match(html, /Download file/);
+  assert.match(html, /href="https:\/\/files\.example\/archive\.zip"/);
+
+  const blocked = ui.renderResourceHtml({
+    uri: 'metafile://zip',
+    normalizedUri: 'metafile://zip',
+    resourceType: 'unsupported',
+    title: 'Archive',
+    renderer: {
+      type: 'unsupported',
+      contentType: 'application/zip',
+      url: 'javascript:alert(1)',
+      error: 'This file can be downloaded.',
+    },
+    actions: [],
+    sections: [],
+  });
+  assert.doesNotMatch(blocked, /Download file/);
+  assert.doesNotMatch(blocked, /javascript:alert/);
+});

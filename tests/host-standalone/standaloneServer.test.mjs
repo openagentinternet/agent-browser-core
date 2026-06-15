@@ -34,6 +34,12 @@ test('standalone Browser server serves Browser shell and health route', async (t
   assert.match(html, /Agent Internet Browser/);
   assert.match(html, /data-browser-shell/);
 
+  const pinId = 'f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0';
+  const deepLinkResponse = await fetch(`${baseUrl}/browser/metafile/${pinId}.pdf`);
+  const deepLinkHtml = await deepLinkResponse.text();
+  assert.equal(deepLinkResponse.status, 200);
+  assert.match(deepLinkHtml, /Agent Internet Browser/);
+
   const runtime = await json(await fetch(`${baseUrl}/api/browser/runtime`));
   assert.equal(runtime.ok, true);
   assert.equal(runtime.data.host.kind, 'standalone');

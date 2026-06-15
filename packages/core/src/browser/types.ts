@@ -1,7 +1,7 @@
 import type { BotHomepageTemplateId } from './botHomepageTemplates.js';
 
-export type BrowserUriScheme = 'metaid' | 'metaapp';
-export type BrowserResourceType = 'bot' | 'metaapp' | 'unsupported';
+export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile';
+export type BrowserResourceType = 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'unsupported' | 'unknown';
 export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'unsupported';
 export type BrowserResolutionState = 'resolved' | 'loading' | 'not_found' | 'error';
 export type BrowserVerificationState = 'verified' | 'partial' | 'unverified';

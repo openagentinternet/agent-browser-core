@@ -27,5 +27,6 @@ export * from './browser/settings.js';
 export * from './browser/botHomepageClient.js';
 export * from './browser/botPageResolver.js';
 export * from './browser/browserResolver.js';
+export * from './browser/metafileResolver.js';
 export * from './browser/metaAppResolver.js';
 export * from './browser/metaAppPinResolver.js';

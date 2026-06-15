@@ -217,12 +217,15 @@ test('unsupported renderer keeps source details available for Inspector', async 
   const payload = result({
     type: 'unsupported',
     contentType: 'application/octet-stream',
+    url: 'https://files.example/archive.zip',
     error: 'Unsupported MetaApp content type.',
   });
   const { context, nodes } = runWithResolve(payload);
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Unsupported renderer'), 'unsupported render');
   assert.match(nodes['[data-browser-viewport]'].innerHTML, /Unsupported MetaApp content type/);
+  assert.match(nodes['[data-browser-viewport]'].innerHTML, /href="https:\/\/files\.example\/archive\.zip"/);
+  assert.match(nodes['[data-browser-viewport]'].innerHTML, /Download file/);
   assert.deepEqual(context.state.current.source.raw, { kept: true });
 });
 

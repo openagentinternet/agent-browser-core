@@ -293,6 +293,16 @@ test('Browser MetaApp deep link path is decoded into the address bar and resolve
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metaapp%3A%2F%2F${pinId}&actorId=worker`);
 });
 
+test('Browser Metafile deep link path is decoded into the address bar and resolved', async () => {
+  const pinId = 'f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0.pdf';
+  const { elements, fetchCalls } = createBrowserContext({ pathname: `/browser/metafile/${pinId}` });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and deep link resolve');
+
+  assert.equal(elements['[data-browser-uri-input]'].value, `metafile://${pinId}`);
+  assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metafile%3A%2F%2F${pinId}&actorId=worker`);
+});
+
 test('Browser status TXID falls back to the proof pin transaction id', async () => {
   const txid = '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
   const pinId = `${txid}i0`;
