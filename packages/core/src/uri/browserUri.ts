@@ -1,4 +1,4 @@
-export type BrowserUriScheme = 'metaid' | 'metaapp';
+export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile';
 
 export interface ParsedBrowserUri {
   originalUri: string;
@@ -7,7 +7,7 @@ export interface ParsedBrowserUri {
   id: string;
 }
 
-const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp']);
+const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'metafile']);
 const GLOBAL_META_ID_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 const GLOBAL_META_ID_CHECKSUM_LENGTH = 6;
 const GLOBAL_META_ID_VERSION_CHARS = new Set(['q', 'p', 'z', 'r', 'y', 't']);
@@ -119,7 +119,6 @@ function normalizeBareGlobalMetaId(input: string): string | null {
 
   return normalized;
 }
-
 export function parseBrowserUri(input: string): ParsedBrowserUri {
   const originalUri = String(input ?? '').trim();
   const schemeMatch = originalUri.match(/^([a-z][a-z0-9+.-]*):\/\/(.*)$/i);

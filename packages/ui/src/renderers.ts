@@ -107,5 +107,6 @@ export function renderResourceHtml(resource: BrowserResourceEnvelope): string {
   if (renderer.type === 'pdf') return renderUrlRenderer(renderer, 'browser-pdf', 'iframe');
   if (renderer.type === 'image') return renderUrlRenderer(renderer, 'browser-image', 'img');
   if (renderer.type === 'video') return renderUrlRenderer(renderer, 'browser-video', 'video');
-  return `<section class="browser-empty-state"><h2>Unsupported renderer</h2><p>${escapeHtml(renderer.error || renderer.contentType || 'This resource type is not supported yet.')}</p></section>`;
+  const downloadUrl = safeResourceUrl(renderer.url);
+  return `<section class="browser-empty-state"><h2>Unsupported renderer</h2><p>${escapeHtml(renderer.error || renderer.contentType || 'This resource type is not supported yet.')}</p>${downloadUrl ? `<a href="${escapeHtml(downloadUrl)}" target="_blank" rel="noopener">Download file</a>` : ''}</section>`;
 }

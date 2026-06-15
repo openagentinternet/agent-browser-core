@@ -1,5 +1,6 @@
 import { createBotHomepageClient } from './botHomepageClient.js';
 import { buildBotPageResolveResult } from './botPageResolver.js';
+import { resolveMetafilePinToResource } from './metafileResolver.js';
 import { buildMetaAppResolveResult } from './metaAppResolver.js';
 import { parseBrowserUri } from './uri.js';
 import {
@@ -51,6 +52,16 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
       resolverUrl: homepage.url,
       templateId: input.config.botHomepageTemplateId,
     }));
+  }
+
+  if (parsed.scheme === 'metafile') {
+    return resolveMetafilePinToResource({
+      uri: parsed.originalUri,
+      id: parsed.id,
+      fetch: input.fetch,
+      manApiBaseUrl: input.config.manApiBaseUrl,
+      metafileContentBaseUrl: input.config.metafileContentBaseUrl,
+    });
   }
 
   let record: MetaAppGalleryRecord | null;

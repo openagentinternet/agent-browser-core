@@ -401,7 +401,7 @@ function endpointWithActor(endpoint) {
 }
 
 function browserUriFromPath(pathname) {
-  var match = textValue(pathname).match(/^\\/browser\\/(metaid|metaapp)\\/([^/?#]+)$/);
+  var match = textValue(pathname).match(/^\\/browser\\/(metaid|metaapp|metafile)\\/([^/?#]+)$/);
   if (!match) return '';
   var rawId = match[2];
   var decodedId = rawId;
@@ -1552,7 +1552,7 @@ function renderRenderer(current) {
   if (type === 'video') {
     return '<video class="browser-video" src="' + escapeHtml(url) + '" controls></video>';
   }
-  return '<section class="browser-empty-state" data-browser-unsupported-renderer><h2>Unsupported renderer</h2><p>' + escapeHtml(renderer.error || 'Unsupported renderer.') + '</p></section>';
+  return '<section class="browser-empty-state" data-browser-unsupported-renderer><h2>Unsupported renderer</h2><p>' + escapeHtml(renderer.error || 'Unsupported renderer.') + '</p>' + (url ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Download file</a>' : '') + '</section>';
 }
 
 function resolveUrl(uri) {
