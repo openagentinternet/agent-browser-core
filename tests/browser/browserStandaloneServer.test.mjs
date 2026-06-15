@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import os from 'node:os';
-import path from 'node:path';
+import os, { tmpdir } from 'node:os';
+import path, { join } from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
+import { makeMetaAppZipArchive } from '../fixtures/browser/metaappZipFixture.mjs';
 
 const require = createRequire(import.meta.url);
 const { createStandaloneBrowserServer } = require('../../packages/host-standalone/dist/server.js');
@@ -289,4 +290,154 @@ test('standalone Browser server resolves MetaApps, serves preview assets, and re
   const cacheAfterAllClear = await adapter.getCache({ actorId: 'standalone-wallet' });
   assert.equal(cacheAfterAllClear.ok, true);
   assert.equal(cacheAfterAllClear.data.artifactCount, 0);
+});
+
+test('standalone Browser server downloads ZIP MetaApp content into artifact cache and serves preview assets', async (t) => {
+  const cacheDir = await mkdtemp(join(tmpdir(), 'abc-standalone-zip-cache-'));
+  t.after(() => rm(cacheDir, { recursive: true, force: true }));
+
+  const pinId = 'a9'.repeat(32) + 'i0';
+  const contentPinId = 'b8'.repeat(32) + 'i0';
+  const wrongPinId = 'c7'.repeat(32) + 'i0';
+  const archive = makeMetaAppZipArchive({
+    'index.html': '<!doctype html><title>ZIP Preview</title><script src="./assets/app.js"></script>',
+    'assets/app.js': 'window.__abcZipPreviewLoaded = true;',
+  });
+  let zipFetchCount = 0;
+
+  const adapter = createStandaloneBrowserHostAdapter({
+    env: {
+      AGENT_BROWSER_CACHE_DIR: cacheDir,
+      METABOT_BROWSER_MANAPI_BASE_URL: 'https://man.example.test',
+      METABOT_BROWSER_METAFILE_CONTENT_BASE_URL: 'https://content.example.test/files',
+    },
+    now: () => 1781450015615,
+    fetch: async (url) => {
+      const textUrl = String(url);
+      if (textUrl === `https://man.example.test/pin/${pinId}`) {
+        return new Response(JSON.stringify({
+          data: {
+            id: pinId,
+            path: '/protocols/metaapp',
+            address: '1ZipPublisher',
+            ownerGlobalMetaId: 'idq1zippublisher',
+            timestamp: 1781450015,
+            contentSummary: JSON.stringify({
+              title: 'ZIP MetaApp',
+              appName: 'zip-metaapp',
+              version: '1.0.0',
+              runtime: 'browser',
+              content: `metafile://${contentPinId}.zip`,
+              contentType: 'application/zip',
+              codeType: 'application/zip',
+              indexFile: 'index.html',
+            }),
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
+      }
+      if (textUrl === `https://content.example.test/files/${contentPinId}`) {
+        zipFetchCount += 1;
+        return new Response(archive, { status: 200, headers: { 'content-type': 'application/zip' } });
+      }
+      throw new Error(`Unexpected fetch URL: ${textUrl}`);
+    },
+  });
+  const server = createStandaloneBrowserServer({ adapter });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const firstResponse = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaapp%3A%2F%2F${pinId}`);
+  const first = await readJson(firstResponse);
+  assert.equal(firstResponse.status, 200);
+  assert.equal(first.ok, true);
+  assert.equal(first.data.renderer.type, 'html-iframe');
+  assert.equal(first.data.renderer.contentType, 'text/html');
+  assert.match(first.data.renderer.url, /^\/api\/browser\/preview-assets\/standalone-/);
+  assert.equal(first.data.renderer.data.record.contentType, 'text/html');
+  assert.equal(first.data.renderer.data.record.codeType, 'application/zip');
+
+  const htmlResponse = await fetch(`${baseUrl}${first.data.renderer.url}`);
+  assert.equal(htmlResponse.status, 200);
+  assert.match(htmlResponse.headers.get('content-type'), /text\/html/);
+  assert.match(await htmlResponse.text(), /ZIP Preview/);
+
+  const scriptUrl = first.data.renderer.url.replace(/index\.html$/, 'assets/app.js');
+  const scriptResponse = await fetch(`${baseUrl}${scriptUrl}`);
+  assert.equal(scriptResponse.status, 200);
+  assert.match(scriptResponse.headers.get('content-type'), /text\/javascript/);
+  assert.match(await scriptResponse.text(), /__abcZipPreviewLoaded/);
+
+  const cache = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`));
+  assert.equal(cache.ok, true);
+  assert.equal(cache.data.cacheRoot, cacheDir);
+  assert.equal(cache.data.artifactCount, 1);
+  assert.equal(cache.data.pinRecordCount, 1);
+  assert.equal(cache.data.activePreviewSessionCount, 1);
+  assert.equal(cache.data.totalBytes > 0, true);
+
+  const clearWrongPinResponse = await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ scope: 'pin', pinId: wrongPinId }),
+  });
+  const clearedWrongPin = await readJson(clearWrongPinResponse);
+  assert.equal(clearWrongPinResponse.status, 200);
+  assert.equal(clearedWrongPin.ok, true);
+  assert.equal(clearedWrongPin.data.clearedArtifacts, 0);
+  assert.equal(clearedWrongPin.data.clearedPinRecords, 0);
+
+  const cacheAfterWrongPinClear = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`));
+  assert.equal(cacheAfterWrongPinClear.ok, true);
+  assert.equal(cacheAfterWrongPinClear.data.artifactCount, 1);
+  assert.equal(cacheAfterWrongPinClear.data.pinRecordCount, 1);
+
+  const htmlAfterWrongPinClearResponse = await fetch(`${baseUrl}${first.data.renderer.url}`);
+  assert.equal(htmlAfterWrongPinClearResponse.status, 200);
+  assert.match(await htmlAfterWrongPinClearResponse.text(), /ZIP Preview/);
+
+  const clearPinResponse = await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ scope: 'pin', pinId }),
+  });
+  const clearedPin = await readJson(clearPinResponse);
+  assert.equal(clearPinResponse.status, 200);
+  assert.equal(clearedPin.ok, true);
+  assert.equal(clearedPin.data.clearedArtifacts, 0);
+  assert.equal(clearedPin.data.clearedPinRecords, 1);
+
+  const cacheAfterPinClear = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`));
+  assert.equal(cacheAfterPinClear.ok, true);
+  assert.equal(cacheAfterPinClear.data.artifactCount, 1);
+  assert.equal(cacheAfterPinClear.data.pinRecordCount, 0);
+  assert.equal(cacheAfterPinClear.data.activePreviewSessionCount, 1);
+
+  const htmlAfterPinClearResponse = await fetch(`${baseUrl}${first.data.renderer.url}`);
+  assert.equal(htmlAfterPinClearResponse.status, 200);
+  assert.match(htmlAfterPinClearResponse.headers.get('content-type'), /text\/html/);
+  assert.match(await htmlAfterPinClearResponse.text(), /ZIP Preview/);
+
+  const secondResponse = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaapp%3A%2F%2F${pinId}`);
+  const second = await readJson(secondResponse);
+  assert.equal(secondResponse.status, 200);
+  assert.equal(second.ok, true);
+  assert.equal(second.data.renderer.type, 'html-iframe');
+  assert.equal(zipFetchCount, 1);
+
+  const clearResponse = await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ scope: 'all' }),
+  });
+  const cleared = await readJson(clearResponse);
+  assert.equal(clearResponse.status, 200);
+  assert.equal(cleared.ok, true);
+  assert.equal(cleared.data.clearedArtifacts, 1);
+  assert.equal(cleared.data.clearedPinRecords, 1);
+
+  const afterClearResponse = await fetch(`${baseUrl}${first.data.renderer.url}`);
+  const afterClear = await readJson(afterClearResponse);
+  assert.equal(afterClearResponse.status, 404);
+  assert.equal(afterClear.ok, false);
+  assert.equal(afterClear.code, 'browser_resource_not_found');
 });
