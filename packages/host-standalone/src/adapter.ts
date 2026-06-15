@@ -33,6 +33,12 @@ import {
   type BrowserTrustedActionInput,
   type BrowserTrustedActionResult,
 } from '@openagentinternet/agent-browser-host-contract';
+import {
+  createStandaloneMetaAppArtifactCacheStore,
+  normalizeMetaAppModifyHistory,
+  resolveStandaloneMetaAppCacheRoot,
+  type MetaAppArtifactCacheEntry,
+} from './metaapp/artifactCache.js';
 
 const STANDALONE_ACTOR_ID = 'standalone-wallet';
 const STANDALONE_DEFAULT_URI = 'metaid://idq1fixturebot';
@@ -131,13 +137,23 @@ export interface CreateStandaloneBrowserHostAdapterInput {
   fetch?: typeof fetch;
   env?: Record<string, string | undefined>;
   now?: () => number;
+  cacheRoot?: string;
+  maxZipArchiveBytes?: number;
 }
 
 interface PreviewSession {
   artifactDir: string;
   indexFile: string;
   createdAt: number;
+  source: 'cache';
+  cacheKey?: string;
 }
+
+const ZIP_CONTENT_TYPES = new Set([
+  'application/zip',
+  'application/x-zip-compressed',
+]);
+const DEFAULT_MAX_ZIP_ARCHIVE_BYTES = 25 * 1024 * 1024;
 
 function normalizeText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
@@ -176,6 +192,10 @@ function contentTypeForPath(filePath: string): string {
   if (extension === '.css') return 'text/css; charset=utf-8';
   if (extension === '.js' || extension === '.mjs') return 'text/javascript; charset=utf-8';
   if (extension === '.json') return 'application/json; charset=utf-8';
+  if (extension === '.wasm') return 'application/wasm';
+  if (extension === '.ico') return 'image/x-icon';
+  if (extension === '.map') return 'application/json; charset=utf-8';
+  if (extension === '.txt') return 'text/plain; charset=utf-8';
   if (extension === '.svg') return 'image/svg+xml';
   if (extension === '.png') return 'image/png';
   if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg';
@@ -197,6 +217,88 @@ function normalizePreviewAssetPath(value: unknown): string | null {
 
 function isFixtureMetaIdUri(uri: unknown): boolean {
   return normalizeText(uri).toLowerCase() === STANDALONE_DEFAULT_URI;
+}
+
+function isZipMetaAppContent(contentType: string, contentReference: string): boolean {
+  const normalizedType = normalizeText(contentType).toLowerCase();
+  const normalizedReference = normalizeText(contentReference).toLowerCase().split(/[?#]/, 1)[0];
+  return ZIP_CONTENT_TYPES.has(normalizedType)
+    || normalizedType.endsWith('/zip')
+    || normalizedType.endsWith('+zip')
+    || normalizedReference.endsWith('.zip')
+    || /^metafile:\/\/.+\.zip$/iu.test(contentReference);
+}
+
+function resolveMetaAppContentUrl(contentReference: string, metafileContentBaseUrl: string): string | null {
+  const reference = normalizeText(contentReference);
+  if (!/^metafile:\/\//iu.test(reference)) {
+    return null;
+  }
+  const pinId = reference.slice('metafile://'.length).split(/[?#]/, 1)[0]?.replace(/\.[A-Za-z0-9]+$/u, '') ?? '';
+  if (!pinId || pinId.includes('/') || pinId.includes('\\')) {
+    return null;
+  }
+  return `${metafileContentBaseUrl.replace(/\/+$/, '')}/${encodeURIComponent(pinId)}`;
+}
+
+async function readBoundedResponseBody(input: {
+  response: Response;
+  maxBytes: number;
+}): Promise<Buffer> {
+  const contentLength = normalizeText(input.response.headers.get('content-length'));
+  if (contentLength) {
+    const parsedLength = Number(contentLength);
+    if (!Number.isFinite(parsedLength) || parsedLength < 0) {
+      throw new Error('MetaApp ZIP download content-length is invalid.');
+    }
+    if (parsedLength > input.maxBytes) {
+      throw new Error('MetaApp ZIP archive is too large.');
+    }
+  }
+
+  const reader = input.response.body?.getReader?.();
+  if (!reader) {
+    throw new Error('MetaApp ZIP download response body is not streamable.');
+  }
+
+  const chunks: Buffer[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    if (!value) {
+      continue;
+    }
+    const chunk = Buffer.from(value);
+    totalBytes += chunk.byteLength;
+    if (totalBytes > input.maxBytes) {
+      throw new Error('MetaApp ZIP archive exceeds the download size limit.');
+    }
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks, totalBytes);
+}
+
+async function downloadMetaAppZipArchive(input: {
+  fetch: typeof fetch;
+  contentReference: string;
+  metafileContentBaseUrl: string;
+  maxBytes?: number;
+}): Promise<Buffer> {
+  const contentUrl = resolveMetaAppContentUrl(input.contentReference, input.metafileContentBaseUrl);
+  if (!contentUrl) {
+    throw new Error('MetaApp ZIP content reference is not downloadable.');
+  }
+  const response = await input.fetch(contentUrl);
+  if (!response.ok) {
+    throw new Error(`MetaApp ZIP download failed with HTTP ${response.status}.`);
+  }
+  return readBoundedResponseBody({
+    response,
+    maxBytes: input.maxBytes ?? DEFAULT_MAX_ZIP_ARCHIVE_BYTES,
+  });
 }
 
 function fixtureFetch(): Promise<Response> {
@@ -243,6 +345,62 @@ export function createStandaloneBrowserHostAdapter(
   let cacheClearedAt: number | null = null;
   let previewCounter = 0;
   const previewSessions = new Map<string, PreviewSession>();
+  const artifactCache = createStandaloneMetaAppArtifactCacheStore({
+    cacheRoot: input.cacheRoot ?? resolveStandaloneMetaAppCacheRoot({ env }),
+    env,
+    now,
+  });
+
+  function createPreviewSessionForArtifact(input: {
+    artifactDir: string;
+    indexFile: string;
+    source: 'cache';
+    cacheKey?: string;
+  }): { previewId: string; localPreviewUrl: string } {
+    previewCounter += 1;
+    const previewId = `standalone-${now().toString(36)}-${previewCounter.toString(36)}`;
+    previewSessions.set(previewId, {
+      artifactDir: input.artifactDir,
+      indexFile: input.indexFile,
+      createdAt: now(),
+      source: input.source,
+      ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
+    });
+    return {
+      previewId,
+      localPreviewUrl: `/api/browser/preview-assets/${encodeURIComponent(previewId)}/${encodeAssetPath(input.indexFile)}`,
+    };
+  }
+
+  async function resolveZipPreviewArtifact(input: {
+    pinId: string;
+    contentReference: string;
+    contentType: string;
+    indexFile: string;
+    pinRecord: Record<string, unknown>;
+    metafileContentBaseUrl: string;
+    resolveFetch: typeof fetch;
+    maxBytes?: number;
+  }): Promise<MetaAppArtifactCacheEntry> {
+    const descriptor = {
+      metaAppPinId: input.pinId,
+      contentReference: input.contentReference,
+      contentType: input.contentType,
+      indexFile: input.indexFile,
+      modifyHistory: normalizeMetaAppModifyHistory(input.pinRecord.modify_history ?? input.pinRecord.modifyHistory),
+    };
+    const cached = await artifactCache.getArtifact(descriptor);
+    if (cached) {
+      return cached;
+    }
+    const archive = await downloadMetaAppZipArchive({
+      fetch: input.resolveFetch,
+      contentReference: input.contentReference,
+      metafileContentBaseUrl: input.metafileContentBaseUrl,
+      maxBytes: input.maxBytes,
+    });
+    return artifactCache.writeArtifact({ ...descriptor, archive });
+  }
 
   async function resolveResourceWithFetch(
     resolveInput: BrowserResolveInput,
@@ -259,22 +417,26 @@ export function createStandaloneBrowserHostAdapter(
         manApiBaseUrl: browserConfig.manApiBaseUrl,
         metafileContentBaseUrl: browserConfig.metafileContentBaseUrl,
         now,
-        createPreviewSession: ({ contentReference, indexFile }) => {
-          if (!contentReference.startsWith('file://')) {
-            return { localPreviewUrl: '' };
+        createPreviewSession: async ({ pinId, contentReference, contentType, indexFile, pinRecord }) => {
+          if (!isZipMetaAppContent(contentType, contentReference)) {
+            throw new Error('Standalone MetaApp preview only supports ZIP content references.');
           }
-          const artifactDir = path.resolve(new URL(contentReference).pathname);
-          previewCounter += 1;
-          const previewId = `standalone-${now().toString(36)}-${previewCounter.toString(36)}`;
-          previewSessions.set(previewId, {
-            artifactDir,
+          const artifact = await resolveZipPreviewArtifact({
+            pinId,
+            contentReference,
+            contentType,
             indexFile,
-            createdAt: now(),
+            pinRecord,
+            metafileContentBaseUrl: browserConfig.metafileContentBaseUrl,
+            resolveFetch,
+            maxBytes: input.maxZipArchiveBytes,
           });
-          return {
-            previewId,
-            localPreviewUrl: `/api/browser/preview-assets/${encodeURIComponent(previewId)}/${encodeAssetPath(indexFile)}`,
-          };
+          return createPreviewSessionForArtifact({
+            artifactDir: artifact.artifactDir,
+            indexFile: artifact.indexFile,
+            source: 'cache',
+            cacheKey: artifact.cacheKey,
+          });
         },
       }),
     });
@@ -338,11 +500,16 @@ export function createStandaloneBrowserHostAdapter(
   async function getCache(cacheInput: BrowserCacheInput = {}): Promise<BrowserCommandResult<BrowserCacheSnapshot>> {
     const actorFailure = resolveActor(cacheInput);
     if (actorFailure) return actorFailure;
+    const stats = await artifactCache.getStats();
     return browserSuccess({
-      cacheRoot: 'standalone-memory',
-      artifactCount: previewSessions.size,
-      pinRecordCount: 0,
-      totalBytes: 0,
+      cacheRoot: stats.cacheRoot,
+      artifactsRoot: stats.artifactsRoot,
+      pinsRoot: stats.pinsRoot,
+      artifactCount: stats.artifactCount,
+      pinRecordCount: stats.pinRecordCount,
+      totalBytes: stats.totalBytes,
+      artifacts: stats.artifacts,
+      activePreviewSessionCount: previewSessions.size,
       ...(cacheClearedAt ? { lastClearedAt: cacheClearedAt } : {}),
     });
   }
@@ -350,22 +517,58 @@ export function createStandaloneBrowserHostAdapter(
   async function clearCache(cacheInput: BrowserCacheClearInput): Promise<BrowserCommandResult<BrowserCacheClearResult>> {
     const actorFailure = resolveActor(cacheInput);
     if (actorFailure) return actorFailure;
-    const scope = normalizeText(cacheInput.scope) || 'all';
+    const scope = normalizeText(cacheInput.scope) || (cacheInput.all ? 'all' : 'all');
     if (scope !== 'all' && scope !== 'pin' && scope !== 'artifact') {
       return browserFailure('invalid_argument', 'Unsupported Browser cache clear scope.');
     }
-    const clearedArtifacts = scope === 'all' || scope === 'artifact' ? previewSessions.size : 0;
-    if (clearedArtifacts > 0) {
-      previewSessions.clear();
+
+    try {
+      let clearedArtifacts = 0;
+      let clearedPinRecords = 0;
+      let clearedPreviewSessions = 0;
+      if (scope === 'all') {
+        clearedPreviewSessions = previewSessions.size;
+        previewSessions.clear();
+        const cleared = await artifactCache.clear({ scope: 'all' });
+        clearedArtifacts = cleared.clearedArtifacts;
+        clearedPinRecords = cleared.clearedPinRecords;
+      } else if (scope === 'pin') {
+        const pinId = normalizeText(cacheInput.pinId);
+        const cleared = pinId ? await artifactCache.clear({ scope: 'pin', pinId }) : { clearedArtifacts: 0, clearedPinRecords: 0 };
+        clearedArtifacts = cleared.clearedArtifacts;
+        clearedPinRecords = cleared.clearedPinRecords;
+      } else {
+        const cacheKey = normalizeText(cacheInput.cacheKey).toLowerCase();
+        if (cacheKey) {
+          const cleared = await artifactCache.clear({ scope: 'artifact', cacheKey });
+          clearedArtifacts = cleared.clearedArtifacts;
+          clearedPinRecords = cleared.clearedPinRecords;
+          for (const [previewId, session] of previewSessions) {
+            if (session.cacheKey === cacheKey) {
+              previewSessions.delete(previewId);
+              clearedPreviewSessions += 1;
+            }
+          }
+        } else {
+          clearedPreviewSessions = previewSessions.size;
+          const cleared = await artifactCache.clear({ scope: 'artifact' });
+          clearedArtifacts = cleared.clearedArtifacts;
+          clearedPinRecords = cleared.clearedPinRecords;
+          previewSessions.clear();
+        }
+      }
+      cacheClearedAt = now();
+      return browserSuccess({
+        clearedArtifacts,
+        clearedPinRecords,
+        clearedPreviewSessions,
+        scope,
+        cacheRoot: artifactCache.cacheRoot,
+        lastClearedAt: cacheClearedAt,
+      });
+    } catch (error) {
+      return browserFailure('invalid_argument', error instanceof Error ? error.message : String(error));
     }
-    cacheClearedAt = now();
-    return browserSuccess({
-      clearedArtifacts,
-      clearedPinRecords: 0,
-      scope,
-      cacheRoot: 'standalone-memory',
-      lastClearedAt: cacheClearedAt,
-    });
   }
 
   async function runTrustedAction(

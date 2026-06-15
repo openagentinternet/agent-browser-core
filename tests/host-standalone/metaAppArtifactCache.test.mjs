@@ -105,6 +105,24 @@ test('standalone artifact clear removes associated pin records', async (t) => {
   assert.equal(stats.pinRecordCount, 0);
 });
 
+test('standalone artifact clear without cache key removes artifacts and preserves pin records', async (t) => {
+  const cacheRoot = await mkdtemp(path.join(tmpdir(), 'abc-artifact-cache-artifact-all-clear-'));
+  t.after(() => rm(cacheRoot, { recursive: true, force: true }));
+
+  const cache = createStandaloneMetaAppArtifactCacheStore({ cacheRoot });
+  const archive = makeMetaAppZipArchive({
+    'index.html': '<!doctype html><title>Clear artifacts only</title>',
+  });
+  await cache.writeArtifact({ ...descriptor, archive });
+
+  const cleared = await cache.clear({ scope: 'artifact' });
+  assert.equal(cleared.clearedArtifacts, 1);
+  assert.equal(cleared.clearedPinRecords, 0);
+  const stats = await cache.getStats();
+  assert.equal(stats.artifactCount, 0);
+  assert.equal(stats.pinRecordCount, 1);
+});
+
 test('standalone all clear removes artifacts and pin records', async (t) => {
   const cacheRoot = await mkdtemp(path.join(tmpdir(), 'abc-artifact-cache-all-clear-'));
   t.after(() => rm(cacheRoot, { recursive: true, force: true }));

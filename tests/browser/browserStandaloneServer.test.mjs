@@ -91,7 +91,8 @@ test('standalone Browser server exposes runtime, settings, cache, and action rou
 
   const cache = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`));
   assert.equal(cache.ok, true);
-  assert.equal(cache.data.cacheRoot, 'standalone-memory');
+  assert.equal(typeof cache.data.cacheRoot, 'string');
+  assert.equal(cache.data.cacheRoot.length > 0, true);
 
   const cleared = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`, {
     method: 'DELETE',
@@ -183,11 +184,10 @@ test('standalone Browser server resolves non-fixture metaid resources through ad
   assert.match(fetchUrls[0], /idq1fetchedbot/);
 });
 
-test('standalone Browser server resolves MetaApps, serves preview assets, and reports preview cache', async (t) => {
+test('standalone Browser server rejects untrusted file MetaApp content references', async (t) => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), 'abc-standalone-metaapp-project-'));
   t.after(() => rm(projectDir, { recursive: true, force: true }));
-  await writeFile(path.join(projectDir, 'index.html'), '<!doctype html><title>Standalone Preview</title>');
-  await writeFile(path.join(projectDir, 'app.js'), 'window.__standalonePreviewLoaded = true;');
+  await writeFile(path.join(projectDir, 'secret.txt'), 'LOCAL_SECRET_SHOULD_NOT_LEAK');
   const projectUrl = pathToFileURL(projectDir).href;
   const adapter = createStandaloneBrowserHostAdapter({
     fetch: async (url) => {
@@ -205,8 +205,8 @@ test('standalone Browser server resolves MetaApps, serves preview assets, and re
               version: '1.0.0',
               runtime: 'browser',
               content: projectUrl,
-              contentType: 'text/html',
-              indexFile: 'index.html',
+              contentType: 'text/plain',
+              indexFile: 'secret.txt',
             }),
           },
         });
@@ -220,76 +220,16 @@ test('standalone Browser server resolves MetaApps, serves preview assets, and re
 
   const resolveResponse = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaapp%3A%2F%2F${METAAPP_PIN_ID}`);
   const resolved = await readJson(resolveResponse);
-  assert.equal(resolveResponse.status, 200);
-  assert.equal(resolved.ok, true);
-  assert.equal(resolved.data.resourceType, 'metaapp');
-  assert.equal(resolved.data.renderer.type, 'html-iframe');
-  assert.match(resolved.data.renderer.url, /^\/api\/browser\/preview-assets\/standalone-/);
+  assert.equal(resolveResponse.status, 400);
+  assert.equal(resolved.ok, false);
+  assert.match(resolved.message, /only supports ZIP content references/i);
+  assert.doesNotMatch(JSON.stringify(resolved), /LOCAL_SECRET_SHOULD_NOT_LEAK/);
 
-  const previewResponse = await fetch(`${baseUrl}${resolved.data.renderer.url}`);
-  assert.equal(previewResponse.status, 200);
-  assert.match(previewResponse.headers.get('content-type'), /text\/html/);
-  assert.match(await previewResponse.text(), /Standalone Preview/);
-
-  const scriptResponse = await fetch(`${baseUrl}${resolved.data.renderer.url.replace(/index\.html$/, 'app.js')}`);
-  assert.equal(scriptResponse.status, 200);
-  assert.match(scriptResponse.headers.get('content-type'), /text\/javascript/);
-  assert.match(await scriptResponse.text(), /__standalonePreviewLoaded/);
-
-  const traversalResponse = await fetch(`${baseUrl}${resolved.data.renderer.url.replace(/index\.html$/, '..%2Foutside.html')}`);
-  const traversal = await readJson(traversalResponse);
-  assert.equal(traversalResponse.status, 400);
-  assert.equal(traversal.ok, false);
-  assert.equal(traversal.code, 'invalid_argument');
-
-  const missingResponse = await fetch(`${baseUrl}${resolved.data.renderer.url.replace(/index\.html$/, 'missing.html')}`);
-  const missing = await readJson(missingResponse);
-  assert.equal(missingResponse.status, 404);
-  assert.equal(missing.ok, false);
-  assert.equal(missing.code, 'browser_resource_not_found');
-
-  const cache = await adapter.getCache({ actorId: 'standalone-wallet' });
-  assert.equal(cache.ok, true);
-  assert.equal(cache.data.artifactCount, 1);
-  assert.equal(cache.data.pinRecordCount, 0);
-
-  const clearPin = await adapter.clearCache({ actorId: 'standalone-wallet', scope: 'pin', pinId: METAAPP_PIN_ID });
-  assert.equal(clearPin.ok, true);
-  assert.equal(clearPin.data.clearedArtifacts, 0);
-  const cacheAfterPinClear = await adapter.getCache({ actorId: 'standalone-wallet' });
-  assert.equal(cacheAfterPinClear.ok, true);
-  assert.equal(cacheAfterPinClear.data.artifactCount, 1);
-
-  const clearArtifacts = await adapter.clearCache({ actorId: 'standalone-wallet', scope: 'artifact' });
-  assert.equal(clearArtifacts.ok, true);
-  assert.equal(clearArtifacts.data.clearedArtifacts, 1);
-  assert.equal(clearArtifacts.data.clearedPinRecords, 0);
-  const cacheAfterArtifactClear = await adapter.getCache({ actorId: 'standalone-wallet' });
-  assert.equal(cacheAfterArtifactClear.ok, true);
-  assert.equal(cacheAfterArtifactClear.data.artifactCount, 0);
-
-  const afterClearResponse = await fetch(`${baseUrl}${resolved.data.renderer.url}`);
-  const afterClear = await readJson(afterClearResponse);
-  assert.equal(afterClearResponse.status, 404);
-  assert.equal(afterClear.ok, false);
-  assert.equal(afterClear.code, 'browser_resource_not_found');
-
-  const secondResolveResponse = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaapp%3A%2F%2F${METAAPP_PIN_ID}`);
-  const secondResolved = await readJson(secondResolveResponse);
-  assert.equal(secondResolveResponse.status, 200);
-  assert.equal(secondResolved.ok, true);
-  assert.match(secondResolved.data.renderer.url, /^\/api\/browser\/preview-assets\/standalone-/);
-  const cacheBeforeAllClear = await adapter.getCache({ actorId: 'standalone-wallet' });
-  assert.equal(cacheBeforeAllClear.ok, true);
-  assert.equal(cacheBeforeAllClear.data.artifactCount, 1);
-
-  const clearAll = await adapter.clearCache({ actorId: 'standalone-wallet', scope: 'all' });
-  assert.equal(clearAll.ok, true);
-  assert.equal(clearAll.data.clearedArtifacts, 1);
-  assert.equal(clearAll.data.clearedPinRecords, 0);
-  const cacheAfterAllClear = await adapter.getCache({ actorId: 'standalone-wallet' });
-  assert.equal(cacheAfterAllClear.ok, true);
-  assert.equal(cacheAfterAllClear.data.artifactCount, 0);
+  const previewResponse = await fetch(`${baseUrl}/api/browser/preview-assets/standalone-probe/secret.txt`);
+  const preview = await readJson(previewResponse);
+  assert.equal(previewResponse.status, 404);
+  assert.equal(preview.ok, false);
+  assert.doesNotMatch(JSON.stringify(preview), /LOCAL_SECRET_SHOULD_NOT_LEAK/);
 });
 
 test('standalone Browser server downloads ZIP MetaApp content into artifact cache and serves preview assets', async (t) => {
@@ -424,6 +364,69 @@ test('standalone Browser server downloads ZIP MetaApp content into artifact cach
   assert.equal(second.data.renderer.type, 'html-iframe');
   assert.equal(zipFetchCount, 1);
 
+  const clearArtifactsResponse = await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ scope: 'artifact' }),
+  });
+  const clearedArtifactsOnly = await readJson(clearArtifactsResponse);
+  assert.equal(clearArtifactsResponse.status, 200);
+  assert.equal(clearedArtifactsOnly.ok, true);
+  assert.equal(clearedArtifactsOnly.data.clearedArtifacts, 1);
+  assert.equal(clearedArtifactsOnly.data.clearedPinRecords, 0);
+  assert.equal(clearedArtifactsOnly.data.clearedPreviewSessions, 2);
+
+  const cacheAfterArtifactClear = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`));
+  assert.equal(cacheAfterArtifactClear.ok, true);
+  assert.equal(cacheAfterArtifactClear.data.artifactCount, 0);
+  assert.equal(cacheAfterArtifactClear.data.pinRecordCount, 1);
+  assert.equal(cacheAfterArtifactClear.data.activePreviewSessionCount, 0);
+
+  const afterArtifactClearResponse = await fetch(`${baseUrl}${first.data.renderer.url}`);
+  const afterArtifactClear = await readJson(afterArtifactClearResponse);
+  assert.equal(afterArtifactClearResponse.status, 404);
+  assert.equal(afterArtifactClear.ok, false);
+  assert.equal(afterArtifactClear.code, 'browser_resource_not_found');
+
+  const thirdResponse = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaapp%3A%2F%2F${pinId}`);
+  const third = await readJson(thirdResponse);
+  assert.equal(thirdResponse.status, 200);
+  assert.equal(third.ok, true);
+  assert.equal(third.data.renderer.type, 'html-iframe');
+  assert.equal(zipFetchCount, 2);
+
+  const cacheBeforeKeyedClear = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`));
+  assert.equal(cacheBeforeKeyedClear.ok, true);
+  assert.equal(cacheBeforeKeyedClear.data.artifactCount, 1);
+  assert.equal(cacheBeforeKeyedClear.data.pinRecordCount, 1);
+  assert.equal(cacheBeforeKeyedClear.data.activePreviewSessionCount, 1);
+  const cacheKey = cacheBeforeKeyedClear.data.artifacts[0].cacheKey;
+
+  const keyedClearResponse = await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`, {
+    method: 'DELETE',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ scope: 'artifact', cacheKey: cacheKey.toUpperCase() }),
+  });
+  const keyedClear = await readJson(keyedClearResponse);
+  assert.equal(keyedClearResponse.status, 200);
+  assert.equal(keyedClear.ok, true);
+  assert.equal(keyedClear.data.clearedArtifacts, 1);
+  assert.equal(keyedClear.data.clearedPinRecords, 1);
+  assert.equal(keyedClear.data.clearedPreviewSessions, 1);
+
+  const cacheAfterKeyedClear = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`));
+  assert.equal(cacheAfterKeyedClear.ok, true);
+  assert.equal(cacheAfterKeyedClear.data.artifactCount, 0);
+  assert.equal(cacheAfterKeyedClear.data.pinRecordCount, 0);
+  assert.equal(cacheAfterKeyedClear.data.activePreviewSessionCount, 0);
+
+  const fourthResponse = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaapp%3A%2F%2F${pinId}`);
+  const fourth = await readJson(fourthResponse);
+  assert.equal(fourthResponse.status, 200);
+  assert.equal(fourth.ok, true);
+  assert.equal(fourth.data.renderer.type, 'html-iframe');
+  assert.equal(zipFetchCount, 3);
+
   const clearResponse = await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`, {
     method: 'DELETE',
     headers: { 'content-type': 'application/json' },
@@ -434,10 +437,181 @@ test('standalone Browser server downloads ZIP MetaApp content into artifact cach
   assert.equal(cleared.ok, true);
   assert.equal(cleared.data.clearedArtifacts, 1);
   assert.equal(cleared.data.clearedPinRecords, 1);
+  assert.equal(cleared.data.clearedPreviewSessions, 1);
 
   const afterClearResponse = await fetch(`${baseUrl}${first.data.renderer.url}`);
   const afterClear = await readJson(afterClearResponse);
   assert.equal(afterClearResponse.status, 404);
   assert.equal(afterClear.ok, false);
   assert.equal(afterClear.code, 'browser_resource_not_found');
+});
+
+test('standalone Browser server rejects arbitrary HTTPS ZIP MetaApp content references', async (t) => {
+  const pinId = 'd6'.repeat(32) + 'i0';
+  let evilZipFetchCount = 0;
+
+  const adapter = createStandaloneBrowserHostAdapter({
+    env: {
+      METABOT_BROWSER_MANAPI_BASE_URL: 'https://man.example.test',
+      METABOT_BROWSER_METAFILE_CONTENT_BASE_URL: 'https://content.example.test/files',
+    },
+    fetch: async (url) => {
+      const textUrl = String(url);
+      if (textUrl === `https://man.example.test/pin/${pinId}`) {
+        return new Response(JSON.stringify({
+          data: {
+            id: pinId,
+            path: '/protocols/metaapp',
+            address: '1HttpsPublisher',
+            timestamp: 1781450015,
+            contentSummary: JSON.stringify({
+              title: 'HTTPS ZIP MetaApp',
+              appName: 'https-zip-metaapp',
+              version: '1.0.0',
+              runtime: 'browser',
+              content: 'https://evil.example/app.zip',
+              contentType: 'application/zip',
+              codeType: 'application/zip',
+              indexFile: 'index.html',
+            }),
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
+      }
+      if (textUrl === 'https://evil.example/app.zip') {
+        evilZipFetchCount += 1;
+        throw new Error('Arbitrary HTTPS ZIP content should not be fetched.');
+      }
+      throw new Error(`Unexpected fetch URL: ${textUrl}`);
+    },
+  });
+  const server = createStandaloneBrowserServer({ adapter });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const response = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaapp%3A%2F%2F${pinId}`);
+  const resolved = await readJson(response);
+  assert.equal(response.status, 400);
+  assert.equal(resolved.ok, false);
+  assert.match(resolved.message, /not downloadable|unsupported ZIP reference/i);
+  assert.equal(evilZipFetchCount, 0);
+});
+
+test('standalone Browser server rejects ZIP MetaApp downloads above the compressed archive limit', async (t) => {
+  const pinId = 'e5'.repeat(32) + 'i0';
+  const contentPinId = 'f4'.repeat(32) + 'i0';
+  let zipFetchCount = 0;
+
+  const adapter = createStandaloneBrowserHostAdapter({
+    env: {
+      METABOT_BROWSER_MANAPI_BASE_URL: 'https://man.example.test',
+      METABOT_BROWSER_METAFILE_CONTENT_BASE_URL: 'https://content.example.test/files',
+    },
+    fetch: async (url) => {
+      const textUrl = String(url);
+      if (textUrl === `https://man.example.test/pin/${pinId}`) {
+        return new Response(JSON.stringify({
+          data: {
+            id: pinId,
+            path: '/protocols/metaapp',
+            address: '1LargeZipPublisher',
+            timestamp: 1781450015,
+            contentSummary: JSON.stringify({
+              title: 'Large ZIP MetaApp',
+              appName: 'large-zip-metaapp',
+              version: '1.0.0',
+              runtime: 'browser',
+              content: `metafile://${contentPinId}.zip`,
+              contentType: 'application/zip',
+              codeType: 'application/zip',
+              indexFile: 'index.html',
+            }),
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
+      }
+      if (textUrl === `https://content.example.test/files/${contentPinId}`) {
+        zipFetchCount += 1;
+        return new Response(Buffer.from('PK'), {
+          status: 200,
+          headers: {
+            'content-length': '999999999',
+            'content-type': 'application/zip',
+          },
+        });
+      }
+      throw new Error(`Unexpected fetch URL: ${textUrl}`);
+    },
+  });
+  const server = createStandaloneBrowserServer({ adapter });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const response = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaapp%3A%2F%2F${pinId}`);
+  const resolved = await readJson(response);
+  assert.equal(response.status, 400);
+  assert.equal(resolved.ok, false);
+  assert.match(resolved.message, /too large|exceeds/i);
+  assert.equal(resolved.data?.renderer?.url, undefined);
+  assert.equal(zipFetchCount, 1);
+});
+
+test('standalone Browser server rejects streaming ZIP MetaApp downloads above the compressed archive limit without content-length', async (t) => {
+  const pinId = 'a4'.repeat(32) + 'i0';
+  const contentPinId = 'b3'.repeat(32) + 'i0';
+  let zipFetchCount = 0;
+
+  const adapter = createStandaloneBrowserHostAdapter({
+    env: {
+      METABOT_BROWSER_MANAPI_BASE_URL: 'https://man.example.test',
+      METABOT_BROWSER_METAFILE_CONTENT_BASE_URL: 'https://content.example.test/files',
+    },
+    maxZipArchiveBytes: 4,
+    fetch: async (url) => {
+      const textUrl = String(url);
+      if (textUrl === `https://man.example.test/pin/${pinId}`) {
+        return new Response(JSON.stringify({
+          data: {
+            id: pinId,
+            path: '/protocols/metaapp',
+            address: '1StreamingZipPublisher',
+            timestamp: 1781450015,
+            contentSummary: JSON.stringify({
+              title: 'Streaming ZIP MetaApp',
+              appName: 'streaming-zip-metaapp',
+              version: '1.0.0',
+              runtime: 'browser',
+              content: `metafile://${contentPinId}.zip`,
+              contentType: 'application/zip',
+              codeType: 'application/zip',
+              indexFile: 'index.html',
+            }),
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
+      }
+      if (textUrl === `https://content.example.test/files/${contentPinId}`) {
+        zipFetchCount += 1;
+        return new Response(new ReadableStream({
+          start(controller) {
+            controller.enqueue(new Uint8Array([1, 2, 3]));
+            controller.enqueue(new Uint8Array([4, 5, 6]));
+            controller.close();
+          },
+        }), {
+          status: 200,
+          headers: { 'content-type': 'application/zip' },
+        });
+      }
+      throw new Error(`Unexpected fetch URL: ${textUrl}`);
+    },
+  });
+  const server = createStandaloneBrowserServer({ adapter });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const response = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaapp%3A%2F%2F${pinId}`);
+  const resolved = await readJson(response);
+  assert.equal(response.status, 400);
+  assert.equal(resolved.ok, false);
+  assert.match(resolved.message, /exceeds the download size limit/i);
+  assert.equal(resolved.data?.renderer?.url, undefined);
+  assert.equal(zipFetchCount, 1);
 });

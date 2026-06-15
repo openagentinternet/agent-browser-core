@@ -49,7 +49,7 @@ export interface MetaAppArtifactCacheStats {
 
 export type MetaAppArtifactCacheClearInput =
   | { scope?: 'all' }
-  | { scope: 'artifact'; cacheKey: string }
+  | { scope: 'artifact'; cacheKey?: string }
   | { scope: 'pin'; pinId: string };
 
 export interface MetaAppArtifactCacheClearResult {
@@ -508,7 +508,17 @@ export function createStandaloneMetaAppArtifactCacheStore(
         throw new Error('Unsupported MetaApp artifact cache clear scope.');
       }
 
-      const cacheKey = safeCacheKey((input as { scope: 'artifact'; cacheKey: string }).cacheKey);
+      const rawCacheKey = normalizeText((input as { scope: 'artifact'; cacheKey?: string }).cacheKey);
+      if (!rawCacheKey) {
+        const stats = await this.getStats();
+        await fs.rm(artifactsRoot, { recursive: true, force: true });
+        return {
+          clearedArtifacts: stats.artifactCount,
+          clearedPinRecords: 0,
+        };
+      }
+
+      const cacheKey = safeCacheKey(rawCacheKey);
       const pinRecordFiles = await listPinRecordFiles(pinsRoot);
       let clearedPinRecords = 0;
       for (const file of pinRecordFiles) {
