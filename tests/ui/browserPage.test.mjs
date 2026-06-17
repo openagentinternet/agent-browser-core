@@ -38,8 +38,9 @@ test('Browser root API uses the generated mature inline CSS template', async () 
   assert.match(template, /\.browser-owner-toolbar \{/);
   assert.match(template, /\.browser-modal-panel \{/);
   assert.match(template, /\.browser-custom-pages-setting \{/);
-  assert.match(template, /\.browser-help-icon \{/);
+  assert.match(template, /\.browser-modal-panel \.browser-help-icon/);
   assert.match(template, /\.browser-help-tooltip \{/);
+  assert.match(template, /\.browser-help-icon \.browser-info-dot \{/);
   assert.match(template, /\.browser-help-wrap:hover \.browser-help-tooltip/);
   assert.match(template, /\.browser-switch-track \{/);
   assert.match(template, /\.browser-switch-thumb \{/);

@@ -453,7 +453,7 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   function renderTemplateSettings() {
     const active = String(settingValue('botHomepageTemplateId') || 'document');
     const customEnabled = customBotPagesEnabled();
-    const infoIcon = '<svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5"></path><path d="M12 8h.01"></path></svg>';
+    const infoIcon = '<svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v6"></path><circle class="browser-info-dot" cx="12" cy="7.5" r="1.1"></circle></svg>';
     return '<section class="browser-template-panel">' +
       '<section class="browser-custom-pages-setting">' +
         '<div class="browser-custom-pages-label"><strong>Render Custom Bot Pages</strong>' +

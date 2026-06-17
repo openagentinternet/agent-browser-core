@@ -65,9 +65,10 @@ export const BROWSER_PAGE_STYLES = `
     .browser-custom-pages-setting { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
     .browser-custom-pages-label { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
     .browser-help-wrap { position: relative; display: inline-flex; align-items: center; }
-    .browser-help-icon { width: 22px; height: 22px; border: 0; border-radius: 999px; background: transparent; color: #6b7280; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
-    .browser-help-icon:hover, .browser-help-icon:focus { color: #374151; background: transparent; }
-    .browser-help-icon svg { width: 22px; height: 22px; stroke-width: 1.9; }
+    .browser-modal-panel .browser-help-icon, .browser-help-icon { width: 22px; min-width: 22px; height: 22px; min-height: 22px; border: 0; border-radius: 999px; background: transparent; color: #6b7280; display: inline-flex; align-items: center; justify-content: center; padding: 0; flex: 0 0 auto; }
+    .browser-modal-panel .browser-help-icon:hover, .browser-modal-panel .browser-help-icon:focus, .browser-help-icon:hover, .browser-help-icon:focus { border: 0; color: #374151; background: transparent; }
+    .browser-help-icon svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    .browser-help-icon .browser-info-dot { fill: currentColor; stroke: none; }
     .browser-help-tooltip { position: absolute; left: 50%; top: calc(100% + 8px); z-index: 35; width: min(330px, calc(100vw - 48px)); border-radius: 8px; background: #111827; color: #fff; box-shadow: 0 14px 32px rgb(17 24 39 / 22%); padding: 9px 10px; font-size: 12px; font-weight: 500; line-height: 1.45; opacity: 0; pointer-events: none; transform: translate(-50%, -3px); transition: opacity .14s ease, transform .14s ease; }
     .browser-help-tooltip::before { content: ""; position: absolute; left: 50%; top: -5px; width: 10px; height: 10px; background: #111827; transform: translateX(-50%) rotate(45deg); }
     .browser-help-wrap:hover .browser-help-tooltip, .browser-help-icon:focus + .browser-help-tooltip, .browser-help-icon:active + .browser-help-tooltip { opacity: 1; transform: translate(-50%, 0); }

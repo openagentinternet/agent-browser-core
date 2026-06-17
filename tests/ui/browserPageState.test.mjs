@@ -817,6 +817,7 @@ test('Browser template settings render global custom Bot Page toggle with toolti
   assert.match(html, /browser-help-tooltip/);
   assert.match(html, /When enabled, Bot Pages can render the custom MetaApp or Metafile declared on \/info\/homepage/);
   assert.match(html, /<circle cx="12" cy="12" r="9"><\/circle>/);
+  assert.match(html, /class="browser-info-dot"/);
   assert.doesNotMatch(html, />\?<\/button>/);
   assert.match(html, /browser-switch-track/);
   assert.match(html, /browser-switch-thumb/);

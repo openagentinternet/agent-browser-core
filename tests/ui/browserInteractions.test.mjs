@@ -20,6 +20,7 @@ test('client script includes runtime menu settings template cache and actor flow
   assert.match(script, /data-browser-custom-pages-toggle/);
   assert.match(script, /data-browser-custom-pages-help/);
   assert.match(script, /browser-help-tooltip/);
+  assert.match(script, /browser-info-dot/);
   assert.match(script, /browser-switch-track/);
   assert.match(script, /browser-switch-thumb/);
   assert.match(script, /data-browser-cache-clear/);
