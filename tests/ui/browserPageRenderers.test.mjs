@@ -128,7 +128,7 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.match(html, /Builds Agent Browser fixtures/);
   assert.match(html, /Overview/);
   assert.match(html, /Recent Activity/);
-  assert.match(html, /<h3>Buzz<\/h3>/);
+  assert.doesNotMatch(html, /<section class="browser-document-section browser-bot-buzzes">/);
   assert.match(html, /<h3>MetaApps<\/h3>/);
   assert.match(html, /Fixture Review/);
   assert.match(html, /Fixture MetaApp/);
@@ -136,6 +136,45 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.match(html, /data-browser-action="private-chat"/);
   assert.match(html, /data-browser-action="service-list"/);
   assert.match(html, /https:\/\/file\.metaid\.io\/metafile-indexer\/content\/avatar-pin/);
+});
+
+test('bot-page renderer truncates buzz detail longer than 200 characters with ellipsis', async () => {
+  const longContent = 'A'.repeat(280);
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1longbuzzbot' },
+    profile: { name: 'Long Buzz Bot', bio: 'Posts long buzz content.' },
+    sections: [
+      {
+        id: 'buzzes',
+        protocolPath: '/protocols/simplebuzz',
+        items: [
+          {
+            pinId: 'buzz-long-pin',
+            protocolPath: '/protocols/simplebuzz',
+            timestamp: 1780760002,
+            data: { payload: { content: longContent } },
+          },
+        ],
+      },
+    ],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    resourceType: 'bot',
+    title: 'Long Buzz Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1longbuzzbot', name: 'Long Buzz Bot', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Long Buzz Bot'), 'long buzz render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /Recent Activity/);
+  assert.ok(html.includes('A'.repeat(200) + '......'), 'buzz detail should be truncated to 200 characters followed by ellipsis');
+  assert.ok(!html.includes('A'.repeat(280)), 'full untruncated buzz content must not be rendered');
 });
 
 test('bot-page renderer uses compact-list template with normalized future lists', async () => {

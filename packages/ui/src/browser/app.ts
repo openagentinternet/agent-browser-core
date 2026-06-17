@@ -264,6 +264,13 @@ function readableText(value) {
   return compactText(text);
 }
 
+function truncateBuzzDetail(value) {
+  var text = textValue(value);
+  var limit = 200;
+  if (text.length <= limit) return text;
+  return text.slice(0, limit) + '......';
+}
+
 function initials(value) {
   var text = textValue(value);
   if (!text) return 'B';
@@ -1246,8 +1253,18 @@ function normalizeBotHomepagePayload(current) {
   var v3Metaapps = botHomepageSectionItems(data, 'apps');
   var services = normalizeBotHomepageServices(v3Services.length ? v3Services : data.services);
   var buzz = normalizeBotHomepageList(v3Buzz.length ? v3Buzz : firstArray(data.buzz, data.posts, data.publications), 'Buzz');
+  buzz.forEach(function (item) {
+    item.title = truncateBuzzDetail(item.title);
+    item.detail = truncateBuzzDetail(item.detail);
+  });
   var metaapps = normalizeBotHomepageList(v3Metaapps.length ? v3Metaapps : firstArray(data.metaapps, data.apps), 'MetaApp');
   var activity = normalizeBotHomepageList(v3Buzz.length ? v3Buzz : data.activity, 'Activity');
+  if (v3Buzz.length) {
+    activity.forEach(function (item) {
+      item.title = truncateBuzzDetail(item.title);
+      item.detail = truncateBuzzDetail(item.detail);
+    });
+  }
   if (!activity.length) {
     activity = services.slice(0, 2).map(function (service) {
       return {
@@ -1324,7 +1341,6 @@ function renderBotHomepageDocumentTemplate(payload, current) {
     renderActionButtons(current.actions) + '</header>' +
     '<section class="browser-document-section"><h3>Overview</h3><p>' + escapeHtml(payload.summary.overview) + '</p></section>' +
     '<section class="browser-document-section browser-bot-services"><h3>Services</h3>' + renderServiceRows(payload.services) + '</section>' +
-    '<section class="browser-document-section browser-bot-buzzes"><h3>Buzz</h3>' + renderGenericRows(payload.buzz, 'No public buzz.', 'activity') + '</section>' +
     '<section class="browser-document-section browser-bot-metaapps"><h3>MetaApps</h3>' + renderGenericRows(payload.metaapps, 'No public MetaApps.', 'layout') + '</section>' +
     '<section class="browser-document-section browser-bot-activity"><h3>Recent Activity</h3>' + renderActivityRows(payload) + '</section>' +
     '</article>';
@@ -1945,6 +1961,7 @@ globalThis.toggleCustomBotPages = toggleCustomBotPages;
 globalThis.clearBrowserCache = clearBrowserCache;
 globalThis.handleTrustedAction = handleTrustedAction;
 globalThis.normalizeBotHomepagePayload = normalizeBotHomepagePayload;
+globalThis.truncateBuzzDetail = truncateBuzzDetail;
 globalThis.confirmPrivateChat = confirmPrivateChat;
 globalThis.confirmServiceCall = confirmServiceCall;
 globalThis.handleOwnerAction = handleOwnerAction;
