@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
 const { createBotHomepageClient } = require('../../packages/core/dist/browser/botHomepageClient.js');
 const { buildBotPageResolveResult } = require('../../packages/core/dist/browser/botPageResolver.js');
 
-test('Bot homepage client fetches metaso-p2p botHomepage.v1 envelope', async () => {
+test('Bot homepage client fetches metaso-p2p botHomepage.v2 envelope', async () => {
   const calls = [];
   const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v1.json', import.meta.url), 'utf8'));
   const client = createBotHomepageClient({
@@ -26,7 +26,9 @@ test('Bot homepage client fetches metaso-p2p botHomepage.v1 envelope', async () 
 
   assert.equal(result.ok, true);
   assert.equal(result.data.profile.name, 'Fixture Bot');
-  assert.deepEqual(calls, ['https://so.example.test/api/bot-homepage/globalmetaid/idq1fixturebot?includeServices=true&includeProofs=true&includePresence=true']);
+  assert.deepEqual(calls, [
+    'https://so.example.test/api/bot-homepage/globalmetaid/idq1fixturebot?version=v2',
+  ]);
 });
 
 test('buildBotPageResolveResult maps homepage JSON into BrowserResolveResult', async () => {

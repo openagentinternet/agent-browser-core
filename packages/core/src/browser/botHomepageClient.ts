@@ -40,7 +40,7 @@ export function createBotHomepageClient(input: BotHomepageClientInput): BotHomep
   return {
     async getByGlobalMetaId(globalMetaId: string): Promise<BotHomepageClientResult> {
       const encodedId = encodeURIComponent(globalMetaId.trim());
-      const url = `${baseUrl}/api/bot-homepage/globalmetaid/${encodedId}?includeServices=true&includeProofs=true&includePresence=true`;
+      const url = `${baseUrl}/api/bot-homepage/globalmetaid/${encodedId}?version=v2`;
       const fetchedAt = Date.now();
 
       try {
