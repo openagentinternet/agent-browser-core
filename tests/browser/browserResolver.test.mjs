@@ -278,6 +278,29 @@ test('resolveBrowserResource uses built-in template when custom uri is empty', a
   assert.equal(result.data.renderer.type, 'bot-page');
 });
 
+test('resolveBrowserResource uses built-in template when custom is null or missing', async () => {
+  const missingCustomHomepage = homepageWithCustom({ uri: `metaapp://${customMetaAppPinId}` });
+  delete missingCustomHomepage.homepage.custom;
+
+  for (const homepage of [
+    homepageWithCustom(null),
+    missingCustomHomepage,
+  ]) {
+    const result = await resolveBrowserResource({
+      uri: 'metaid://idq1custombot',
+      config: browserConfig(),
+      fetch: homepageFetch(homepage),
+      metaAppLookup: async () => {
+        throw new Error('empty custom homepage should not resolve MetaApp');
+      },
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.data.resourceType, 'bot');
+    assert.equal(result.data.renderer.type, 'bot-page');
+  }
+});
+
 test('resolveBrowserResource fails closed for unsupported custom homepage uri', async () => {
   const result = await resolveBrowserResource({
     uri: 'metaid://idq1custombot',
@@ -290,4 +313,24 @@ test('resolveBrowserResource fails closed for unsupported custom homepage uri', 
 
   assert.equal(result.ok, false);
   assert.equal(result.code, 'invalid_browser_uri');
+});
+
+test('resolveBrowserResource fails closed when custom homepage target resolution fails', async () => {
+  const result = await resolveBrowserResource({
+    uri: 'metaid://idq1custombot',
+    config: browserConfig(),
+    fetch: homepageFetch(homepageWithCustom({ uri: `metaapp://${customMetaAppPinId}` })),
+    metaAppResolve: async (pinId) => {
+      assert.equal(pinId, customMetaAppPinId);
+      return {
+        ok: false,
+        code: 'browser_resource_not_found',
+        message: 'Custom target not found.',
+      };
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'browser_resource_not_found');
+  assert.equal(result.message, 'Custom target not found.');
 });
