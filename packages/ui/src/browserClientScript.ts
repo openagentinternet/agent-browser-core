@@ -453,12 +453,17 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   function renderTemplateSettings() {
     const active = String(settingValue('botHomepageTemplateId') || 'document');
     const customEnabled = customBotPagesEnabled();
+    const infoIcon = '<svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5"></path><path d="M12 8h.01"></path></svg>';
     return '<section class="browser-template-panel">' +
       '<section class="browser-custom-pages-setting">' +
         '<div class="browser-custom-pages-label"><strong>Render Custom Bot Pages</strong>' +
-          '<button type="button" class="browser-help-icon" data-browser-custom-pages-help aria-label="Custom Bot Page rendering help" title="' + escapeAttribute(CUSTOM_BOT_PAGE_HELP) + '">?</button></div>' +
-        '<button type="button" class="browser-switch" role="switch" data-browser-custom-pages-toggle aria-checked="' + (customEnabled ? 'true' : 'false') + '">' +
-          '<span>' + (customEnabled ? 'On' : 'Off') + '</span></button>' +
+          '<span class="browser-help-wrap">' +
+            '<button type="button" class="browser-help-icon" data-browser-custom-pages-help aria-label="Custom Bot Page rendering help" aria-describedby="browser-custom-pages-tooltip">' + infoIcon + '</button>' +
+            '<span class="browser-help-tooltip" id="browser-custom-pages-tooltip" role="tooltip">' + escapeHtml(CUSTOM_BOT_PAGE_HELP) + '</span>' +
+          '</span></div>' +
+        '<button type="button" class="browser-switch" role="switch" data-browser-custom-pages-toggle aria-label="Render Custom Bot Pages" aria-checked="' + (customEnabled ? 'true' : 'false') + '">' +
+          '<span class="browser-switch-track" aria-hidden="true"><span class="browser-switch-thumb"></span></span>' +
+          '<span class="browser-switch-label">' + (customEnabled ? 'On' : 'Off') + '</span></button>' +
       '</section>' +
       '<section class="browser-template-builtins">' +
         '<div class="browser-settings-section-label">Built-in Template</div>' +

@@ -814,11 +814,16 @@ test('Browser template settings render global custom Bot Page toggle with toolti
   assert.match(html, /role="switch"/);
   assert.match(html, /aria-checked="true"/);
   assert.match(html, /data-browser-custom-pages-help/);
-  assert.doesNotMatch(html, />When enabled, Bot Pages can render the custom MetaApp or Metafile declared on \/info\/homepage/);
+  assert.match(html, /browser-help-tooltip/);
+  assert.match(html, /When enabled, Bot Pages can render the custom MetaApp or Metafile declared on \/info\/homepage/);
+  assert.match(html, /<circle cx="12" cy="12" r="9"><\/circle>/);
+  assert.doesNotMatch(html, />\?<\/button>/);
+  assert.match(html, /browser-switch-track/);
+  assert.match(html, /browser-switch-thumb/);
 });
 
 test('Browser custom Bot Page toggle saves globally and re-resolves the current URI', async () => {
-  const { context, fetchCalls } = createBrowserContext({
+  const { context, elements, fetchCalls } = createBrowserContext({
     search: '?uri=metaid%3A%2F%2Fidq1custombot',
   });
 
@@ -827,6 +832,7 @@ test('Browser custom Bot Page toggle saves globally and re-resolves the current 
   await context.toggleCustomBotPages();
 
   assert.equal(context.state.settingsData.browser.renderCustomBotPages, false);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /aria-checked="false"/);
   assert.equal(fetchCalls.includes('/api/browser/settings?actorId=worker'), false);
   assert.ok(fetchCalls.includes('/api/browser/settings'));
   assert.ok(fetchCalls.filter((call) => call.startsWith('/api/browser/resolve?uri=metaid%3A%2F%2Fidq1custombot')).length >= 2);

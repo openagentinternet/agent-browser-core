@@ -39,6 +39,11 @@ test('Browser root API uses the generated mature inline CSS template', async () 
   assert.match(template, /\.browser-modal-panel \{/);
   assert.match(template, /\.browser-custom-pages-setting \{/);
   assert.match(template, /\.browser-help-icon \{/);
+  assert.match(template, /\.browser-help-tooltip \{/);
+  assert.match(template, /\.browser-help-wrap:hover \.browser-help-tooltip/);
+  assert.match(template, /\.browser-switch-track \{/);
+  assert.match(template, /\.browser-switch-thumb \{/);
+  assert.match(template, /\.browser-switch\[aria-checked="true"\] \.browser-switch-track/);
   assert.match(template, /\.browser-settings-section-label \{/);
   assert.match(template, /\.browser-address-form input:focus-visible \{\n        outline: none;\n        outline-offset: 0;\n      \}/);
   assert.match(html, /body:has\(\.browser-shell\)/);

@@ -284,6 +284,7 @@ function iconHtml(name) {
     external: '<path d="M14 5h5v5"></path><path d="M10 14L19 5"></path><path d="M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4"></path>',
     history: '<path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5M12 7v5l3 2"></path>',
     layout: '<rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="M4 10h16M9 10v9"></path>',
+    info: '<circle cx="12" cy="12" r="9"></circle><path d="M12 11v5"></path><path d="M12 8h.01"></path>',
     link: '<path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"></path>',
     message: '<path d="M5 6h14v9H8l-3 3V6z"></path>',
     database: '<ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>',
@@ -568,9 +569,13 @@ function renderTemplateSettings() {
   return '<section class="browser-template-panel">' +
     '<section class="browser-custom-pages-setting">' +
       '<div class="browser-custom-pages-label"><strong>Render Custom Bot Pages</strong>' +
-        '<button type="button" class="browser-help-icon" data-browser-custom-pages-help aria-label="Custom Bot Page rendering help" title="' + escapeHtml(CUSTOM_BOT_PAGE_HELP) + '">?</button></div>' +
-      '<button type="button" class="browser-switch" role="switch" data-browser-custom-pages-toggle aria-checked="' + (customEnabled ? 'true' : 'false') + '">' +
-        '<span>' + (customEnabled ? 'On' : 'Off') + '</span></button>' +
+        '<span class="browser-help-wrap">' +
+          '<button type="button" class="browser-help-icon" data-browser-custom-pages-help aria-label="Custom Bot Page rendering help" aria-describedby="browser-custom-pages-tooltip">' + iconHtml('info') + '</button>' +
+          '<span class="browser-help-tooltip" id="browser-custom-pages-tooltip" role="tooltip">' + escapeHtml(CUSTOM_BOT_PAGE_HELP) + '</span>' +
+        '</span></div>' +
+      '<button type="button" class="browser-switch" role="switch" data-browser-custom-pages-toggle aria-label="Render Custom Bot Pages" aria-checked="' + (customEnabled ? 'true' : 'false') + '">' +
+        '<span class="browser-switch-track" aria-hidden="true"><span class="browser-switch-thumb"></span></span>' +
+        '<span class="browser-switch-label">' + (customEnabled ? 'On' : 'Off') + '</span></button>' +
     '</section>' +
     '<section class="browser-template-builtins">' +
       '<div class="browser-settings-section-label">Built-in Template</div>' +
