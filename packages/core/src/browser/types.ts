@@ -13,6 +13,7 @@ export interface BrowserBaseConfig {
   blockExplorerBaseUrl: string;
   walletApiBaseUrl?: string;
   botHomepageTemplateId: BotHomepageTemplateId;
+  renderCustomBotPages: boolean;
   localMode: boolean;
 }
 

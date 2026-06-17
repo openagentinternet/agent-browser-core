@@ -84,14 +84,21 @@ test('standalone Browser server exposes runtime resolve settings cache and actio
   const settings = await json(await fetch(`${baseUrl}/api/browser/settings`));
   assert.equal(settings.ok, true);
   assert.equal(settings.data.effectiveBrowser.botHomepageTemplateId, 'document');
+  assert.equal(settings.data.effectiveBrowser.renderCustomBotPages, true);
 
   const updated = await json(await fetch(`${baseUrl}/api/browser/settings`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ browser: { botHomepageTemplateId: 'compact-list' } }),
+    body: JSON.stringify({
+      browser: {
+        botHomepageTemplateId: 'compact-list',
+        renderCustomBotPages: false,
+      },
+    }),
   }));
   assert.equal(updated.ok, true);
   assert.equal(updated.data.effectiveBrowser.botHomepageTemplateId, 'compact-list');
+  assert.equal(updated.data.effectiveBrowser.renderCustomBotPages, false);
 
   const cache = await json(await fetch(`${baseUrl}/api/browser/cache`));
   assert.equal(cache.ok, true);
