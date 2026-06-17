@@ -226,6 +226,11 @@ test('custom Bot Page alias renders target renderer while preserving source deta
   assert.equal(context.state.current.normalizedUri, aliasUri);
   assert.equal(context.state.current.source.raw.aliasUri, aliasUri);
   assert.equal(context.state.current.source.raw.customHomepageUri, customHomepageUri);
+
+  context.renderInspector();
+  const inspector = nodes['[data-browser-inspector]'].innerHTML;
+  assert.match(inspector, /customHomepageUri/);
+  assert.match(inspector, /metaapp:\/\/custom-pin/);
 });
 
 test('pdf, image, and video render with content-specific elements', async () => {

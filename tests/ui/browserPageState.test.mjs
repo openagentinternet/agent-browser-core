@@ -8,7 +8,8 @@ const { buildBrowserPageDefinition } = require('../../packages/ui/dist/browser/a
 
 class FakeElement {
   constructor(value = '') {
-    this.value = value;
+    this._value = String(value);
+    this.valueHistory = [];
     this.textContent = '';
     this._innerHTML = '';
     this.hidden = false;
@@ -28,6 +29,16 @@ class FakeElement {
         else delete this.attrs[`class:${name}`];
       },
     };
+  }
+
+  get value() {
+    return this._value;
+  }
+
+  set value(value) {
+    const nextValue = String(value);
+    this._value = nextValue;
+    this.valueHistory.push(nextValue);
   }
 
   get innerHTML() {
@@ -369,7 +380,10 @@ test('Browser preserves metaid address when resolver returns custom target resou
   assert.equal(context.state.current.resourceType, 'metaapp');
   assert.equal(context.state.current.normalizedUri, aliasUri);
   assert.equal(elements['[data-browser-uri-input]'].value, aliasUri);
+  assert.equal(fetchCalls[1], '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1custombot&actorId=worker');
   assert.equal(fetchCalls.some((call) => call.includes('metaapp%3A%2F%2F')), false);
+  assert.deepEqual(elements['[data-browser-uri-input]'].valueHistory, [aliasUri, aliasUri, aliasUri]);
+  assert.equal(elements['[data-browser-uri-input]'].valueHistory.includes(customHomepageUri), false);
 });
 
 test('Browser Metafile deep link path is decoded into the address bar and resolved', async () => {
