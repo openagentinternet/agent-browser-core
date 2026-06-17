@@ -14,8 +14,29 @@ Target hosts:
 
 ## Current State
 
-This repository is currently in docs/bootstrap state. Runtime code has not been migrated from
-Open Agent Connect yet.
+This repository now contains the TypeScript workspace for the shared Agent Browser packages.
+Browser runtime code has been extracted into host-neutral core and UI packages, with standalone
+host support for local/public Browser previews.
+
+## Core Modules
+
+- `packages/host-contract`: shared Browser host contracts, command result states, and
+  adapter-facing types.
+- `packages/core`: host-neutral Browser resource parsing, URI normalization, resource envelopes,
+  Bot homepage templates, and Browser resource resolvers.
+- `packages/ui`: shared Browser UI rendering, Browser shell/page generation, client hydration,
+  menu models, and resource renderers.
+- `packages/host-standalone`: standalone HTTP runtime, standalone host adapter, memory host, and
+  MetaApp preview support.
+- `packages/test-harness`: reusable conformance checks for host contract behavior.
+
+## Main Workflows
+
+- Build all packages with `npm run build`.
+- Run the full verification suite with `npm test` or `npm run verify`.
+- Run package and release checks with `npm run verify:packages` and
+  `npm run verify:release-version`.
+- Start the standalone runtime with `npm run dev:standalone -- --port 8787`.
 
 ## Development Rules
 
