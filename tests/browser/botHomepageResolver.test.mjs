@@ -7,9 +7,9 @@ const require = createRequire(import.meta.url);
 const { createBotHomepageClient } = require('../../packages/core/dist/browser/botHomepageClient.js');
 const { buildBotPageResolveResult } = require('../../packages/core/dist/browser/botPageResolver.js');
 
-test('Bot homepage client fetches metaso-p2p botHomepage.v2 envelope', async () => {
+test('Bot homepage client fetches metaso-p2p botHomepage.v3 envelope', async () => {
   const calls = [];
-  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v1.json', import.meta.url), 'utf8'));
+  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
   const client = createBotHomepageClient({
     baseUrl: 'https://so.example.test',
     fetch: async (url) => {
@@ -27,17 +27,18 @@ test('Bot homepage client fetches metaso-p2p botHomepage.v2 envelope', async () 
   assert.equal(result.ok, true);
   assert.equal(result.data.profile.name, 'Fixture Bot');
   assert.deepEqual(calls, [
-    'https://so.example.test/api/bot-homepage/globalmetaid/idq1fixturebot?version=v2',
+    'https://so.example.test/api/bot-homepage/globalmetaid/idq1fixturebot?version=v3',
   ]);
 });
 
 test('buildBotPageResolveResult maps homepage JSON into BrowserResolveResult', async () => {
-  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v1.json', import.meta.url), 'utf8'));
+  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
   const result = buildBotPageResolveResult({
     uri: 'metaid://idq1fixturebot',
     normalizedUri: 'metaid://idq1fixturebot',
     homepage: fixture,
     resolverUrl: 'https://so.example.test/api/bot-homepage/globalmetaid/idq1fixturebot',
+    metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
   });
 
   assert.equal(result.resourceType, 'bot');
@@ -45,19 +46,20 @@ test('buildBotPageResolveResult maps homepage JSON into BrowserResolveResult', a
   assert.equal(result.owner.kind, 'bot');
   assert.equal(result.owner.globalMetaId, 'idq1fixturebot');
   assert.equal(result.owner.online, true);
+  assert.equal(result.owner.avatar, 'https://file.metaid.io/metafile-indexer/content/avatar-pin');
   assert.equal(result.renderer.type, 'bot-page');
   assert.equal(result.renderer.contentType, 'application/vnd.oac.bot-homepage+json');
   assert.equal(result.renderer.templateId, 'document');
   assert.equal(result.status.state, 'resolved');
   assert.equal(result.status.verificationState, 'partial');
-  assert.equal(result.proof.txid, 'identity-txid');
-  assert.equal(result.proof.pinId, 'identity-pin');
+  assert.equal(result.proof.pinId, 'name-pin');
+  assert.equal(result.proof.protocolPath, '/info/name');
   assert.equal(result.actions.some((action) => action.kind === 'private-chat'), true);
   assert.equal(result.actions.some((action) => action.kind === 'service-list'), true);
 });
 
 test('buildBotPageResolveResult accepts a selected Bot homepage template', async () => {
-  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v1.json', import.meta.url), 'utf8'));
+  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
   const result = buildBotPageResolveResult({
     uri: 'metaid://idq1fixturebot',
     normalizedUri: 'metaid://idq1fixturebot',

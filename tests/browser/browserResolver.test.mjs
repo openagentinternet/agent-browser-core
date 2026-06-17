@@ -23,7 +23,7 @@ test('resolveBrowserResource fails closed when metaso-p2p URL is missing for met
 });
 
 test('resolveBrowserResource resolves metaid URI through homepage client', async () => {
-  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v1.json', import.meta.url), 'utf8'));
+  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
   const result = await resolveBrowserResource({
     uri: 'metaid://idq1fixturebot',
     config: {
@@ -52,7 +52,7 @@ test('resolveBrowserResource dispatches metafile URI to ManAPI file metadata', a
     config: {
       metasoP2PBaseUrl: '',
       manApiBaseUrl: 'https://man.example.test',
-      metafileContentBaseUrl: 'https://content.example.test/files',
+      metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
       botHomepageTemplateId: 'document',
       defaultChainName: 'mvc',
       localMode: true,
@@ -82,7 +82,7 @@ test('resolveBrowserResource dispatches metafile URI to ManAPI file metadata', a
   assert.equal(result.data.normalizedUri, `metafile://${pinId}`);
   assert.equal(result.data.resourceType, 'pdf');
   assert.equal(result.data.renderer.type, 'pdf');
-  assert.equal(result.data.renderer.url, `https://content.example.test/files/${pinId}`);
+  assert.equal(result.data.renderer.url, `https://file.metaid.io/metafile-indexer/api/v1/files/accelerate/content/${pinId}`);
 });
 
 const customMetaAppPinId = 'c06b7a2db6efa241560a2356e9966cf9758dae3ec9c795f614a652b113e30329i0';
@@ -92,7 +92,7 @@ function browserConfig(overrides = {}) {
   return {
     metasoP2PBaseUrl: 'https://so.example.test',
     manApiBaseUrl: 'https://man.example.test',
-    metafileContentBaseUrl: 'https://content.example.test/files',
+    metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
     blockExplorerBaseUrl: 'https://explorer.example.test/tx',
     botHomepageTemplateId: 'document',
     defaultChainName: 'mvc',
@@ -104,21 +104,51 @@ function browserConfig(overrides = {}) {
 
 function homepageWithCustom(custom) {
   return {
-    schemaVersion: 'botHomepage.v2',
-    globalMetaId: 'idq1custombot',
-    canonical: { globalMetaId: 'idq1custombot' },
-    profile: { name: 'Custom Bot' },
-    homepage: {
-      mode: custom ? 'custom' : 'default',
-      title: 'Custom Bot',
-      summary: 'Custom summary.',
-      custom,
+    schemaVersion: 'botHomepage.v3',
+    identity: {
+      globalMetaId: 'idq1custombot',
+      legacyMetaId: 'metaid-custom',
+      display: 'idq1custom...bot',
     },
-    proofs: { verificationState: 'partial' },
-    source: { resolver: 'test-homepage' },
-    actions: [
-      { id: 'copy-uri', label: 'Copy URI', kind: 'copy', enabled: true, uri: 'metaid://idq1custombot' },
+    profile: {
+      name: 'Custom Bot',
+      bio: 'Custom summary.',
+      homepage: custom
+        ? {
+          pinId: 'homepage-pin',
+          payload: custom,
+        }
+        : null,
+      pins: {
+        name: 'name-pin',
+      },
+    },
+    presence: {
+      state: 'unknown',
+      updatedAt: null,
+      source: '',
+    },
+    sections: [
+      {
+        id: 'services',
+        protocolPath: '/protocols/skill-service',
+        page: { limit: 5, count: 0, hasMore: false },
+        items: [],
+      },
+      {
+        id: 'buzzes',
+        protocolPath: '/protocols/simplebuzz',
+        page: { limit: 5, count: 0, hasMore: false },
+        items: [],
+      },
+      {
+        id: 'metaapps',
+        protocolPath: '/protocols/metaapp',
+        page: { limit: 5, count: 0, hasMore: false },
+        items: [],
+      },
     ],
+    warnings: [],
   };
 }
 
@@ -149,7 +179,7 @@ function homepageFetch(homepage) {
   return async (url) => {
     assert.equal(
       String(url),
-      'https://so.example.test/api/bot-homepage/globalmetaid/idq1custombot?version=v2',
+      'https://so.example.test/api/bot-homepage/globalmetaid/idq1custombot?version=v3',
     );
     return {
       ok: true,
@@ -182,9 +212,9 @@ test('resolveBrowserResource aliases custom metaapp homepage without rewriting n
   assert.equal(result.data.source.raw.customHomepageUri, customHomepageUri);
   assert.equal(
     result.data.source.raw.botHomepageSourceUrl,
-    'https://so.example.test/api/bot-homepage/globalmetaid/idq1custombot?version=v2',
+    'https://so.example.test/api/bot-homepage/globalmetaid/idq1custombot?version=v3',
   );
-  assert.equal(result.data.source.raw.botHomepageRaw.homepage.custom.uri, customHomepageUri);
+  assert.equal(result.data.source.raw.botHomepageRaw.profile.homepage.payload.uri, customHomepageUri);
 });
 
 test('resolveBrowserResource aliases custom metafile homepage without rewriting normalized URI', async () => {
@@ -231,16 +261,16 @@ test('resolveBrowserResource aliases custom metafile homepage without rewriting 
   assert.equal(result.data.normalizedUri, 'metaid://idq1custombot');
   assert.equal(result.data.resourceType, 'image');
   assert.equal(result.data.renderer.type, 'image');
-  assert.equal(result.data.renderer.url, `https://content.example.test/files/${customMetafilePinId}`);
+  assert.equal(result.data.renderer.url, `https://file.metaid.io/metafile-indexer/api/v1/files/accelerate/content/${customMetafilePinId}`);
   assert.equal(result.data.actions.find((action) => action.id === 'copy-uri').uri, 'metaid://idq1custombot');
   assert.equal(result.data.source.raw.aliasUri, 'metaid://idq1custombot');
   assert.equal(result.data.source.raw.customHomepageUri, customHomepageUri);
   assert.equal(
     result.data.source.raw.botHomepageSourceUrl,
-    'https://so.example.test/api/bot-homepage/globalmetaid/idq1custombot?version=v2',
+    'https://so.example.test/api/bot-homepage/globalmetaid/idq1custombot?version=v3',
   );
   assert.deepEqual(fetchCalls, [
-    'https://so.example.test/api/bot-homepage/globalmetaid/idq1custombot?version=v2',
+    'https://so.example.test/api/bot-homepage/globalmetaid/idq1custombot?version=v3',
     `https://man.example.test/pin/${customMetafilePinId}`,
   ]);
 });
@@ -280,7 +310,7 @@ test('resolveBrowserResource uses built-in template when custom uri is empty', a
 
 test('resolveBrowserResource uses built-in template when custom is null or missing', async () => {
   const missingCustomHomepage = homepageWithCustom({ uri: `metaapp://${customMetaAppPinId}` });
-  delete missingCustomHomepage.homepage.custom;
+  delete missingCustomHomepage.profile.homepage;
 
   for (const homepage of [
     homepageWithCustom(null),

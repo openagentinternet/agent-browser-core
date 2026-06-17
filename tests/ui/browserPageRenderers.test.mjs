@@ -105,7 +105,8 @@ function result(renderer, overrides = {}) {
 }
 
 test('bot-page renderer shows profile, services, and trusted buttons from homepage JSON', async () => {
-  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v1.json', import.meta.url), 'utf8'));
+  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
+  const avatarUrl = 'https://file.metaid.io/metafile-indexer/content/avatar-pin';
   const { nodes } = runWithResolve(result({
     type: 'bot-page',
     contentType: 'application/vnd.oac.bot-homepage+json',
@@ -113,8 +114,11 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   }, {
     resourceType: 'bot',
     title: 'Fixture Bot',
-    owner: { kind: 'bot', globalMetaId: 'idq1fixturebot', name: 'Fixture Bot', avatar: fixture.profile.avatar, verificationState: 'partial' },
-    actions: fixture.actions,
+    owner: { kind: 'bot', globalMetaId: 'idq1fixturebot', name: 'Fixture Bot', avatar: avatarUrl, verificationState: 'partial' },
+    actions: [
+      { id: 'message', label: 'Message', kind: 'private-chat', enabled: true },
+      { id: 'services', label: 'Services', kind: 'service-list', enabled: true },
+    ],
   }));
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Fixture Review'), 'bot page render');
@@ -125,9 +129,11 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.match(html, /Overview/);
   assert.match(html, /Recent Activity/);
   assert.match(html, /Fixture Review/);
+  assert.match(html, /Fixture MetaApp/);
+  assert.match(html, /Published a v3 homepage fixture/);
   assert.match(html, /data-browser-action="private-chat"/);
   assert.match(html, /data-browser-action="service-list"/);
-  assert.match(html, /https:\/\/so\.example\.test\/content\/avatar-pin/);
+  assert.match(html, /https:\/\/file\.metaid\.io\/metafile-indexer\/content\/avatar-pin/);
 });
 
 test('bot-page renderer uses compact-list template with normalized future lists', async () => {

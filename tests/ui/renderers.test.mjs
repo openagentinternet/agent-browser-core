@@ -6,12 +6,13 @@ const core = await import('../../packages/core/dist/index.js');
 const ui = await import('../../packages/ui/dist/index.js');
 
 async function botEnvelope(templateId = 'document') {
-  const homepage = JSON.parse(await readFile(new URL('../fixtures/botHomepage.v1.json', import.meta.url), 'utf8'));
+  const homepage = JSON.parse(await readFile(new URL('../fixtures/botHomepage.v3.json', import.meta.url), 'utf8'));
   return core.buildBotHomepageEnvelope({
     uri: 'metaid://idq1fixturebot',
     normalizedUri: 'metaid://idq1fixturebot',
     homepage,
     templateId,
+    metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
   });
 }
 
@@ -21,8 +22,8 @@ test('bot-page renderer shows profile, sections, and trusted buttons', async () 
   assert.match(html, /Fixture Bot/);
   assert.match(html, /idq1fixturebot/);
   assert.match(html, /Fixture Review/);
-  assert.match(html, /Template Authoring/);
-  assert.match(html, /Fixture Bus/);
+  assert.match(html, /Fixture MetaApp/);
+  assert.match(html, /Published a v3 homepage fixture/);
   assert.match(html, /data-browser-action="private-chat"/);
   assert.match(html, /data-browser-action="service-call"/);
 });

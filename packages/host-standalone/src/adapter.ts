@@ -4,6 +4,7 @@ import {
   applyBrowserSettingsUpdate,
   createBrowserSettingsSnapshot,
   createDefaultBrowserConfig,
+  buildMetafileAcceleratedContentUrl,
   resolveBrowserConfig,
   resolveBrowserResource,
   type BrowserCommandResult as CoreBrowserCommandResult,
@@ -43,59 +44,93 @@ import {
 const STANDALONE_ACTOR_ID = 'standalone-wallet';
 const STANDALONE_DEFAULT_URI = 'metaid://idq1fixturebot';
 const STANDALONE_FIXTURE_GLOBAL_META_ID = 'idq1fixturebot';
-const STANDALONE_METAFILE_CONTENT_BASE_URL = 'https://file.metaid.io/metafile-indexer/api/v1/files/accelerate/content';
+const STANDALONE_METAFILE_CONTENT_BASE_URL = 'https://file.metaid.io/metafile-indexer';
 
 const FIXTURE_BOT_HOMEPAGE: Record<string, unknown> = {
-  schemaVersion: 'botHomepage.v1',
+  schemaVersion: 'botHomepage.v3',
   resolvedAt: 1780760000000,
-  globalMetaId: STANDALONE_FIXTURE_GLOBAL_META_ID,
-  canonical: {
+  identity: {
     globalMetaId: STANDALONE_FIXTURE_GLOBAL_META_ID,
-    metaid: 'metaid-fixture',
-    address: '18FixtureAddress',
-    chainName: 'mvc',
+    legacyMetaId: 'metaid-fixture',
+    display: 'idq1fixture...bot',
   },
   profile: {
     name: 'Fixture Bot',
-    avatar: 'https://so.example.test/content/avatar-pin',
-    avatarPinId: 'avatar-pin',
+    avatar: {
+      pinId: 'avatar-pin',
+      contentType: 'image/png',
+    },
     bio: 'Builds Agent Browser fixtures.',
-    bioPinId: 'bio-pin',
     chatPubkey: '04fixture',
-    chatPubkeyPinId: 'chat-pin',
-    displayGlobalMetaId: 'idq1fixture...bot',
-  },
-  homepage: {
-    mode: 'default',
-    title: 'Fixture Bot',
-    summary: 'Builds Agent Browser fixtures.',
-    custom: null,
+    homepage: null,
+    pins: {
+      name: 'name-pin',
+      bio: 'bio-pin',
+      chatPubkey: 'chat-pin',
+    },
   },
   presence: {
     state: 'online',
     updatedAt: 1780760000000,
     source: 'fixture-presence',
   },
-  services: [
+  sections: [
     {
-      id: 'service-current-pin',
-      currentPinId: 'service-current-pin',
-      sourceServicePinId: 'service-source-pin',
-      displayName: 'Fixture Review',
-      serviceName: 'fixture-review',
-      description: 'Review a fixture payload.',
-      providerSkill: 'fixture-review',
-      price: '0',
-      currency: 'SPACE',
-      paymentChain: 'mvc',
-      paymentAddress: '18FixtureAddress',
-      proof: {
-        txid: 'service-txid',
-        pinId: 'service-current-pin',
-        sourceServicePinId: 'service-source-pin',
-        protocolPath: '/protocols/skill-service',
-        publisherGlobalMetaId: STANDALONE_FIXTURE_GLOBAL_META_ID,
-      },
+      id: 'services',
+      title: 'Services',
+      items: [
+        {
+          pinId: 'service-current-pin',
+          protocolPath: '/protocols/skill-service',
+          timestamp: 1780760000000,
+          data: {
+            payload: {
+              displayName: 'Fixture Review',
+              serviceName: 'fixture-review',
+              description: 'Review a fixture payload.',
+              providerSkill: 'fixture-review',
+              price: '0',
+              currency: 'SPACE',
+              paymentChain: 'mvc',
+              paymentAddress: '18FixtureAddress',
+            },
+          },
+        },
+      ],
+    },
+    {
+      id: 'buzzes',
+      title: 'Buzz',
+      items: [
+        {
+          pinId: 'buzz-pin',
+          protocolPath: '/protocols/simplebuzz',
+          timestamp: 1780760000000,
+          data: {
+            payload: {
+              content: 'Published a v3 homepage fixture.',
+            },
+          },
+        },
+      ],
+    },
+    {
+      id: 'metaapps',
+      title: 'MetaApps',
+      items: [
+        {
+          pinId: 'metaapp-pin',
+          protocolPath: '/protocols/metaapp',
+          timestamp: 1780760000000,
+          data: {
+            payload: {
+              title: 'Fixture MetaApp',
+              appName: 'Fixture MetaApp',
+              intro: 'A fixture MetaApp for standalone Browser.',
+            },
+          },
+        },
+      ],
     },
   ],
   actions: [
@@ -106,9 +141,8 @@ const FIXTURE_BOT_HOMEPAGE: Record<string, unknown> = {
   proofs: {
     verificationState: 'partial',
     identity: {
-      txid: 'fixture-identity-txid',
-      pinId: 'fixture-identity-pin',
-      protocolPath: '/protocols/simpleprofile',
+      pinId: 'name-pin',
+      protocolPath: '/info/name',
       publisherGlobalMetaId: STANDALONE_FIXTURE_GLOBAL_META_ID,
       verificationState: 'partial',
     },
@@ -118,6 +152,7 @@ const FIXTURE_BOT_HOMEPAGE: Record<string, unknown> = {
     fetchedAt: 1780760000000,
     stale: false,
   },
+  warnings: [],
 };
 
 export interface StandaloneBrowserPreviewAsset {
@@ -240,7 +275,7 @@ function resolveMetaAppContentUrl(contentReference: string, metafileContentBaseU
   if (!pinId || pinId.includes('/') || pinId.includes('\\')) {
     return null;
   }
-  return `${metafileContentBaseUrl.replace(/\/+$/, '')}/${encodeURIComponent(pinId)}`;
+  return buildMetafileAcceleratedContentUrl(metafileContentBaseUrl, pinId);
 }
 
 async function readBoundedResponseBody(input: {

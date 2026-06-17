@@ -69,7 +69,7 @@ test('resolveMetaAppPinToRecord renders metafile content URL instead of ManAPI m
   const pinId = 'c'.repeat(64) + 'i0';
   const contentPinId = 'd'.repeat(64) + 'i0';
   const manApiBaseUrl = 'https://man.example.test';
-  const metafileContentBaseUrl = 'https://content.example.test/files';
+  const metafileContentBaseUrl = 'https://file.metaid.io/metafile-indexer';
   const resolved = await resolveMetaAppPinToRecord({
     pinId,
     manApiBaseUrl,
@@ -112,7 +112,7 @@ test('resolveMetaAppPinToRecord renders metafile content URL instead of ManAPI m
   });
 
   assert.equal(result.renderer.type, 'html-iframe');
-  assert.equal(result.renderer.url, `${metafileContentBaseUrl}/${contentPinId}`);
+  assert.equal(result.renderer.url, `${metafileContentBaseUrl}/api/v1/files/accelerate/content/${contentPinId}`);
   assert.notEqual(result.renderer.url, `${manApiBaseUrl}/pin/${pinId}`);
 });
 

@@ -5,6 +5,7 @@ import type {
   BrowserVerificationState,
 } from './types.js';
 import { normalizeBotHomepageTemplateId } from './botHomepageTemplates.js';
+import { buildMetafileContentUrl } from './metafileContentUrl.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -13,6 +14,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function recordField(source: Record<string, unknown>, key: string): Record<string, unknown> {
   const value = source[key];
   return isRecord(value) ? value : {};
+}
+
+function recordListField(source: Record<string, unknown>, key: string): Array<Record<string, unknown>> {
+  const value = source[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => isRecord(item))
+    : [];
 }
 
 function stringField(source: Record<string, unknown>, key: string): string {
@@ -29,6 +37,10 @@ function verificationState(value: unknown): BrowserVerificationState {
   return value === 'verified' || value === 'partial' || value === 'unverified'
     ? value
     : 'unverified';
+}
+
+function isV3Homepage(homepage: Record<string, unknown>): boolean {
+  return stringField(homepage, 'schemaVersion') === 'botHomepage.v3';
 }
 
 function shortGlobalMetaId(globalMetaId: string): string {
@@ -50,6 +62,55 @@ function onlineState(value: unknown): boolean | null {
     return false;
   }
   return null;
+}
+
+function avatarFromProfile(profile: Record<string, unknown>, metafileContentBaseUrl: unknown): string | undefined {
+  const rawAvatar = profile.avatar;
+  if (typeof rawAvatar === 'string') {
+    return rawAvatar.trim() || undefined;
+  }
+  if (!isRecord(rawAvatar)) {
+    return undefined;
+  }
+  const directUrl = stringField(rawAvatar, 'url');
+  if (directUrl) {
+    return directUrl;
+  }
+  const pinId = stringField(rawAvatar, 'pinId') || stringField(rawAvatar, 'id');
+  return pinId ? buildMetafileContentUrl(metafileContentBaseUrl, pinId) : undefined;
+}
+
+function v3HasProvenance(homepage: Record<string, unknown>): boolean {
+  const profile = recordField(homepage, 'profile');
+  const pins = recordField(profile, 'pins');
+  if (Object.values(pins).some((value) => typeof value === 'string' && value.trim())) {
+    return true;
+  }
+  if (stringField(recordField(profile, 'avatar'), 'pinId')) {
+    return true;
+  }
+  if (stringField(recordField(profile, 'homepage'), 'pinId')) {
+    return true;
+  }
+  for (const section of recordListField(homepage, 'sections')) {
+    for (const item of recordListField(section, 'items')) {
+      if (stringField(item, 'pinId')) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function resolveHomepageVerificationState(
+  homepage: Record<string, unknown>,
+  proofs: Record<string, unknown>,
+): BrowserVerificationState {
+  const state = verificationState(proofs.verificationState);
+  if (state !== 'unverified') {
+    return state;
+  }
+  return isV3Homepage(homepage) && v3HasProvenance(homepage) ? 'partial' : 'unverified';
 }
 
 function proofSummary(value: unknown, fallbackState: BrowserVerificationState): BrowserProofSummary | undefined {
@@ -105,6 +166,93 @@ function pickProof(homepage: Record<string, unknown>, state: BrowserVerification
   return undefined;
 }
 
+function v3ProofSummary(input: {
+  pinId: string;
+  protocolPath?: string;
+  publisherGlobalMetaId: string;
+  verificationState: BrowserVerificationState;
+  details: Record<string, unknown>;
+}): BrowserProofSummary {
+  return {
+    pinId: input.pinId,
+    protocolPath: input.protocolPath,
+    publisherGlobalMetaId: input.publisherGlobalMetaId || undefined,
+    verificationState: input.verificationState,
+    details: input.details,
+  };
+}
+
+function pickV3Proof(
+  homepage: Record<string, unknown>,
+  globalMetaId: string,
+  state: BrowserVerificationState,
+): BrowserProofSummary | undefined {
+  const profile = recordField(homepage, 'profile');
+  const pins = recordField(profile, 'pins');
+  const profilePins: Array<[string, string]> = [
+    ['name', '/info/name'],
+    ['bio', '/info/bio'],
+    ['chatPubkey', '/info/chatpubkey'],
+  ];
+  for (const [key, protocolPath] of profilePins) {
+    const pinId = stringField(pins, key);
+    if (pinId) {
+      return v3ProofSummary({
+        pinId,
+        protocolPath,
+        publisherGlobalMetaId: globalMetaId,
+        verificationState: state,
+        details: { source: `profile.pins.${key}` },
+      });
+    }
+  }
+
+  const avatar = recordField(profile, 'avatar');
+  const avatarPinId = stringField(avatar, 'pinId');
+  if (avatarPinId) {
+    return v3ProofSummary({
+      pinId: avatarPinId,
+      protocolPath: '/info/avatar',
+      publisherGlobalMetaId: globalMetaId,
+      verificationState: state,
+      details: { source: 'profile.avatar', avatar },
+    });
+  }
+
+  const homepageInfo = recordField(profile, 'homepage');
+  const homepagePinId = stringField(homepageInfo, 'pinId');
+  if (homepagePinId) {
+    return v3ProofSummary({
+      pinId: homepagePinId,
+      protocolPath: '/info/homepage',
+      publisherGlobalMetaId: globalMetaId,
+      verificationState: state,
+      details: { source: 'profile.homepage', homepage: homepageInfo },
+    });
+  }
+
+  for (const section of recordListField(homepage, 'sections')) {
+    for (const item of recordListField(section, 'items')) {
+      const pinId = stringField(item, 'pinId');
+      if (!pinId) {
+        continue;
+      }
+      return v3ProofSummary({
+        pinId,
+        protocolPath: stringField(item, 'protocolPath') || undefined,
+        publisherGlobalMetaId: globalMetaId,
+        verificationState: state,
+        details: {
+          source: 'sections.items',
+          sectionId: stringField(section, 'id') || undefined,
+          item,
+        },
+      });
+    }
+  }
+  return undefined;
+}
+
 function normalizeAction(value: unknown): BrowserTrustedAction | null {
   if (!isRecord(value)) {
     return null;
@@ -157,15 +305,22 @@ export function buildBotPageResolveResult(input: {
   homepage: Record<string, unknown>;
   resolverUrl: string;
   templateId?: unknown;
+  metafileContentBaseUrl?: unknown;
 }): BrowserResolveResult {
   const canonical = recordField(input.homepage, 'canonical');
+  const identity = recordField(input.homepage, 'identity');
   const profile = recordField(input.homepage, 'profile');
   const homepageInfo = recordField(input.homepage, 'homepage');
   const proofs = recordField(input.homepage, 'proofs');
   const source = recordField(input.homepage, 'source');
-  const globalMetaId = stringField(input.homepage, 'globalMetaId') || stringField(canonical, 'globalMetaId');
-  const state = verificationState(proofs.verificationState);
-  const title = stringField(profile, 'name') || stringField(homepageInfo, 'title') || shortGlobalMetaId(globalMetaId);
+  const globalMetaId = stringField(identity, 'globalMetaId')
+    || stringField(input.homepage, 'globalMetaId')
+    || stringField(canonical, 'globalMetaId');
+  const state = resolveHomepageVerificationState(input.homepage, proofs);
+  const title = stringField(profile, 'name')
+    || stringField(homepageInfo, 'title')
+    || stringField(identity, 'display')
+    || shortGlobalMetaId(globalMetaId);
 
   return {
     uri: input.uri,
@@ -175,10 +330,10 @@ export function buildBotPageResolveResult(input: {
     owner: {
       kind: 'bot',
       globalMetaId,
-      metaid: stringField(canonical, 'metaid') || undefined,
+      metaid: stringField(identity, 'legacyMetaId') || stringField(canonical, 'metaid') || undefined,
       address: stringField(canonical, 'address') || undefined,
       name: title,
-      avatar: stringField(profile, 'avatar') || undefined,
+      avatar: avatarFromProfile(profile, input.metafileContentBaseUrl),
       online: onlineState(input.homepage.presence),
       verificationState: state,
     },
@@ -193,7 +348,9 @@ export function buildBotPageResolveResult(input: {
       verificationState: state,
       message: 'Bot Page resolved.',
     },
-    proof: pickProof(input.homepage, state),
+    proof: isV3Homepage(input.homepage)
+      ? pickV3Proof(input.homepage, globalMetaId, state) ?? pickProof(input.homepage, state)
+      : pickProof(input.homepage, state),
     source: {
       resolver: stringField(source, 'resolver') || 'metaso-p2p',
       url: input.resolverUrl,

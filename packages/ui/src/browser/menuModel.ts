@@ -89,7 +89,7 @@ export const BROWSER_BASE_URL_FIELDS: BrowserBaseUrlFieldDefinition[] = [
   {
     key: 'metafileContentBaseUrl',
     label: 'Metafile Content Base URL',
-    placeholder: 'https://so.metaid.io/content',
+    placeholder: 'https://file.metaid.io/metafile-indexer',
   },
   {
     key: 'manApiBaseUrl',

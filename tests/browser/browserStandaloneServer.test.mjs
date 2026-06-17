@@ -165,11 +165,10 @@ test('standalone Browser server falls back to the fixture bot homepage when netw
 });
 
 test('standalone Browser server resolves non-fixture metaid resources through adapter fetch', async (t) => {
-  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v1.json', import.meta.url), 'utf8'));
-  fixture.globalMetaId = 'idq1fetchedbot';
-  fixture.canonical.globalMetaId = 'idq1fetchedbot';
+  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
+  fixture.identity.globalMetaId = 'idq1fetchedbot';
+  fixture.identity.display = 'idq1fetched...bot';
   fixture.profile.name = 'Fetched Bot';
-  fixture.homepage.title = 'Fetched Bot';
   const fetchUrls = [];
   const adapter = createStandaloneBrowserHostAdapter({
     fetch: async (url) => {

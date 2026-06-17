@@ -6,9 +6,12 @@ import {
   type BrowserResolveResult,
   type BrowserResourceType,
 } from './types.js';
+import {
+  buildMetafileAcceleratedContentUrl,
+  normalizeMetafileContentBaseUrl,
+} from './metafileContentUrl.js';
 
 const DEFAULT_MANAPI_BASE_URL = 'https://manapi.metaid.io';
-const DEFAULT_METAFILE_CONTENT_BASE_URL = 'https://so.metaid.io/content';
 
 type FetchResponse = {
   ok: boolean;
@@ -238,9 +241,9 @@ export async function resolveMetafilePinToResource(
 
   const now = (input.now ?? Date.now)();
   const manApiBaseUrl = normalizeBaseUrl(input.manApiBaseUrl, DEFAULT_MANAPI_BASE_URL);
-  const metafileContentBaseUrl = normalizeBaseUrl(input.metafileContentBaseUrl, DEFAULT_METAFILE_CONTENT_BASE_URL);
+  const metafileContentBaseUrl = normalizeMetafileContentBaseUrl(input.metafileContentBaseUrl);
   const pinUrl = `${manApiBaseUrl}/pin/${encodeURIComponent(pinId)}`;
-  const contentUrl = `${metafileContentBaseUrl}/${encodeURIComponent(pinId)}`;
+  const contentUrl = buildMetafileAcceleratedContentUrl(metafileContentBaseUrl, pinId);
 
   try {
     const response = await fetchImpl(pinUrl);

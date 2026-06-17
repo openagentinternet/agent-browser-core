@@ -27,35 +27,81 @@ export interface MemoryStandaloneHostInput {
 
 function fixtureHomepage(): Record<string, unknown> {
   return {
-    schemaVersion: 'botHomepage.v1',
-    globalMetaId: 'idq1fixturebot',
+    schemaVersion: 'botHomepage.v3',
+    identity: {
+      globalMetaId: 'idq1fixturebot',
+      legacyMetaId: 'metaid-fixture',
+      display: 'idq1fixture...bot',
+    },
     profile: {
       name: 'Fixture Bot',
-      avatar: 'https://so.example.test/content/avatar-pin',
+      avatar: {
+        pinId: 'avatar-pin',
+        contentType: 'image/png',
+      },
       bio: 'Builds Agent Browser fixtures.',
-      address: '1FixtureAddress',
+      homepage: null,
+      pins: {
+        name: 'name-pin',
+        bio: 'bio-pin',
+      },
     },
-    homepage: {
-      summary: 'A Bot homepage served by the standalone development host.',
+    presence: {
+      state: 'online',
+      updatedAt: null,
+      source: 'memory-fixture',
     },
-    identity: {
-      txid: 'identity-txid',
-      pinId: 'identity-pin',
-    },
-    services: [
+    sections: [
       {
-        id: 'svc-review',
-        currentPinId: 'service-pin-1',
-        displayName: 'Fixture Review',
-        description: 'Reviews Browser templates.',
+        id: 'services',
+        title: 'Services',
+        items: [
+          {
+            pinId: 'service-pin-1',
+            protocolPath: '/protocols/skill-service',
+            data: {
+              payload: {
+                displayName: 'Fixture Review',
+                description: 'Reviews Browser templates.',
+              },
+            },
+          },
+        ],
+      },
+      {
+        id: 'buzzes',
+        title: 'Buzz',
+        items: [
+          {
+            pinId: 'buzz-pin-1',
+            protocolPath: '/protocols/simplebuzz',
+            data: {
+              payload: {
+                content: 'A Bot homepage served by the standalone development host.',
+              },
+            },
+          },
+        ],
+      },
+      {
+        id: 'metaapps',
+        title: 'MetaApps',
+        items: [
+          {
+            pinId: 'metaapp-pin-1',
+            protocolPath: '/protocols/metaapp',
+            data: {
+              payload: {
+                title: 'Fixture MetaApp',
+                appName: 'Fixture MetaApp',
+                intro: 'Creates Bot homepage layouts.',
+              },
+            },
+          },
+        ],
       },
     ],
-    skills: [
-      {
-        name: 'Template Authoring',
-        description: 'Creates Bot homepage layouts.',
-      },
-    ],
+    warnings: [],
   };
 }
 

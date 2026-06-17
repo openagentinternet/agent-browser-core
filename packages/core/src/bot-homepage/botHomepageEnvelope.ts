@@ -8,6 +8,7 @@ import {
   normalizeBotHomepageTemplateId,
   type BotHomepageTemplateId,
 } from '../templates/botHomepageTemplates.js';
+import { buildMetafileContentUrl } from '../browser/metafileContentUrl.js';
 
 export interface BuildBotHomepageEnvelopeInput {
   uri: string;
@@ -16,6 +17,7 @@ export interface BuildBotHomepageEnvelopeInput {
   resolverUrl?: string;
   templateId?: string;
   fetchedAt?: number;
+  metafileContentBaseUrl?: string;
 }
 
 function text(value: unknown): string {
@@ -33,7 +35,16 @@ function list(value: unknown): Array<Record<string, unknown>> {
 }
 
 function displayTitle(item: Record<string, unknown>): string {
-  return text(item.displayName) || text(item.name) || text(item.title) || text(item.id) || text(item.currentPinId) || 'Untitled';
+  return text(item.displayName)
+    || text(item.name)
+    || text(item.title)
+    || text(item.serviceName)
+    || text(item.appName)
+    || text(item.content)
+    || text(item.id)
+    || text(item.currentPinId)
+    || text(item.pinId)
+    || 'Untitled';
 }
 
 function normalizeItems(items: Array<Record<string, unknown>>): Array<Record<string, unknown>> {
@@ -42,6 +53,43 @@ function normalizeItems(items: Array<Record<string, unknown>>): Array<Record<str
     title: displayTitle(item),
     description: text(item.description) || text(item.summary) || text(item.bio),
   }));
+}
+
+function v3PayloadItem(item: Record<string, unknown>): Record<string, unknown> {
+  const data = record(item.data);
+  const payload = record(data.payload);
+  const source = Object.keys(payload).length > 0 ? payload : item;
+  return {
+    ...source,
+    pinId: text(item.pinId) || text(source.pinId) || text(source.currentPinId),
+    protocolPath: text(item.protocolPath) || text(source.protocolPath),
+    timestamp: item.timestamp ?? source.timestamp,
+  };
+}
+
+function v3SectionId(sectionId: string): string {
+  return sectionId === 'metaapps' ? 'apps' : sectionId;
+}
+
+function v3SectionKind(sectionId: string): BrowserResourceSection['kind'] {
+  if (sectionId === 'services') return 'services';
+  if (sectionId === 'buzzes') return 'buzzes';
+  if (sectionId === 'metaapps' || sectionId === 'apps') return 'apps';
+  if (sectionId === 'activity') return 'activity';
+  if (sectionId === 'skills') return 'skills';
+  if (sectionId === 'buses') return 'buses';
+  return 'generic-list';
+}
+
+function v3SectionTitle(sectionId: string, title: string): string {
+  if (title) return title;
+  if (sectionId === 'services') return 'Services';
+  if (sectionId === 'buzzes') return 'Buzz';
+  if (sectionId === 'metaapps' || sectionId === 'apps') return 'Apps';
+  if (sectionId === 'activity') return 'Recent Activity';
+  if (sectionId === 'skills') return 'Skills';
+  if (sectionId === 'buses') return 'Buses';
+  return 'Section';
 }
 
 function section(
@@ -60,6 +108,19 @@ function section(
 }
 
 function sectionsFromHomepage(homepage: Record<string, unknown>): BrowserResourceSection[] {
+  const v3RawSections = list(homepage.sections);
+  if (text(homepage.schemaVersion) === 'botHomepage.v3' || v3RawSections.length > 0) {
+    return v3RawSections.map((rawSection) => {
+      const rawId = text(rawSection.id) || 'section';
+      return section(
+        v3SectionId(rawId),
+        v3SectionTitle(rawId, text(rawSection.title)),
+        v3SectionKind(rawId),
+        list(rawSection.items).map(v3PayloadItem),
+      );
+    }).filter((item): item is BrowserResourceSection => Boolean(item));
+  }
+
   return [
     section('overview', 'Overview', 'generic-list', list(homepage.homepage).length ? list(homepage.homepage) : [record(homepage.homepage)].filter((item) => Object.keys(item).length > 0)),
     section('services', 'Services', 'services', list(homepage.services)),
@@ -82,8 +143,11 @@ function actionsFromHomepage(globalMetaId: string, homepage: Record<string, unkn
       payload: { globalMetaId },
     });
   }
-  for (const service of list(homepage.services)) {
-    const serviceId = text(service.currentPinId) || text(service.id);
+  const serviceItems = list(homepage.sections).length > 0
+    ? sectionsFromHomepage(homepage).find((item) => item.id === 'services')?.items ?? []
+    : list(homepage.services);
+  for (const service of serviceItems) {
+    const serviceId = text(service.pinId) || text(service.currentPinId) || text(service.id);
     if (!serviceId) continue;
     actions.push({
       id: `service-call:${serviceId}`,
@@ -99,9 +163,60 @@ function actionsFromHomepage(globalMetaId: string, homepage: Record<string, unkn
   return actions;
 }
 
+function globalMetaIdFromHomepage(homepage: Record<string, unknown>, profile: Record<string, unknown>): string {
+  const identity = record(homepage.identity);
+  return text(identity.globalMetaId) || text(homepage.globalMetaId) || text(profile.globalMetaId);
+}
+
+function avatarFromProfile(profile: Record<string, unknown>, metafileContentBaseUrl: unknown): string | undefined {
+  const rawAvatar = profile.avatar;
+  if (typeof rawAvatar === 'string') {
+    return rawAvatar.trim() || undefined;
+  }
+  const avatar = record(rawAvatar);
+  const directUrl = text(avatar.url);
+  if (directUrl) {
+    return directUrl;
+  }
+  const pinId = text(avatar.pinId) || text(avatar.id);
+  return pinId ? buildMetafileContentUrl(metafileContentBaseUrl, pinId) : undefined;
+}
+
+function proofFromHomepage(homepage: Record<string, unknown>, globalMetaId: string): BrowserResourceEnvelope['proof'] {
+  const profile = record(homepage.profile);
+  const pins = record(profile.pins);
+  const namePinId = text(pins.name);
+  if (namePinId) {
+    return {
+      pinId: namePinId,
+      protocolPath: '/info/name',
+      publisherGlobalMetaId: globalMetaId || undefined,
+      verificationState: 'partial',
+      details: { source: 'profile.pins.name' },
+    };
+  }
+  const avatarPinId = text(record(profile.avatar).pinId);
+  if (avatarPinId) {
+    return {
+      pinId: avatarPinId,
+      protocolPath: '/info/avatar',
+      publisherGlobalMetaId: globalMetaId || undefined,
+      verificationState: 'partial',
+      details: { source: 'profile.avatar' },
+    };
+  }
+  const identity = record(homepage.identity);
+  return {
+    txid: text(identity.txid) || undefined,
+    pinId: text(identity.pinId) || undefined,
+    publisherGlobalMetaId: globalMetaId || undefined,
+    verificationState: 'partial',
+  };
+}
+
 export function buildBotHomepageEnvelope(input: BuildBotHomepageEnvelopeInput): BrowserResourceEnvelope {
   const profile = record(input.homepage.profile);
-  const globalMetaId = text(input.homepage.globalMetaId) || text(profile.globalMetaId);
+  const globalMetaId = globalMetaIdFromHomepage(input.homepage, profile);
   const title = text(profile.name) || text(input.homepage.name) || globalMetaId || 'Bot';
   const templateId: BotHomepageTemplateId = normalizeBotHomepageTemplateId(
     input.templateId,
@@ -119,7 +234,7 @@ export function buildBotHomepageEnvelope(input: BuildBotHomepageEnvelopeInput): 
       address: text(profile.address) || undefined,
       name: title,
       label: title,
-      avatar: text(profile.avatar) || undefined,
+      avatar: avatarFromProfile(profile, input.metafileContentBaseUrl),
       verificationState: 'partial',
     },
     ownerAffinity: null,
@@ -136,17 +251,12 @@ export function buildBotHomepageEnvelope(input: BuildBotHomepageEnvelopeInput): 
       verificationState: 'partial',
       message: '',
     },
-    proof: {
-      txid: text(record(input.homepage.identity).txid) || undefined,
-      pinId: text(record(input.homepage.identity).pinId) || undefined,
-      publisherGlobalMetaId: globalMetaId || undefined,
-      verificationState: 'partial',
-    },
+    proof: proofFromHomepage(input.homepage, globalMetaId),
     source: {
       resolver: 'bot-homepage',
       url: input.resolverUrl,
       fetchedAt: input.fetchedAt,
-      schemaVersion: text(input.homepage.schemaVersion) || 'botHomepage.v1',
+      schemaVersion: text(input.homepage.schemaVersion) || 'botHomepage.v3',
       raw: input.homepage,
     },
     raw: input.homepage,

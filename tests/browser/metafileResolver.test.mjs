@@ -6,7 +6,8 @@ const require = createRequire(import.meta.url);
 const { resolveMetafilePinToResource } = require('../../packages/core/dist/browser/metafileResolver.js');
 
 const manApiBaseUrl = 'https://man.example.test';
-const metafileContentBaseUrl = 'https://content.example.test/files';
+const metafileContentBaseUrl = 'https://file.metaid.io/metafile-indexer';
+const acceleratedContentBaseUrl = `${metafileContentBaseUrl}/api/v1/files/accelerate/content`;
 
 function pinRecord(pinId, overrides = {}) {
   return {
@@ -64,7 +65,7 @@ test('resolveMetafilePinToResource normalizes extension input and trusts chain c
   assert.equal(result.data.resourceType, 'pdf');
   assert.equal(result.data.renderer.type, 'pdf');
   assert.equal(result.data.renderer.contentType, 'application/pdf');
-  assert.equal(result.data.renderer.url, `${metafileContentBaseUrl}/${pinId}`);
+  assert.equal(result.data.renderer.url, `${acceleratedContentBaseUrl}/${pinId}`);
   assert.equal(result.data.title, 'chain-document.pdf');
   assert.equal(result.data.proof.pinId, pinId);
   assert.equal(result.data.proof.details.fileSize, 42_000);
@@ -94,7 +95,7 @@ test('resolveMetafilePinToResource selects video renderer from ManAPI content ty
   assert.equal(result.data.resourceType, 'document');
   assert.equal(result.data.renderer.type, 'video');
   assert.equal(result.data.renderer.contentType, 'video/mp4');
-  assert.equal(result.data.renderer.url, `${metafileContentBaseUrl}/${pinId}`);
+  assert.equal(result.data.renderer.url, `${acceleratedContentBaseUrl}/${pinId}`);
 });
 
 test('resolveMetafilePinToResource returns a download link for unsupported ZIP content', async () => {
@@ -117,7 +118,7 @@ test('resolveMetafilePinToResource returns a download link for unsupported ZIP c
   assert.equal(result.data.resourceType, 'unsupported');
   assert.equal(result.data.renderer.type, 'unsupported');
   assert.equal(result.data.renderer.contentType, 'application/zip');
-  assert.equal(result.data.renderer.url, `${metafileContentBaseUrl}/${pinId}`);
+  assert.equal(result.data.renderer.url, `${acceleratedContentBaseUrl}/${pinId}`);
   assert.equal(result.data.status.state, 'resolved');
   assert.match(result.data.renderer.error, /download/i);
 });

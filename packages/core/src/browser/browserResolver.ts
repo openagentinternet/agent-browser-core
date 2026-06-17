@@ -29,6 +29,14 @@ function text(value: unknown): string {
 }
 
 function readCustomHomepageUri(homepage: Record<string, unknown>): string {
+  const profile = isRecord(homepage.profile) ? homepage.profile : {};
+  const profileHomepage = isRecord(profile.homepage) ? profile.homepage : {};
+  const payload = isRecord(profileHomepage.payload) ? profileHomepage.payload : {};
+  const v3Uri = text(payload.uri);
+  if (v3Uri) {
+    return v3Uri;
+  }
+
   const homepageInfo = isRecord(homepage.homepage) ? homepage.homepage : {};
   const custom = isRecord(homepageInfo.custom) ? homepageInfo.custom : {};
   return text(custom.uri);
@@ -163,6 +171,7 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
       homepage: homepage.data,
       resolverUrl: homepage.url,
       templateId: input.config.botHomepageTemplateId,
+      metafileContentBaseUrl: input.config.metafileContentBaseUrl,
     }));
   }
 

@@ -23,6 +23,7 @@ export {
 export * from './browser/types.js';
 export * from './browser/uri.js';
 export * from './browser/config.js';
+export * from './browser/metafileContentUrl.js';
 export * from './browser/settings.js';
 export * from './browser/botHomepageClient.js';
 export * from './browser/botPageResolver.js';

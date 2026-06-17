@@ -5,10 +5,13 @@ import {
   type MetaAppGalleryRecord,
   type MetaAppPreviewSessionFactory,
 } from './types.js';
+import {
+  buildMetafileAcceleratedContentUrl,
+  normalizeMetafileContentBaseUrl,
+} from './metafileContentUrl.js';
 
 const METAAPP_PROTOCOL_PATH = '/protocols/metaapp';
 const DEFAULT_MANAPI_BASE_URL = 'https://manapi.metaid.io';
-const DEFAULT_METAFILE_CONTENT_BASE_URL = 'https://so.metaid.io/content';
 const HTML_CONTENT_TYPE = 'text/html';
 
 type FetchResponse = {
@@ -137,7 +140,7 @@ function resolveContentUrl(reference: string, metafileContentBaseUrl: string): s
   if (!pinId || pinId.includes('/') || pinId.includes('\\')) {
     return undefined;
   }
-  return `${metafileContentBaseUrl}/${encodeURIComponent(pinId)}`;
+  return buildMetafileAcceleratedContentUrl(metafileContentBaseUrl, pinId);
 }
 
 function buildRecord(input: {
@@ -218,7 +221,7 @@ export async function resolveMetaAppPinToRecord(
   }
 
   const manApiBaseUrl = normalizeBaseUrl(input.manApiBaseUrl, DEFAULT_MANAPI_BASE_URL);
-  const metafileContentBaseUrl = normalizeBaseUrl(input.metafileContentBaseUrl, DEFAULT_METAFILE_CONTENT_BASE_URL);
+  const metafileContentBaseUrl = normalizeMetafileContentBaseUrl(input.metafileContentBaseUrl);
   const pinUrl = `${manApiBaseUrl}/pin/${encodeURIComponent(pinId)}`;
 
   try {

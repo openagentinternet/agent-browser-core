@@ -21,6 +21,17 @@ test('Browser settings default to rendering custom Bot Pages globally', () => {
   assert.equal(snapshot.effectiveBrowser.renderCustomBotPages, true);
 });
 
+test('Browser settings default Metafile content base to indexer root', () => {
+  const defaults = createDefaultBrowserConfig();
+  const resolved = resolveBrowserConfig({});
+  const snapshot = createBrowserSettingsSnapshot({ config: {} });
+
+  assert.equal(defaults.metafileContentBaseUrl, 'https://file.metaid.io/metafile-indexer');
+  assert.equal(resolved.metafileContentBaseUrl, 'https://file.metaid.io/metafile-indexer');
+  assert.equal(snapshot.defaults.metafileContentBaseUrl, 'https://file.metaid.io/metafile-indexer');
+  assert.equal(snapshot.effectiveBrowser.metafileContentBaseUrl, 'https://file.metaid.io/metafile-indexer');
+});
+
 test('Browser settings update custom rendering and template as global browser fields', () => {
   const current = {
     browser: {

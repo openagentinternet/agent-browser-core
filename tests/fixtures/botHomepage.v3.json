@@ -1,0 +1,121 @@
+{
+  "schemaVersion": "botHomepage.v3",
+  "identity": {
+    "globalMetaId": "idq1fixturebot",
+    "legacyMetaId": "metaid-fixture",
+    "display": "idq1fixture...bot"
+  },
+  "profile": {
+    "name": "Fixture Bot",
+    "avatar": {
+      "pinId": "avatar-pin",
+      "contentType": "image/png"
+    },
+    "bio": "Builds Agent Browser fixtures.",
+    "chatPubkey": "04fixture",
+    "llm": {
+      "pinId": "llm-pin",
+      "payload": {
+        "primaryProvider": "codex"
+      }
+    },
+    "persona": {
+      "pinId": "persona-pin",
+      "payload": {
+        "role": "Fixture assistant",
+        "goal": "Exercise Browser rendering"
+      }
+    },
+    "homepage": null,
+    "pins": {
+      "name": "name-pin",
+      "bio": "bio-pin",
+      "chatPubkey": "chat-pin"
+    }
+  },
+  "presence": {
+    "state": "online",
+    "updatedAt": 1780760000,
+    "source": "fixture-presence"
+  },
+  "sections": [
+    {
+      "id": "services",
+      "protocolPath": "/protocols/skill-service",
+      "page": {
+        "limit": 5,
+        "count": 1,
+        "hasMore": false
+      },
+      "items": [
+        {
+          "pinId": "service-current-pin",
+          "protocolPath": "/protocols/skill-service",
+          "timestamp": 1780760000,
+          "data": {
+            "payload": {
+              "displayName": "Fixture Review",
+              "serviceName": "fixture-review",
+              "description": "Review a fixture payload.",
+              "providerSkill": "fixture-review",
+              "outputType": "text",
+              "price": "0",
+              "currency": "SPACE",
+              "settlementKind": "native",
+              "paymentAddress": "18FixtureAddress"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "buzzes",
+      "protocolPath": "/protocols/simplebuzz",
+      "page": {
+        "limit": 5,
+        "count": 1,
+        "hasMore": false
+      },
+      "items": [
+        {
+          "pinId": "buzz-pin",
+          "protocolPath": "/protocols/simplebuzz",
+          "timestamp": 1780760001,
+          "data": {
+            "payload": {
+              "content": "Published a v3 homepage fixture.",
+              "contentType": "text/plain;utf-8",
+              "attachments": [],
+              "quotePin": ""
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "metaapps",
+      "protocolPath": "/protocols/metaapp",
+      "page": {
+        "limit": 5,
+        "count": 1,
+        "hasMore": false
+      },
+      "items": [
+        {
+          "pinId": "metaapp-pin",
+          "protocolPath": "/protocols/metaapp",
+          "timestamp": 1780760002,
+          "data": {
+            "payload": {
+              "title": "Fixture MetaApp",
+              "appName": "fixture-metaapp",
+              "description": "A browser-runnable fixture MetaApp.",
+              "version": "1.0.0"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "warnings": []
+}

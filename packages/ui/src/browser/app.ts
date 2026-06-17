@@ -1138,9 +1138,34 @@ function firstArray() {
   return [];
 }
 
+function botHomepageSectionItems(data, sectionId) {
+  var sections = Array.isArray(data && data.sections) ? data.sections : [];
+  var targetId = textValue(sectionId);
+  for (var sectionIndex = 0; sectionIndex < sections.length; sectionIndex += 1) {
+    var section = objectValue(sections[sectionIndex]);
+    var rawId = textValue(section.id);
+    if (rawId !== targetId && !(targetId === 'apps' && rawId === 'metaapps')) continue;
+    var items = Array.isArray(section.items) ? section.items : [];
+    return items.map(function (item) {
+      var rawItem = objectValue(item);
+      var payload = objectValue(objectValue(rawItem.data).payload);
+      var source = Object.keys(payload).length ? payload : rawItem;
+      var normalized = {};
+      Object.keys(source).forEach(function (key) {
+        normalized[key] = source[key];
+      });
+      normalized.pinId = textValue(rawItem.pinId) || textValue(source.pinId) || textValue(source.currentPinId);
+      normalized.protocolPath = textValue(rawItem.protocolPath) || textValue(source.protocolPath);
+      normalized.timestamp = rawItem.timestamp || source.timestamp;
+      return normalized;
+    });
+  }
+  return [];
+}
+
 function normalizeBotHomepageListItem(item, index, fallbackLabel) {
   if (item && typeof item === 'object' && !Array.isArray(item)) {
-    var title = textValue(item.title || item.name || item.displayName || item.serviceName || item.label || item.id) ||
+    var title = textValue(item.title || item.name || item.displayName || item.serviceName || item.appName || item.label || item.content || item.id || item.pinId) ||
       fallbackLabel + ' ' + (index + 1);
     var detail = readableText(item.description || item.summary || item.detail || item.content || item.text || item.bio);
     return {
@@ -1177,11 +1202,17 @@ function normalizeBotHomepageServices(items) {
 function normalizeBotHomepagePayload(current) {
   var renderer = current.renderer || {};
   var data = renderer.data && typeof renderer.data === 'object' ? renderer.data : {};
+  var identity = objectValue(data.identity);
   var profile = objectValue(data.profile);
   var homepage = objectValue(data.homepage);
   var owner = objectValue(current.owner);
-  var services = normalizeBotHomepageServices(data.services);
-  var activity = normalizeBotHomepageList(data.activity, 'Activity');
+  var v3Services = botHomepageSectionItems(data, 'services');
+  var v3Buzz = botHomepageSectionItems(data, 'buzzes');
+  var v3Metaapps = botHomepageSectionItems(data, 'apps');
+  var services = normalizeBotHomepageServices(v3Services.length ? v3Services : data.services);
+  var buzz = normalizeBotHomepageList(v3Buzz.length ? v3Buzz : firstArray(data.buzz, data.posts, data.publications), 'Buzz');
+  var metaapps = normalizeBotHomepageList(v3Metaapps.length ? v3Metaapps : firstArray(data.metaapps, data.apps), 'MetaApp');
+  var activity = normalizeBotHomepageList(v3Buzz.length ? v3Buzz : data.activity, 'Activity');
   if (!activity.length) {
     activity = services.slice(0, 2).map(function (service) {
       return {
@@ -1200,12 +1231,13 @@ function normalizeBotHomepagePayload(current) {
   }
   var name = textValue(profile.name) || textValue(homepage.title) || textValue(current.title);
   var summary = readableText(homepage.summary) || readableText(profile.bio);
+  var profileAvatar = typeof profile.avatar === 'string' ? profile.avatar : textValue(objectValue(profile.avatar).url);
   return {
     raw: data,
     identity: {
       name: name || 'Bot',
-      globalMetaId: textValue(data.globalMetaId) || textValue(owner.globalMetaId),
-      avatar: safeUrl(profile.avatar || owner.avatar),
+      globalMetaId: textValue(identity.globalMetaId) || textValue(data.globalMetaId) || textValue(owner.globalMetaId),
+      avatar: safeUrl(owner.avatar || profileAvatar),
       proofState: textValue(current.status && current.status.verificationState) || 'unverified'
     },
     summary: {
@@ -1215,7 +1247,8 @@ function normalizeBotHomepagePayload(current) {
     services: services,
     activity: activity,
     skills: normalizeBotHomepageList(firstArray(data.skills, data.publishedSkills, data.capabilities), 'Skill'),
-    buzz: normalizeBotHomepageList(firstArray(data.buzz, data.posts, data.publications), 'Buzz'),
+    buzz: buzz,
+    metaapps: metaapps,
     buses: normalizeBotHomepageList(firstArray(data.buses, data.bus), 'Bus')
   };
 }
@@ -1256,6 +1289,7 @@ function renderBotHomepageDocumentTemplate(payload, current) {
     renderActionButtons(current.actions) + '</header>' +
     '<section class="browser-document-section"><h3>Overview</h3><p>' + escapeHtml(payload.summary.overview) + '</p></section>' +
     '<section class="browser-document-section browser-bot-services"><h3>Services</h3>' + renderServiceRows(payload.services) + '</section>' +
+    '<section class="browser-document-section browser-bot-metaapps"><h3>MetaApps</h3>' + renderGenericRows(payload.metaapps, 'No public MetaApps.', 'layout') + '</section>' +
     '<section class="browser-document-section browser-bot-activity"><h3>Recent Activity</h3>' + renderActivityRows(payload) + '</section>' +
     '</article>';
 }
@@ -1268,6 +1302,7 @@ function renderBotHomepageCompactListTemplate(payload, current) {
   var identity = payload.identity;
   var extraPanels = [
     renderCompactPanel('Services', renderServiceRows(payload.services)),
+    renderCompactPanel('MetaApps', renderGenericRows(payload.metaapps, 'No public MetaApps.', 'layout')),
     renderCompactPanel('Skills', renderGenericRows(payload.skills, 'No public skills.', 'service')),
     renderCompactPanel('Buzz', renderGenericRows(payload.buzz, 'No public buzz.', 'activity'))
   ];
@@ -1300,6 +1335,8 @@ function servicesFromCurrent() {
   var current = state.current || {};
   var renderer = current.renderer || {};
   var data = renderer.data && typeof renderer.data === 'object' ? renderer.data : {};
+  var v3Services = botHomepageSectionItems(data, 'services');
+  if (v3Services.length) return v3Services;
   return Array.isArray(data.services) ? data.services : [];
 }
 

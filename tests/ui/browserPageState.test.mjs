@@ -180,7 +180,7 @@ function createBrowserContext(options = {}) {
   const settingsData = options.settingsData ?? {
     browser: {
       metasoP2PBaseUrl: 'https://so.metaid.io',
-      metafileContentBaseUrl: 'https://so.metaid.io/content',
+      metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
       manApiBaseUrl: 'https://manapi.metaid.io',
       blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
@@ -190,7 +190,7 @@ function createBrowserContext(options = {}) {
     },
     effectiveBrowser: {
       metasoP2PBaseUrl: 'https://so.metaid.io',
-      metafileContentBaseUrl: 'https://so.metaid.io/content',
+      metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
       manApiBaseUrl: 'https://manapi.metaid.io',
       blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
@@ -200,7 +200,7 @@ function createBrowserContext(options = {}) {
     },
     defaults: {
       metasoP2PBaseUrl: 'https://so.metaid.io',
-      metafileContentBaseUrl: 'https://so.metaid.io/content',
+      metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
       manApiBaseUrl: 'https://manapi.metaid.io',
       blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
