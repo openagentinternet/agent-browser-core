@@ -54,14 +54,19 @@ export const BROWSER_PAGE_STYLES = `
     .browser-settings-error { border-color: #fca5a5; color: #991b1b; }
     .browser-settings-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
     .browser-settings-tabs button, .browser-settings-actions button, .browser-cache-actions button { border: 1px solid #d1d5db; background: #fff; padding: 7px 10px; }
-    .browser-settings-tabs button[aria-selected="true"], .browser-template-grid button[aria-current="true"], .browser-actor-list button[aria-current="true"] { border-color: #2563eb; background: #eff6ff; }
+    .browser-settings-tabs button[aria-selected="true"], .browser-template-grid button[aria-current="true"], .browser-template-options button[aria-current="true"], .browser-template-options button[aria-pressed="true"], .browser-actor-list button[aria-current="true"] { border-color: #2563eb; background: #eff6ff; }
     .browser-settings-fields { display: grid; gap: 10px; }
     .browser-settings-fields label { display: grid; gap: 5px; color: #374151; }
     .browser-settings-fields input { min-width: 0; height: 34px; border: 1px solid #d1d5db; padding: 0 10px; }
     .browser-settings-actions { margin-top: 14px; }
-    .browser-template-grid, .browser-actor-list { display: grid; gap: 10px; }
-    .browser-template-grid button, .browser-actor-list button { display: grid; gap: 4px; padding: 12px; border: 1px solid #d1d5db; background: #fff; text-align: left; }
-    .browser-template-grid span, .browser-actor-list span { color: #4b5563; }
+    .browser-template-grid, .browser-template-options, .browser-actor-list { display: grid; gap: 10px; }
+    .browser-template-grid button, .browser-template-options button, .browser-actor-list button { display: grid; gap: 4px; padding: 12px; border: 1px solid #d1d5db; background: #fff; text-align: left; }
+    .browser-template-grid span, .browser-template-options span, .browser-actor-list span { color: #4b5563; }
+    .browser-custom-pages-setting { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb; }
+    .browser-custom-pages-label { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+    .browser-help-icon { width: 26px; height: 26px; border-radius: 999px; padding: 0; }
+    .browser-switch { min-width: 64px; }
+    .browser-settings-section-label { margin: 16px 0 10px; font-size: 12px; font-weight: 700; text-transform: uppercase; color: #4b5563; }
     .browser-cache-panel dl { display: grid; gap: 8px; margin: 0 0 14px; }
     .browser-cache-panel dl div { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-bottom: 1px solid #e5e7eb; }
     .browser-cache-panel dt { color: #4b5563; }

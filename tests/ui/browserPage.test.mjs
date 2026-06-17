@@ -67,6 +67,7 @@ test('Browser client script includes mature renderer, modal, owner, and share fl
   assert.match(definition.script, /function renderRenderer\(current\)/);
   assert.match(definition.script, /function openUsingIdentitySelector\(\)/);
   assert.match(definition.script, /async function selectBotHomepageTemplate\(templateId\)/);
+  assert.match(definition.script, /async function toggleCustomBotPages\(\)/);
   assert.match(definition.script, /state\.pendingPrivateChat = \{/);
   assert.match(definition.script, /state\.pendingServiceCall = \{/);
   assert.match(definition.script, /data-browser-owner-action="share"/);

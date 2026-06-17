@@ -173,6 +173,7 @@ function createBrowserContext(options = {}) {
       manApiBaseUrl: 'https://manapi.metaid.io',
       blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
+      renderCustomBotPages: true,
       defaultChainName: 'mvc',
       localMode: true,
     },
@@ -182,6 +183,7 @@ function createBrowserContext(options = {}) {
       manApiBaseUrl: 'https://manapi.metaid.io',
       blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
+      renderCustomBotPages: true,
       defaultChainName: 'mvc',
       localMode: true,
     },
@@ -191,6 +193,7 @@ function createBrowserContext(options = {}) {
       manApiBaseUrl: 'https://manapi.metaid.io',
       blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
+      renderCustomBotPages: true,
       defaultChainName: 'mvc',
       localMode: true,
     },
@@ -707,7 +710,7 @@ test('Browser menu is data-driven and opens cache management settings', async ()
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /Cache/);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /\/tmp\/\.metabot\/cache\/metaapps/);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /2 artifacts/);
-  assert.equal(fetchCalls.at(-2), '/api/browser/settings?actorId=worker');
+  assert.equal(fetchCalls.at(-2), '/api/browser/settings');
   assert.equal(fetchCalls.at(-1), '/api/browser/cache?actorId=worker');
 });
 
@@ -724,13 +727,46 @@ test('Browser template settings select the default Bot homepage template', async
   assert.equal(elements['[data-browser-modal-root]'].hidden, false);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /Document/);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /Compact List/);
+  assert.equal(fetchCalls.at(-2), '/api/browser/settings');
+  assert.equal(fetchCalls.at(-1), '/api/browser/cache?actorId=worker');
 
   await context.selectBotHomepageTemplate('compact-list');
 
   assert.equal(context.state.settingsData.browser.botHomepageTemplateId, 'compact-list');
   assert.equal(context.state.current.renderer.templateId, 'compact-list');
   assert.match(elements['[data-browser-viewport]'].innerHTML, /browser-bot-template-compact-list/);
-  assert.equal(fetchCalls.at(-1), '/api/browser/settings?actorId=worker');
+  assert.equal(fetchCalls.includes('/api/browser/settings?actorId=worker'), false);
+});
+
+test('Browser template settings render global custom Bot Page toggle with tooltip help', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext();
+
+  await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
+  await context.handleBrowserMenuAction('templates');
+
+  const html = elements['[data-browser-modal-root]'].innerHTML;
+  assert.match(html, /Render Custom Bot Pages/);
+  assert.match(html, /data-browser-custom-pages-toggle/);
+  assert.match(html, /role="switch"/);
+  assert.match(html, /aria-checked="true"/);
+  assert.match(html, /data-browser-custom-pages-help/);
+  assert.doesNotMatch(html, />When enabled, Bot Pages can render the custom MetaApp or Metafile declared on \/info\/homepage/);
+});
+
+test('Browser custom Bot Page toggle saves globally and re-resolves the current URI', async () => {
+  const { context, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1custombot',
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
+  await context.handleBrowserMenuAction('templates');
+  await context.toggleCustomBotPages();
+
+  assert.equal(context.state.settingsData.browser.renderCustomBotPages, false);
+  assert.equal(fetchCalls.includes('/api/browser/settings?actorId=worker'), false);
+  assert.ok(fetchCalls.includes('/api/browser/settings'));
+  assert.ok(fetchCalls.filter((call) => call.startsWith('/api/browser/resolve?uri=metaid%3A%2F%2Fidq1custombot')).length >= 2);
+  assert.equal(context.state.current.normalizedUri, 'metaid://idq1custombot');
 });
 
 test('Browser history controls navigate without replacing Browser chrome', async () => {

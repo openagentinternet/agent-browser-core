@@ -12,10 +12,13 @@ test('client script includes runtime menu settings template cache and actor flow
   assert.match(script, /function renderBrowserMenu\(/);
   assert.match(script, /function openBrowserSettings\(/);
   assert.match(script, /function renderTemplateSettings\(/);
+  assert.match(script, /function toggleCustomBotPages\(/);
   assert.match(script, /function clearBrowserCache\(/);
   assert.match(script, /function openActorSelector\(/);
   assert.match(script, /data-browser-settings-tab/);
   assert.match(script, /data-browser-template-select/);
+  assert.match(script, /data-browser-custom-pages-toggle/);
+  assert.match(script, /data-browser-custom-pages-help/);
   assert.match(script, /data-browser-cache-clear/);
   assert.match(script, /data-browser-actor-id/);
 });

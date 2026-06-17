@@ -112,6 +112,7 @@ function buildBrowserPageScript(): string {
 var browserSettingsTabs = ${JSON.stringify(BROWSER_SETTINGS_TABS)};
 var browserBaseUrlFields = ${JSON.stringify(BROWSER_BASE_URL_FIELDS)};
 var browserBotHomepageTemplates = ${JSON.stringify(BROWSER_BOT_HOMEPAGE_TEMPLATES)};
+var CUSTOM_BOT_PAGE_HELP = 'When enabled, Bot Pages can render the custom MetaApp or Metafile declared on /info/homepage. When disabled, Browser always uses the selected built-in template.';
 var browserEndpoints = {
   runtime: '/api/browser/runtime',
   resolve: '/api/browser/resolve',
@@ -400,6 +401,10 @@ function endpointWithActor(endpoint) {
   return endpoint + '?' + query.toString();
 }
 
+function browserSettingsEndpoint() {
+  return browserEndpoints.settings;
+}
+
 function browserUriFromPath(pathname) {
   var match = textValue(pathname).match(/^\\/browser\\/(metaid|metaapp|metafile)\\/([^/?#]+)$/);
   if (!match) return '';
@@ -497,6 +502,22 @@ function renderSettingsTabs() {
   }).join('') + '</div>';
 }
 
+function settingValue(key) {
+  var data = state.settingsData || {};
+  var browser = data.browser || {};
+  var effectiveBrowser = data.effectiveBrowser || {};
+  var defaults = data.defaults || {};
+  if (Object.prototype.hasOwnProperty.call(browser, key)) return browser[key];
+  if (Object.prototype.hasOwnProperty.call(effectiveBrowser, key)) return effectiveBrowser[key];
+  if (Object.prototype.hasOwnProperty.call(defaults, key)) return defaults[key];
+  return '';
+}
+
+function customBotPagesEnabled() {
+  var value = settingValue('renderCustomBotPages');
+  return value !== false;
+}
+
 function renderBaseUrlSettings() {
   var data = state.settingsData || {};
   var browser = data.browser || {};
@@ -511,7 +532,7 @@ function renderBaseUrlSettings() {
         '<input data-browser-setting-field="' + escapeHtml(key) + '" value="' + escapeHtml(value) + '" placeholder="' + escapeHtml(placeholder) + '" />' +
       '</label>';
     }).join('') +
-    '<p class="browser-settings-note">Empty values reset to defaults. Changes apply to the selected local Bot.</p>' +
+    '<p class="browser-settings-note">Empty values reset to defaults. Changes apply globally.</p>' +
   '</form>';
 }
 
@@ -543,8 +564,17 @@ function selectedBotHomepageTemplateId() {
 
 function renderTemplateSettings() {
   var selectedId = selectedBotHomepageTemplateId();
+  var customEnabled = customBotPagesEnabled();
   return '<section class="browser-template-panel">' +
-    '<div class="browser-template-options">' + browserBotHomepageTemplates.map(function (template) {
+    '<section class="browser-custom-pages-setting">' +
+      '<div class="browser-custom-pages-label"><strong>Render Custom Bot Pages</strong>' +
+        '<button type="button" class="browser-help-icon" data-browser-custom-pages-help aria-label="Custom Bot Page rendering help" title="' + escapeHtml(CUSTOM_BOT_PAGE_HELP) + '">?</button></div>' +
+      '<button type="button" class="browser-switch" role="switch" data-browser-custom-pages-toggle aria-checked="' + (customEnabled ? 'true' : 'false') + '">' +
+        '<span>' + (customEnabled ? 'On' : 'Off') + '</span></button>' +
+    '</section>' +
+    '<section class="browser-template-builtins">' +
+      '<div class="browser-settings-section-label">Built-in Template</div>' +
+      '<div class="browser-template-options">' + browserBotHomepageTemplates.map(function (template) {
       var templateId = textValue(template && template.id);
       var selected = templateId === selectedId;
       var previewImage = textValue(template && template.previewImage);
@@ -556,8 +586,8 @@ function renderTemplateSettings() {
         '<span class="browser-template-copy"><strong>' + escapeHtml(textValue(template && template.name) || templateId) + '</strong>' +
         '<span>' + escapeHtml(textValue(template && template.description)) + '</span></span>' +
       '</button>';
-    }).join('') + '</div>' +
-    '<p class="browser-settings-note">The selected template is used for Bot homepage rendering for this local Bot.</p>' +
+      }).join('') + '</div>' +
+    '</section>' +
   '</section>';
 }
 
@@ -596,7 +626,7 @@ function renderBrowserSettingsModal() {
 }
 
 async function loadBrowserSettingsData() {
-  var settings = await api(endpointWithActor(browserEndpoints.settings));
+  var settings = await api(browserSettingsEndpoint());
   var cache = await api(endpointWithActor(browserEndpoints.cache));
   state.settingsData = settings;
   state.cacheData = cache;
@@ -650,7 +680,7 @@ async function saveBrowserSettings() {
     var input = elements.modalRoot.querySelector('[data-browser-setting-field="' + key + '"]');
     browser[key] = input ? input.value : '';
   });
-  var result = await api(endpointWithActor(browserEndpoints.settings), {
+  var result = await api(browserSettingsEndpoint(), {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ browser: browser })
@@ -668,7 +698,7 @@ async function selectBotHomepageTemplate(templateId) {
     return null;
   }
   var selectedId = textValue(selectedTemplate.id);
-  var result = await api(endpointWithActor(browserEndpoints.settings), {
+  var result = await api(browserSettingsEndpoint(), {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ browser: { botHomepageTemplateId: selectedId } })
@@ -682,6 +712,23 @@ async function selectBotHomepageTemplate(templateId) {
   }
   setStatus('saved', '');
   renderBrowserSettingsModal();
+  return result;
+}
+
+async function toggleCustomBotPages() {
+  var nextValue = !customBotPagesEnabled();
+  var result = await api(browserSettingsEndpoint(), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ browser: { renderCustomBotPages: nextValue } })
+  });
+  state.settingsData = result;
+  setStatus('saved', '');
+  renderBrowserSettingsModal();
+  var uri = state.current && state.current.uri || elements.input && elements.input.value || '';
+  if (uri) {
+    await resolveUri(uri, { record: false });
+  }
   return result;
 }
 
@@ -1659,6 +1706,12 @@ async function initialize() {
         });
         return;
       }
+      if (closestWithAttribute(event && event.target, 'data-browser-custom-pages-toggle')) {
+        toggleCustomBotPages().catch(function (error) {
+          setStatus('error', error && error.message ? error.message : 'Custom Bot Page setting failed.');
+        });
+        return;
+      }
       var templateSelect = closestWithAttribute(event && event.target, 'data-browser-template-select');
       if (templateSelect) {
         selectBotHomepageTemplate(templateSelect.getAttribute('data-browser-template-select')).catch(function (error) {
@@ -1810,6 +1863,7 @@ globalThis.openBrowserSettings = openBrowserSettings;
 globalThis.switchBrowserSettingsTab = switchBrowserSettingsTab;
 globalThis.saveBrowserSettings = saveBrowserSettings;
 globalThis.selectBotHomepageTemplate = selectBotHomepageTemplate;
+globalThis.toggleCustomBotPages = toggleCustomBotPages;
 globalThis.clearBrowserCache = clearBrowserCache;
 globalThis.handleTrustedAction = handleTrustedAction;
 globalThis.normalizeBotHomepagePayload = normalizeBotHomepagePayload;
