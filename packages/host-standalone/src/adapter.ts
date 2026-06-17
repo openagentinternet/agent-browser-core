@@ -482,15 +482,11 @@ export function createStandaloneBrowserHostAdapter(
     return toBrowserResult(result);
   }
 
-  async function getSettings(settingsInput: BrowserSettingsInput = {}): Promise<BrowserCommandResult<BrowserSettingsSnapshot>> {
-    const actorFailure = resolveActor(settingsInput);
-    if (actorFailure) return actorFailure;
+  async function getSettings(_settingsInput: BrowserSettingsInput = {}): Promise<BrowserCommandResult<BrowserSettingsSnapshot>> {
     return browserSuccess(toHostSettingsSnapshot(createBrowserSettingsSnapshot({ config, env })));
   }
 
   async function updateSettings(settingsInput: BrowserSettingsUpdateInput): Promise<BrowserCommandResult<BrowserSettingsSnapshot>> {
-    const actorFailure = resolveActor(settingsInput);
-    if (actorFailure) return actorFailure;
     try {
       config = applyBrowserSettingsUpdate(config, settingsInput.browser);
       return browserSuccess(toHostSettingsSnapshot(createBrowserSettingsSnapshot({ config, env })));

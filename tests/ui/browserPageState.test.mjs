@@ -769,6 +769,33 @@ test('Browser custom Bot Page toggle saves globally and re-resolves the current 
   assert.equal(context.state.current.normalizedUri, 'metaid://idq1custombot');
 });
 
+test('Browser custom Bot Page toggle is wired through modal click delegation', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1custombot',
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
+  await context.handleBrowserMenuAction('templates');
+
+  const modalClick = elements['[data-browser-modal-root]'].listeners.get('click');
+  assert.equal(typeof modalClick, 'function');
+  modalClick({
+    target: {
+      parentElement: null,
+      getAttribute(name) {
+        return name === 'data-browser-custom-pages-toggle' ? '' : null;
+      },
+      hasAttribute(name) {
+        return name === 'data-browser-custom-pages-toggle';
+      },
+    },
+  });
+  await waitFor(() => context.state.settingsData.browser.renderCustomBotPages === false, 'delegated custom pages toggle');
+
+  assert.equal(fetchCalls.includes('/api/browser/settings?actorId=worker'), false);
+  assert.ok(fetchCalls.filter((call) => call.startsWith('/api/browser/resolve?uri=metaid%3A%2F%2Fidq1custombot')).length >= 2);
+});
+
 test('Browser history controls navigate without replacing Browser chrome', async () => {
   const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1one' });
   const topbar = elements['[data-browser-address-form]'];

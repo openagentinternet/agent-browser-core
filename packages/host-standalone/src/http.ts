@@ -132,7 +132,7 @@ export async function handleStandaloneBrowserApiRoute(
 
   if (url.pathname === '/api/browser/settings') {
     if (method === 'GET') {
-      const result = await adapter.getSettings(actorId ? { actorId } : {});
+      const result = await adapter.getSettings({});
       sendJson(res, statusForBrowserResult(result), result);
       return true;
     }
@@ -142,7 +142,7 @@ export async function handleStandaloneBrowserApiRoute(
       const browser = body.browser && typeof body.browser === 'object' && !Array.isArray(body.browser)
         ? body.browser as Record<string, unknown>
         : {};
-      const result = await adapter.updateSettings({ browser, ...(actorId ? { actorId } : {}) });
+      const result = await adapter.updateSettings({ browser });
       sendJson(res, statusForBrowserResult(result), result);
       return true;
     }

@@ -100,6 +100,25 @@ test('standalone Browser server exposes runtime resolve settings cache and actio
   assert.equal(updated.data.effectiveBrowser.botHomepageTemplateId, 'compact-list');
   assert.equal(updated.data.effectiveBrowser.renderCustomBotPages, false);
 
+  const missingActorSettings = await json(await fetch(`${baseUrl}/api/browser/settings?actorId=missing`));
+  assert.equal(missingActorSettings.ok, true);
+  assert.equal(missingActorSettings.data.effectiveBrowser.botHomepageTemplateId, 'compact-list');
+  assert.equal(missingActorSettings.data.effectiveBrowser.renderCustomBotPages, false);
+
+  const missingActorUpdated = await json(await fetch(`${baseUrl}/api/browser/settings?actorId=missing`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      browser: {
+        botHomepageTemplateId: 'document',
+        renderCustomBotPages: true,
+      },
+    }),
+  }));
+  assert.equal(missingActorUpdated.ok, true);
+  assert.equal(missingActorUpdated.data.effectiveBrowser.botHomepageTemplateId, 'document');
+  assert.equal(missingActorUpdated.data.effectiveBrowser.renderCustomBotPages, true);
+
   const cache = await json(await fetch(`${baseUrl}/api/browser/cache`));
   assert.equal(cache.ok, true);
   assert.equal(cache.data.cacheRoot, cacheDir);
@@ -171,6 +190,12 @@ test('standalone Browser server maps bad client requests to explicit failures', 
   assert.equal(badActorResponse.status, 404);
   assert.equal(badActor.ok, false);
   assert.equal(badActor.code, 'actor_not_found');
+
+  const badCacheActorResponse = await fetch(`${baseUrl}/api/browser/cache?actorId=missing`);
+  const badCacheActor = await json(badCacheActorResponse);
+  assert.equal(badCacheActorResponse.status, 404);
+  assert.equal(badCacheActor.ok, false);
+  assert.equal(badCacheActor.code, 'actor_not_found');
 
   const methodResponse = await fetch(`${baseUrl}/api/browser/runtime`, { method: 'POST' });
   const method = await json(methodResponse);
