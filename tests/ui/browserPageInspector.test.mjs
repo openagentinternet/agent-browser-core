@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import vm from 'node:vm';
 
@@ -216,6 +217,41 @@ test('Inspector proof labels use TXID and include proof details', async () => {
   assert.match(html, /publisher GlobalMetaId/);
   assert.match(html, /block explorer action/);
   assert.match(html, /View on Block Explorer/);
+});
+
+test('Inspector summarizes homepage v3 sections', async () => {
+  const homepage = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
+  const { context, nodes } = createContext();
+  await waitFor(() => context.state.current, 'initial resource');
+
+  context.state.current = browserResult('metaid://idq1fixturebot', {
+    renderer: {
+      type: 'bot-page',
+      contentType: 'application/vnd.oac.bot-homepage+json',
+      data: homepage,
+    },
+    source: {
+      resolver: 'test-resolver',
+      schemaVersion: 'botHomepage.v3',
+      raw: homepage,
+    },
+    proof: {
+      pinId: 'name-pin',
+      protocolPath: '/info/name',
+      publisherGlobalMetaId: 'idq1fixturebot',
+      verificationState: 'partial',
+    },
+  });
+  context.openInspector();
+
+  const html = nodes['[data-browser-inspector]'].innerHTML;
+  assert.match(html, /<h3>Homepage v3<\/h3>/);
+  assert.match(html, /services/);
+  assert.match(html, /service-current-pin/);
+  assert.match(html, /buzzes/);
+  assert.match(html, /buzz-pin/);
+  assert.match(html, /metaapps/);
+  assert.match(html, /metaapp-pin/);
 });
 
 test('Inspector TXID falls back to the proof pin transaction id', async () => {

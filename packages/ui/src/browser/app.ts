@@ -1055,6 +1055,41 @@ function requiredKeyValue(label, value) {
   return '<dt>' + escapeHtml(label) + '</dt><dd>' + escapeHtml(text) + '</dd>';
 }
 
+function homepageV3SectionSummary(data, sectionId) {
+  var sections = Array.isArray(data && data.sections) ? data.sections : [];
+  var targetId = textValue(sectionId);
+  for (var sectionIndex = 0; sectionIndex < sections.length; sectionIndex += 1) {
+    var section = objectValue(sections[sectionIndex]);
+    var rawId = textValue(section.id);
+    if (rawId !== targetId) continue;
+    var items = Array.isArray(section.items) ? section.items : [];
+    var pinIds = items.map(function (item) {
+      return textValue(item && item.pinId);
+    }).filter(Boolean).slice(0, 4);
+    return items.length + (items.length === 1 ? ' item' : ' items') + (pinIds.length ? ': ' + pinIds.join(', ') : '');
+  }
+  return '';
+}
+
+function renderHomepageV3Inspector(current) {
+  var renderer = current.renderer || {};
+  var data = objectValue(renderer.data);
+  if (textValue(data.schemaVersion) !== 'botHomepage.v3') return '';
+  var profile = objectValue(data.profile);
+  var profilePins = objectValue(profile.pins);
+  return '<h3>Homepage v3</h3><dl>' +
+    keyValue('schema', data.schemaVersion) +
+    keyValue('profile name', profile.name) +
+    keyValue('/info/name', profilePins.name) +
+    keyValue('/info/bio', profilePins.bio) +
+    keyValue('/info/chatpubkey', profilePins.chatPubkey) +
+    keyValue('avatar pin', objectValue(profile.avatar).pinId) +
+    keyValue('services', homepageV3SectionSummary(data, 'services')) +
+    keyValue('buzzes', homepageV3SectionSummary(data, 'buzzes')) +
+    keyValue('metaapps', homepageV3SectionSummary(data, 'metaapps')) +
+    '</dl>';
+}
+
 function renderInspector() {
   if (!elements.inspector || !state.current) return;
   var current = state.current;
@@ -1096,7 +1131,7 @@ function renderInspector() {
     keyValue('local path', source.localPath || source.path) +
     keyValue('fetched at', source.fetchedAt || source.cachedAt || source.resolvedAt) +
     keyValue('schema', source.schemaVersion) +
-    '</dl>' + (source.raw ? '<pre>' + escapeHtml(JSON.stringify(source.raw || {}, null, 2)) + '</pre>' : '') + '</section>';
+    '</dl>' + renderHomepageV3Inspector(current) + (source.raw ? '<pre>' + escapeHtml(JSON.stringify(source.raw || {}, null, 2)) + '</pre>' : '') + '</section>';
 }
 
 function openInspector() {
@@ -1289,6 +1324,7 @@ function renderBotHomepageDocumentTemplate(payload, current) {
     renderActionButtons(current.actions) + '</header>' +
     '<section class="browser-document-section"><h3>Overview</h3><p>' + escapeHtml(payload.summary.overview) + '</p></section>' +
     '<section class="browser-document-section browser-bot-services"><h3>Services</h3>' + renderServiceRows(payload.services) + '</section>' +
+    '<section class="browser-document-section browser-bot-buzzes"><h3>Buzz</h3>' + renderGenericRows(payload.buzz, 'No public buzz.', 'activity') + '</section>' +
     '<section class="browser-document-section browser-bot-metaapps"><h3>MetaApps</h3>' + renderGenericRows(payload.metaapps, 'No public MetaApps.', 'layout') + '</section>' +
     '<section class="browser-document-section browser-bot-activity"><h3>Recent Activity</h3>' + renderActivityRows(payload) + '</section>' +
     '</article>';

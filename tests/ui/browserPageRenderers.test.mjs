@@ -128,6 +128,8 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.match(html, /Builds Agent Browser fixtures/);
   assert.match(html, /Overview/);
   assert.match(html, /Recent Activity/);
+  assert.match(html, /<h3>Buzz<\/h3>/);
+  assert.match(html, /<h3>MetaApps<\/h3>/);
   assert.match(html, /Fixture Review/);
   assert.match(html, /Fixture MetaApp/);
   assert.match(html, /Published a v3 homepage fixture/);
