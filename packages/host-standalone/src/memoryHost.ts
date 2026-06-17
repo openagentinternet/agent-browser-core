@@ -174,13 +174,10 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
         return browserFailure('invalid_browser_uri', error instanceof Error ? error.message : String(error));
       }
     },
-    async getSettings(actorInput = {}) {
-      const failure = ensureActor(actorInput.actorId);
-      return failure ?? browserSuccess(settings);
+    async getSettings(_actorInput = {}) {
+      return browserSuccess(settings);
     },
     async updateSettings(input) {
-      const failure = ensureActor(input.actorId);
-      if (failure) return failure;
       settings = {
         browser: input.browser ?? {},
         effectiveBrowser: {

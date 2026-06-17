@@ -204,6 +204,28 @@ test('standalone Browser server maps bad client requests to explicit failures', 
   assert.equal(method.code, 'method_not_allowed');
 });
 
+test('memory standalone Browser host keeps settings global while cache remains actor-scoped', async () => {
+  const host = standalone.createMemoryStandaloneBrowserHost();
+
+  const missingActorSettings = await host.getSettings({ actorId: 'missing' });
+  assert.equal(missingActorSettings.ok, true);
+
+  const updated = await host.updateSettings({
+    actorId: 'missing',
+    browser: {
+      botHomepageTemplateId: 'compact-list',
+      renderCustomBotPages: false,
+    },
+  });
+  assert.equal(updated.ok, true);
+  assert.equal(updated.data.effectiveBrowser.botHomepageTemplateId, 'compact-list');
+  assert.equal(updated.data.effectiveBrowser.renderCustomBotPages, false);
+
+  const missingActorCache = await host.getCache({ actorId: 'missing' });
+  assert.equal(missingActorCache.ok, false);
+  assert.equal(missingActorCache.code, 'actor_not_found');
+});
+
 test('standalone CLI rejects listen errors', async (t) => {
   const server = standalone.createStandaloneBrowserServer();
   t.after(() => new Promise((resolve) => server.close(resolve)));
