@@ -322,6 +322,56 @@ test('Browser address input displays the resolver-normalized URI for a bare Glob
   assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
 });
 
+test('Browser preserves metaid address when resolver returns custom target resource model', async () => {
+  const aliasUri = 'metaid://idq1custombot';
+  const customHomepageUri = 'metaapp://custom-pin';
+  const { context, elements, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1custombot',
+    resolveResponse: () => ({
+      ok: true,
+      data: {
+        uri: aliasUri,
+        normalizedUri: aliasUri,
+        resourceType: 'metaapp',
+        title: 'Custom MetaApp',
+        owner: {
+          kind: 'metaapp-publisher',
+          globalMetaId: 'idq1metaappowner',
+          name: 'Custom MetaApp Owner',
+          verificationState: 'partial',
+        },
+        renderer: {
+          type: 'html-iframe',
+          contentType: 'text/html',
+          url: '/api/metaapp/preview-assets/custom/index.html',
+        },
+        status: { state: 'resolved', verificationState: 'partial', message: '' },
+        proof: { pinId: 'custom-pin', verificationState: 'partial' },
+        source: {
+          resolver: 'test',
+          raw: {
+            aliasUri,
+            customHomepageUri,
+          },
+        },
+        actions: [
+          { id: 'copy-uri', label: 'Copy URI', kind: 'copy', enabled: true, uri: aliasUri },
+        ],
+      },
+    }),
+  });
+
+  await waitFor(
+    () => context.state.current && elements['[data-browser-uri-input]'].value === aliasUri,
+    'custom target alias address',
+  );
+
+  assert.equal(context.state.current.resourceType, 'metaapp');
+  assert.equal(context.state.current.normalizedUri, aliasUri);
+  assert.equal(elements['[data-browser-uri-input]'].value, aliasUri);
+  assert.equal(fetchCalls.some((call) => call.includes('metaapp%3A%2F%2F')), false);
+});
+
 test('Browser Metafile deep link path is decoded into the address bar and resolved', async () => {
   const pinId = 'f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0.pdf';
   const { elements, fetchCalls } = createBrowserContext({ pathname: `/browser/metafile/${pinId}` });
