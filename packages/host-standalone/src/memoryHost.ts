@@ -1,6 +1,10 @@
 import {
+  applyBrowserSettingsUpdate,
   buildBotHomepageEnvelope,
+  createBrowserSettingsSnapshot,
   parseBrowserUri,
+  type BrowserConfigContainer,
+  type BrowserSettingsSnapshot as CoreBrowserSettingsSnapshot,
 } from '@openagentinternet/agent-browser-core';
 import {
   browserFailure,
@@ -87,22 +91,19 @@ function runtime(defaultUri: string): BrowserRuntimeSnapshot {
   };
 }
 
+function toHostSettingsSnapshot(snapshot: CoreBrowserSettingsSnapshot): BrowserSettingsSnapshot {
+  return {
+    browser: { ...snapshot.browser },
+    effectiveBrowser: { ...snapshot.effectiveBrowser },
+    defaults: { ...snapshot.defaults },
+  };
+}
+
 export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInput = {}): BrowserHostAdapter {
   const now = input.now ?? Date.now;
   const defaultUri = input.defaultUri ?? 'metaid://idq1fixturebot';
-  let settings: BrowserSettingsSnapshot = {
-    browser: {
-      botHomepageTemplateId: 'document',
-    },
-    effectiveBrowser: {
-      botHomepageTemplateId: 'document',
-      localMode: false,
-    },
-    defaults: {
-      botHomepageTemplateId: 'document',
-      localMode: false,
-    },
-  };
+  let config: BrowserConfigContainer = { browser: { botHomepageTemplateId: 'document' } };
+  let settings: BrowserSettingsSnapshot = toHostSettingsSnapshot(createBrowserSettingsSnapshot({ config }));
   let cacheClearedAt: number | null = null;
 
   function ensureActor(actorId?: string) {
@@ -178,16 +179,13 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
       return browserSuccess(settings);
     },
     async updateSettings(input) {
-      settings = {
-        browser: input.browser ?? {},
-        effectiveBrowser: {
-          ...settings.defaults,
-          ...(input.browser ?? {}),
-          localMode: false,
-        },
-        defaults: settings.defaults,
-      };
-      return browserSuccess(settings);
+      try {
+        config = applyBrowserSettingsUpdate(config, input.browser);
+        settings = toHostSettingsSnapshot(createBrowserSettingsSnapshot({ config }));
+        return browserSuccess(settings);
+      } catch (error) {
+        return browserFailure('invalid_argument', error instanceof Error ? error.message : String(error));
+      }
     },
     async getCache(actorInput = {}) {
       const failure = ensureActor(actorInput.actorId);

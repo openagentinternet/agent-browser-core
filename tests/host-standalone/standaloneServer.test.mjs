@@ -209,6 +209,8 @@ test('memory standalone Browser host keeps settings global while cache remains a
 
   const missingActorSettings = await host.getSettings({ actorId: 'missing' });
   assert.equal(missingActorSettings.ok, true);
+  assert.equal(missingActorSettings.data.effectiveBrowser.renderCustomBotPages, true);
+  assert.equal(missingActorSettings.data.defaults.renderCustomBotPages, true);
 
   const updated = await host.updateSettings({
     actorId: 'missing',
@@ -220,6 +222,20 @@ test('memory standalone Browser host keeps settings global while cache remains a
   assert.equal(updated.ok, true);
   assert.equal(updated.data.effectiveBrowser.botHomepageTemplateId, 'compact-list');
   assert.equal(updated.data.effectiveBrowser.renderCustomBotPages, false);
+
+  const invalid = await host.updateSettings({
+    actorId: 'missing',
+    browser: {
+      renderCustomBotPages: 'false',
+    },
+  });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.code, 'invalid_argument');
+  assert.match(invalid.message, /browser\.renderCustomBotPages must be a boolean/);
+
+  const missingActorRuntime = await host.getRuntime({ actorId: 'missing' });
+  assert.equal(missingActorRuntime.ok, false);
+  assert.equal(missingActorRuntime.code, 'actor_not_found');
 
   const missingActorCache = await host.getCache({ actorId: 'missing' });
   assert.equal(missingActorCache.ok, false);
