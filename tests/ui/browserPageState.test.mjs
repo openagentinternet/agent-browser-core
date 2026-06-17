@@ -8,7 +8,8 @@ const { buildBrowserPageDefinition } = require('../../packages/ui/dist/browser/a
 
 class FakeElement {
   constructor(value = '') {
-    this.value = value;
+    this._value = String(value);
+    this.valueHistory = [];
     this.textContent = '';
     this._innerHTML = '';
     this.hidden = false;
@@ -28,6 +29,16 @@ class FakeElement {
         else delete this.attrs[`class:${name}`];
       },
     };
+  }
+
+  get value() {
+    return this._value;
+  }
+
+  set value(value) {
+    const nextValue = String(value);
+    this._value = nextValue;
+    this.valueHistory.push(nextValue);
   }
 
   get innerHTML() {
@@ -173,6 +184,7 @@ function createBrowserContext(options = {}) {
       manApiBaseUrl: 'https://manapi.metaid.io',
       blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
+      renderCustomBotPages: true,
       defaultChainName: 'mvc',
       localMode: true,
     },
@@ -182,6 +194,7 @@ function createBrowserContext(options = {}) {
       manApiBaseUrl: 'https://manapi.metaid.io',
       blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
+      renderCustomBotPages: true,
       defaultChainName: 'mvc',
       localMode: true,
     },
@@ -191,6 +204,7 @@ function createBrowserContext(options = {}) {
       manApiBaseUrl: 'https://manapi.metaid.io',
       blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
+      renderCustomBotPages: true,
       defaultChainName: 'mvc',
       localMode: true,
     },
@@ -317,6 +331,59 @@ test('Browser address input displays the resolver-normalized URI for a bare Glob
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=${encodeURIComponent(globalMetaId)}&actorId=worker`);
   assert.equal(elements['[data-browser-uri-input]'].value, canonicalUri);
   assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
+});
+
+test('Browser preserves metaid address when resolver returns custom target resource model', async () => {
+  const aliasUri = 'metaid://idq1custombot';
+  const customHomepageUri = 'metaapp://custom-pin';
+  const { context, elements, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1custombot',
+    resolveResponse: () => ({
+      ok: true,
+      data: {
+        uri: aliasUri,
+        normalizedUri: aliasUri,
+        resourceType: 'metaapp',
+        title: 'Custom MetaApp',
+        owner: {
+          kind: 'metaapp-publisher',
+          globalMetaId: 'idq1metaappowner',
+          name: 'Custom MetaApp Owner',
+          verificationState: 'partial',
+        },
+        renderer: {
+          type: 'html-iframe',
+          contentType: 'text/html',
+          url: '/api/metaapp/preview-assets/custom/index.html',
+        },
+        status: { state: 'resolved', verificationState: 'partial', message: '' },
+        proof: { pinId: 'custom-pin', verificationState: 'partial' },
+        source: {
+          resolver: 'test',
+          raw: {
+            aliasUri,
+            customHomepageUri,
+          },
+        },
+        actions: [
+          { id: 'copy-uri', label: 'Copy URI', kind: 'copy', enabled: true, uri: aliasUri },
+        ],
+      },
+    }),
+  });
+
+  await waitFor(
+    () => context.state.current && elements['[data-browser-uri-input]'].value === aliasUri,
+    'custom target alias address',
+  );
+
+  assert.equal(context.state.current.resourceType, 'metaapp');
+  assert.equal(context.state.current.normalizedUri, aliasUri);
+  assert.equal(elements['[data-browser-uri-input]'].value, aliasUri);
+  assert.equal(fetchCalls[1], '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1custombot&actorId=worker');
+  assert.equal(fetchCalls.some((call) => call.includes('metaapp%3A%2F%2F')), false);
+  assert.deepEqual(elements['[data-browser-uri-input]'].valueHistory, [aliasUri, aliasUri, aliasUri]);
+  assert.equal(elements['[data-browser-uri-input]'].valueHistory.includes(customHomepageUri), false);
 });
 
 test('Browser Metafile deep link path is decoded into the address bar and resolved', async () => {
@@ -707,7 +774,7 @@ test('Browser menu is data-driven and opens cache management settings', async ()
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /Cache/);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /\/tmp\/\.metabot\/cache\/metaapps/);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /2 artifacts/);
-  assert.equal(fetchCalls.at(-2), '/api/browser/settings?actorId=worker');
+  assert.equal(fetchCalls.at(-2), '/api/browser/settings');
   assert.equal(fetchCalls.at(-1), '/api/browser/cache?actorId=worker');
 });
 
@@ -724,13 +791,73 @@ test('Browser template settings select the default Bot homepage template', async
   assert.equal(elements['[data-browser-modal-root]'].hidden, false);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /Document/);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /Compact List/);
+  assert.equal(fetchCalls.at(-2), '/api/browser/settings');
+  assert.equal(fetchCalls.at(-1), '/api/browser/cache?actorId=worker');
 
   await context.selectBotHomepageTemplate('compact-list');
 
   assert.equal(context.state.settingsData.browser.botHomepageTemplateId, 'compact-list');
   assert.equal(context.state.current.renderer.templateId, 'compact-list');
   assert.match(elements['[data-browser-viewport]'].innerHTML, /browser-bot-template-compact-list/);
-  assert.equal(fetchCalls.at(-1), '/api/browser/settings?actorId=worker');
+  assert.equal(fetchCalls.includes('/api/browser/settings?actorId=worker'), false);
+});
+
+test('Browser template settings render global custom Bot Page toggle with tooltip help', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext();
+
+  await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
+  await context.handleBrowserMenuAction('templates');
+
+  const html = elements['[data-browser-modal-root]'].innerHTML;
+  assert.match(html, /Render Custom Bot Pages/);
+  assert.match(html, /data-browser-custom-pages-toggle/);
+  assert.match(html, /role="switch"/);
+  assert.match(html, /aria-checked="true"/);
+  assert.match(html, /data-browser-custom-pages-help/);
+  assert.doesNotMatch(html, />When enabled, Bot Pages can render the custom MetaApp or Metafile declared on \/info\/homepage/);
+});
+
+test('Browser custom Bot Page toggle saves globally and re-resolves the current URI', async () => {
+  const { context, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1custombot',
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
+  await context.handleBrowserMenuAction('templates');
+  await context.toggleCustomBotPages();
+
+  assert.equal(context.state.settingsData.browser.renderCustomBotPages, false);
+  assert.equal(fetchCalls.includes('/api/browser/settings?actorId=worker'), false);
+  assert.ok(fetchCalls.includes('/api/browser/settings'));
+  assert.ok(fetchCalls.filter((call) => call.startsWith('/api/browser/resolve?uri=metaid%3A%2F%2Fidq1custombot')).length >= 2);
+  assert.equal(context.state.current.normalizedUri, 'metaid://idq1custombot');
+});
+
+test('Browser custom Bot Page toggle is wired through modal click delegation', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1custombot',
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
+  await context.handleBrowserMenuAction('templates');
+
+  const modalClick = elements['[data-browser-modal-root]'].listeners.get('click');
+  assert.equal(typeof modalClick, 'function');
+  modalClick({
+    target: {
+      parentElement: null,
+      getAttribute(name) {
+        return name === 'data-browser-custom-pages-toggle' ? '' : null;
+      },
+      hasAttribute(name) {
+        return name === 'data-browser-custom-pages-toggle';
+      },
+    },
+  });
+  await waitFor(() => context.state.settingsData.browser.renderCustomBotPages === false, 'delegated custom pages toggle');
+
+  assert.equal(fetchCalls.includes('/api/browser/settings?actorId=worker'), false);
+  assert.ok(fetchCalls.filter((call) => call.startsWith('/api/browser/resolve?uri=metaid%3A%2F%2Fidq1custombot')).length >= 2);
 });
 
 test('Browser history controls navigate without replacing Browser chrome', async () => {

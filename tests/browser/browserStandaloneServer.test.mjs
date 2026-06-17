@@ -84,17 +84,23 @@ test('standalone Browser server exposes runtime, settings, cache, and action rou
     noActorBody: 'Standalone Browser is running with a development wallet actor.',
   });
 
-  const settings = await readJson(await fetch(`${baseUrl}/api/browser/settings?actorId=standalone-wallet`));
+  const settings = await readJson(await fetch(`${baseUrl}/api/browser/settings`));
   assert.equal(settings.ok, true);
   assert.equal(settings.data.effectiveBrowser.localMode, false);
 
-  const updated = await readJson(await fetch(`${baseUrl}/api/browser/settings?actorId=standalone-wallet`, {
+  const updated = await readJson(await fetch(`${baseUrl}/api/browser/settings`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ browser: { botHomepageTemplateId: 'compact-list' } }),
+    body: JSON.stringify({ browser: { botHomepageTemplateId: 'compact-list', renderCustomBotPages: false } }),
   }));
   assert.equal(updated.ok, true);
   assert.equal(updated.data.effectiveBrowser.botHomepageTemplateId, 'compact-list');
+  assert.equal(updated.data.effectiveBrowser.renderCustomBotPages, false);
+
+  const missingActorSettings = await readJson(await fetch(`${baseUrl}/api/browser/settings?actorId=missing`));
+  assert.equal(missingActorSettings.ok, true);
+  assert.equal(missingActorSettings.data.effectiveBrowser.botHomepageTemplateId, 'compact-list');
+  assert.equal(missingActorSettings.data.effectiveBrowser.renderCustomBotPages, false);
 
   const cache = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`));
   assert.equal(cache.ok, true);

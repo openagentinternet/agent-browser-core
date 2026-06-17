@@ -84,14 +84,40 @@ test('standalone Browser server exposes runtime resolve settings cache and actio
   const settings = await json(await fetch(`${baseUrl}/api/browser/settings`));
   assert.equal(settings.ok, true);
   assert.equal(settings.data.effectiveBrowser.botHomepageTemplateId, 'document');
+  assert.equal(settings.data.effectiveBrowser.renderCustomBotPages, true);
 
   const updated = await json(await fetch(`${baseUrl}/api/browser/settings`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ browser: { botHomepageTemplateId: 'compact-list' } }),
+    body: JSON.stringify({
+      browser: {
+        botHomepageTemplateId: 'compact-list',
+        renderCustomBotPages: false,
+      },
+    }),
   }));
   assert.equal(updated.ok, true);
   assert.equal(updated.data.effectiveBrowser.botHomepageTemplateId, 'compact-list');
+  assert.equal(updated.data.effectiveBrowser.renderCustomBotPages, false);
+
+  const missingActorSettings = await json(await fetch(`${baseUrl}/api/browser/settings?actorId=missing`));
+  assert.equal(missingActorSettings.ok, true);
+  assert.equal(missingActorSettings.data.effectiveBrowser.botHomepageTemplateId, 'compact-list');
+  assert.equal(missingActorSettings.data.effectiveBrowser.renderCustomBotPages, false);
+
+  const missingActorUpdated = await json(await fetch(`${baseUrl}/api/browser/settings?actorId=missing`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      browser: {
+        botHomepageTemplateId: 'document',
+        renderCustomBotPages: true,
+      },
+    }),
+  }));
+  assert.equal(missingActorUpdated.ok, true);
+  assert.equal(missingActorUpdated.data.effectiveBrowser.botHomepageTemplateId, 'document');
+  assert.equal(missingActorUpdated.data.effectiveBrowser.renderCustomBotPages, true);
 
   const cache = await json(await fetch(`${baseUrl}/api/browser/cache`));
   assert.equal(cache.ok, true);
@@ -165,11 +191,55 @@ test('standalone Browser server maps bad client requests to explicit failures', 
   assert.equal(badActor.ok, false);
   assert.equal(badActor.code, 'actor_not_found');
 
+  const badCacheActorResponse = await fetch(`${baseUrl}/api/browser/cache?actorId=missing`);
+  const badCacheActor = await json(badCacheActorResponse);
+  assert.equal(badCacheActorResponse.status, 404);
+  assert.equal(badCacheActor.ok, false);
+  assert.equal(badCacheActor.code, 'actor_not_found');
+
   const methodResponse = await fetch(`${baseUrl}/api/browser/runtime`, { method: 'POST' });
   const method = await json(methodResponse);
   assert.equal(methodResponse.status, 405);
   assert.equal(method.ok, false);
   assert.equal(method.code, 'method_not_allowed');
+});
+
+test('memory standalone Browser host keeps settings global while cache remains actor-scoped', async () => {
+  const host = standalone.createMemoryStandaloneBrowserHost();
+
+  const missingActorSettings = await host.getSettings({ actorId: 'missing' });
+  assert.equal(missingActorSettings.ok, true);
+  assert.equal(missingActorSettings.data.effectiveBrowser.renderCustomBotPages, true);
+  assert.equal(missingActorSettings.data.defaults.renderCustomBotPages, true);
+
+  const updated = await host.updateSettings({
+    actorId: 'missing',
+    browser: {
+      botHomepageTemplateId: 'compact-list',
+      renderCustomBotPages: false,
+    },
+  });
+  assert.equal(updated.ok, true);
+  assert.equal(updated.data.effectiveBrowser.botHomepageTemplateId, 'compact-list');
+  assert.equal(updated.data.effectiveBrowser.renderCustomBotPages, false);
+
+  const invalid = await host.updateSettings({
+    actorId: 'missing',
+    browser: {
+      renderCustomBotPages: 'false',
+    },
+  });
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.code, 'invalid_argument');
+  assert.match(invalid.message, /browser\.renderCustomBotPages must be a boolean/);
+
+  const missingActorRuntime = await host.getRuntime({ actorId: 'missing' });
+  assert.equal(missingActorRuntime.ok, false);
+  assert.equal(missingActorRuntime.code, 'actor_not_found');
+
+  const missingActorCache = await host.getCache({ actorId: 'missing' });
+  assert.equal(missingActorCache.ok, false);
+  assert.equal(missingActorCache.code, 'actor_not_found');
 });
 
 test('standalone CLI rejects listen errors', async (t) => {

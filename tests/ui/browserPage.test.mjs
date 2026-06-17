@@ -37,6 +37,9 @@ test('Browser root API uses the generated mature inline CSS template', async () 
   assert.match(template, /\.browser-viewport \{\n        grid-row: 1;\n        grid-column: 1;/);
   assert.match(template, /\.browser-owner-toolbar \{/);
   assert.match(template, /\.browser-modal-panel \{/);
+  assert.match(template, /\.browser-custom-pages-setting \{/);
+  assert.match(template, /\.browser-help-icon \{/);
+  assert.match(template, /\.browser-settings-section-label \{/);
   assert.match(template, /\.browser-address-form input:focus-visible \{\n        outline: none;\n        outline-offset: 0;\n      \}/);
   assert.match(html, /body:has\(\.browser-shell\)/);
   assert.doesNotMatch(html, /__PAGE_CONTENT__|__PAGE_TITLE__|__PAGE_SCRIPT__/);
@@ -67,6 +70,7 @@ test('Browser client script includes mature renderer, modal, owner, and share fl
   assert.match(definition.script, /function renderRenderer\(current\)/);
   assert.match(definition.script, /function openUsingIdentitySelector\(\)/);
   assert.match(definition.script, /async function selectBotHomepageTemplate\(templateId\)/);
+  assert.match(definition.script, /async function toggleCustomBotPages\(\)/);
   assert.match(definition.script, /state\.pendingPrivateChat = \{/);
   assert.match(definition.script, /state\.pendingServiceCall = \{/);
   assert.match(definition.script, /data-browser-owner-action="share"/);

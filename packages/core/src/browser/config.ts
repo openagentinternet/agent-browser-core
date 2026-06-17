@@ -22,6 +22,7 @@ export function createDefaultBrowserConfig(): BrowserBaseConfig {
     blockExplorerBaseUrl: DEFAULT_BLOCK_EXPLORER_BASE_URL,
     walletApiBaseUrl: '',
     botHomepageTemplateId: DEFAULT_BOT_HOMEPAGE_TEMPLATE_ID,
+    renderCustomBotPages: true,
     localMode: false,
   };
 }
@@ -49,6 +50,9 @@ export function resolveBrowserConfig(
       || normalizeUrl(browser.walletApiBaseUrl)
       || defaults.walletApiBaseUrl,
     botHomepageTemplateId: normalizeBotHomepageTemplateId(browser.botHomepageTemplateId),
+    renderCustomBotPages: typeof browser.renderCustomBotPages === 'boolean'
+      ? browser.renderCustomBotPages
+      : defaults.renderCustomBotPages,
     localMode: typeof browser.localMode === 'boolean' ? browser.localMode : defaults.localMode,
   };
 }

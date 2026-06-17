@@ -96,6 +96,13 @@ export function applyBrowserSettingsUpdate<TConfig extends BrowserConfigContaine
     nextBrowser.botHomepageTemplateId = templateId;
   }
 
+  if (Object.prototype.hasOwnProperty.call(browserInput, 'renderCustomBotPages')) {
+    if (typeof browserInput.renderCustomBotPages !== 'boolean') {
+      throw new Error('browser.renderCustomBotPages must be a boolean');
+    }
+    nextBrowser.renderCustomBotPages = browserInput.renderCustomBotPages;
+  }
+
   if (Object.prototype.hasOwnProperty.call(browserInput, 'localMode')) {
     nextBrowser.localMode = browserInput.localMode === true;
   }

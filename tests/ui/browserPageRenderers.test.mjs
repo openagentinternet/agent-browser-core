@@ -199,6 +199,40 @@ test('html-iframe renderer is sandboxed without privileged permissions', async (
   assert.doesNotMatch(html, /wallet|payment|signing/i);
 });
 
+test('custom Bot Page alias renders target renderer while preserving source details', async () => {
+  const aliasUri = 'metaid://idq1custombot';
+  const customHomepageUri = 'metaapp://custom-pin';
+  const { context, nodes } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: '/api/metaapp/preview-assets/custom/index.html',
+  }, {
+    uri: aliasUri,
+    normalizedUri: aliasUri,
+    resourceType: 'metaapp',
+    title: 'Custom MetaApp',
+    source: {
+      resolver: 'test',
+      raw: {
+        aliasUri,
+        customHomepageUri,
+      },
+    },
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'custom alias iframe render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /<iframe class="browser-html-frame" sandbox="allow-scripts" src="\/api\/metaapp\/preview-assets\/custom\/index\.html"/);
+  assert.equal(context.state.current.normalizedUri, aliasUri);
+  assert.equal(context.state.current.source.raw.aliasUri, aliasUri);
+  assert.equal(context.state.current.source.raw.customHomepageUri, customHomepageUri);
+
+  context.renderInspector();
+  const inspector = nodes['[data-browser-inspector]'].innerHTML;
+  assert.match(inspector, /customHomepageUri/);
+  assert.match(inspector, /metaapp:\/\/custom-pin/);
+});
+
 test('pdf, image, and video render with content-specific elements', async () => {
   const pdf = runWithResolve(result({ type: 'pdf', contentType: 'application/pdf', url: 'https://files.example/a.pdf' }));
   await waitFor(() => pdf.nodes['[data-browser-viewport]'].innerHTML.includes('browser-pdf'), 'pdf render');
