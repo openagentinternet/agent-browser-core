@@ -66,6 +66,64 @@ test('html iframe renderer is sandboxed and rejects unsafe URLs', () => {
   assert.doesNotMatch(blocked, /javascript:alert/);
 });
 
+test('UI renders protocol-pin resources through first-party renderer pack', () => {
+  const html = ui.renderResourceHtml({
+    uri: 'map://simplebuzz/pin/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    normalizedUri: 'map://simplebuzz/pin/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    resourceType: 'protocol',
+    title: 'Buzz Detail',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+    renderer: {
+      type: 'protocol-pin',
+      contentType: 'application/json',
+      data: {
+        rendererId: 'simplebuzz.detail',
+        protocolPath: '/protocols/simplebuzz',
+        payload: { content: 'Full buzz text' },
+        version: {
+          requestedPinId: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+          resolvedPinId: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+          versionSelector: 'latest',
+        },
+      },
+    },
+    actions: [],
+    sections: [],
+  });
+
+  assert.match(html, /browser-simplebuzz-detail/);
+  assert.match(html, /Full buzz text/);
+});
+
+test('UI renders host-action resources as trusted action panels', () => {
+  const html = ui.renderResourceHtml({
+    uri: 'map://simplemsg/conversation?peer=idq1peer',
+    normalizedUri: 'map://simplemsg/conversation?peer=idq1peer',
+    resourceType: 'conversation',
+    title: 'Conversation',
+    owner: { kind: 'unknown', name: 'idq1peer', verificationState: 'partial' },
+    renderer: {
+      type: 'host-action',
+      contentType: 'application/vnd.openagent.browser.host-action+json',
+      data: { actionKind: 'open-conversation', actionId: 'open-conversation' },
+    },
+    actions: [{
+      id: 'open-conversation',
+      label: 'Conversation',
+      kind: 'open-conversation',
+      enabled: true,
+      payload: {
+        conversationUri: 'map://simplemsg/conversation?peer=idq1peer',
+        peerGlobalMetaId: 'idq1peer',
+      },
+    }],
+    sections: [],
+  });
+
+  assert.match(html, /data-browser-action="open-conversation"/);
+  assert.match(html, /Conversation/);
+});
+
 test('safeRendererUrl allows local http and https URLs only', () => {
   assert.equal(ui.safeRendererUrl('/local/path'), '/local/path');
   assert.equal(ui.safeRendererUrl('https://example.test/app'), 'https://example.test/app');

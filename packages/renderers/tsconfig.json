@@ -9,8 +9,6 @@
     "src/**/*.ts"
   ],
   "references": [
-    { "path": "../host-contract" },
-    { "path": "../core" },
-    { "path": "../renderers" }
+    { "path": "../host-contract" }
   ]
 }

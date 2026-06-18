@@ -3,6 +3,7 @@
   "packages": {
     "@openagentinternet/agent-browser-host-contract": "0.3.0",
     "@openagentinternet/agent-browser-core": "0.3.0",
+    "@openagentinternet/agent-browser-renderers": "0.3.0",
     "@openagentinternet/agent-browser-ui": "0.3.0",
     "@openagentinternet/agent-browser-host-standalone": "0.3.0",
     "@openagentinternet/agent-browser-test-harness": "0.3.0"

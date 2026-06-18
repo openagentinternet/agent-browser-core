@@ -1,11 +1,11 @@
 {
-  "name": "@openagentinternet/agent-browser-ui",
+  "name": "@openagentinternet/agent-browser-renderers",
   "version": "0.3.0",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/openagentinternet/agent-browser-core.git",
-    "directory": "packages/ui"
+    "directory": "packages/renderers"
   },
   "type": "module",
   "main": "./dist-cjs/index.js",
@@ -24,17 +24,10 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist-cjs/index.js"
-    },
-    "./browser": {
-      "types": "./dist/browser/index.d.ts",
-      "import": "./dist/browser/index.js",
-      "require": "./dist-cjs/browser/index.js"
     }
   },
   "dependencies": {
-    "@openagentinternet/agent-browser-core": "0.3.0",
-    "@openagentinternet/agent-browser-host-contract": "0.3.0",
-    "@openagentinternet/agent-browser-renderers": "0.3.0"
+    "@openagentinternet/agent-browser-host-contract": "0.3.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"

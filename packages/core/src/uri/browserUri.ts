@@ -1,4 +1,6 @@
-export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile';
+import { parseMapUri } from '../browser/mapUri.js';
+
+export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile' | 'map';
 
 export interface ParsedBrowserUri {
   originalUri: string;
@@ -7,7 +9,7 @@ export interface ParsedBrowserUri {
   id: string;
 }
 
-const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'metafile']);
+const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'metafile', 'map']);
 const GLOBAL_META_ID_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 const GLOBAL_META_ID_CHECKSUM_LENGTH = 6;
 const GLOBAL_META_ID_VERSION_CHARS = new Set(['q', 'p', 'z', 'r', 'y', 't']);
@@ -146,6 +148,16 @@ export function parseBrowserUri(input: string): ParsedBrowserUri {
   const id = schemeMatch[2].trim();
   if (!id) {
     throw new Error('Agent Internet URI has an empty resource id.');
+  }
+
+  if (scheme === 'map') {
+    const parsed = parseMapUri(originalUri);
+    return {
+      originalUri,
+      normalizedUri: parsed.normalizedUri,
+      scheme,
+      id: parsed.normalizedUri.slice('map://'.length),
+    };
   }
 
   return {

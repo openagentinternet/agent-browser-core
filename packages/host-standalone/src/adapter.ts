@@ -614,6 +614,18 @@ export function createStandaloneBrowserHostAdapter(
         action: { label: 'Connect wallet', route: '/browser/login' },
       });
     }
+    if (actionInput.kind === 'open-conversation') {
+      return browserManualActionRequired(
+        'browser_identity_required',
+        'Standalone Browser cannot open private conversations until a local identity is selected.',
+        {
+          data: {
+            conversationUri: normalizeText(actionInput.payload?.conversationUri),
+            peerGlobalMetaId: normalizeText(actionInput.payload?.peerGlobalMetaId),
+          },
+        },
+      );
+    }
     return browserFailure(
       'browser_action_not_supported',
       `Standalone Browser does not support trusted action: ${actionInput.kind}`,

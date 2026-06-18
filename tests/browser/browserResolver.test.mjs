@@ -364,3 +364,31 @@ test('resolveBrowserResource fails closed when custom homepage target resolution
   assert.equal(result.code, 'browser_resource_not_found');
   assert.equal(result.message, 'Custom target not found.');
 });
+
+test('resolveBrowserResource dispatches map URI to protocol resolver', async () => {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  const result = await resolveBrowserResource({
+    uri: `map://unknown-protocol/pin/${pinId}`,
+    config: browserConfig(),
+    fetch: async (url) => {
+      assert.equal(String(url), `https://man.example.test/pin/${pinId}`);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            id: pinId,
+            path: '/protocols/unknown-protocol',
+            operation: 'create',
+            contentType: 'text/plain',
+            content: 'raw protocol body',
+          },
+        }),
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.renderer.type, 'protocol-pin');
+  assert.equal(result.data.renderer.data.rendererId, 'generic.protocol-pin');
+});

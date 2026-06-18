@@ -41,3 +41,45 @@ test('parseBrowserUri rejects missing, empty, and unsupported schemes', () => {
   assert.throws(() => core.parseBrowserUri('metaid://'), /empty resource id/i);
   assert.throws(() => core.parseBrowserUri('https://example.com'), /unsupported URI scheme/i);
 });
+
+test('parseMapUri parses protocol pins and conversation targets', () => {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+
+  assert.deepEqual(core.parseMapUri(`map://simplebuzz/pin/${pinId}`), {
+    originalUri: `map://simplebuzz/pin/${pinId}`,
+    normalizedUri: `map://simplebuzz/pin/${pinId}`,
+    authority: 'simplebuzz',
+    protocolPath: '/protocols/simplebuzz',
+    targetKind: 'pin',
+    pinId,
+    versionSelector: 'latest',
+  });
+
+  assert.deepEqual(core.parseMapUri(`map://simplebuzz/pin/${pinId}[1]`), {
+    originalUri: `map://simplebuzz/pin/${pinId}[1]`,
+    normalizedUri: `map://simplebuzz/pin/${pinId}?version=1`,
+    authority: 'simplebuzz',
+    protocolPath: '/protocols/simplebuzz',
+    targetKind: 'pin',
+    pinId,
+    versionSelector: 'history-index',
+    historyIndex: 1,
+  });
+
+  assert.deepEqual(core.parseMapUri('map://simplemsg/conversation?peer=idq1peer'), {
+    originalUri: 'map://simplemsg/conversation?peer=idq1peer',
+    normalizedUri: 'map://simplemsg/conversation?peer=idq1peer',
+    authority: 'simplemsg',
+    protocolPath: '/protocols/simplemsg',
+    targetKind: 'conversation',
+    peerGlobalMetaId: 'idq1peer',
+  });
+});
+
+test('parseMapUri rejects aliases, empty paths, and invalid history selectors', () => {
+  assert.throws(() => core.parseMapUri('map://buzz/pin/abc'), /pinId/i);
+  assert.throws(() => core.parseMapUri('map://simplebuzz/pin/abc[-1]'), /history/i);
+  assert.throws(() => core.parseMapUri('map://simplebuzz/pin/abc?version=latest'), /version/i);
+  assert.throws(() => core.parseMapUri('map://simplemsg/conversation'), /peer/i);
+  assert.throws(() => core.parseMapUri('map://simplebuzz/render/abc'), /unsupported MAP path/i);
+});

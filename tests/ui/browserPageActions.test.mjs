@@ -192,6 +192,14 @@ function ownerActionTarget(action) {
   };
 }
 
+function browserActionTarget(attrs) {
+  return {
+    parentElement: null,
+    getAttribute: (name) => attrs[name] || '',
+    hasAttribute: (name) => Object.prototype.hasOwnProperty.call(attrs, name),
+  };
+}
+
 function modalShareCopyTarget(value) {
   return {
     parentElement: null,
@@ -241,6 +249,41 @@ test('private-chat sends only after modal confirmation with Browser action contr
   assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body, 'from'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body.payload, 'peer'), false);
   assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body.payload, 'message'), false);
+});
+
+test('viewport open-conversation action posts payload and follows returned href', async () => {
+  const { context, nodes, requests } = createContext({
+    actionResponse: {
+      ok: true,
+      data: {
+        kind: 'open-conversation',
+        handled: true,
+        data: { href: '/ui/conversations?local=idq1worker&peer=idq1peer' },
+      },
+    },
+  });
+
+  await context.initialize();
+  nodes['[data-browser-viewport]'].listeners.get('click')({
+    preventDefault() {},
+    target: browserActionTarget({
+      'data-browser-action': 'open-conversation',
+      'data-browser-action-id': 'conversation',
+      'data-browser-action-payload': JSON.stringify({
+        conversationUri: 'map://simplemsg/conversation?peer=idq1peer',
+        peerGlobalMetaId: 'idq1peer',
+      }),
+    }),
+  });
+  await waitFor(() => requests.length === 1, 'open-conversation action post');
+  await waitFor(
+    () => context.window.location.href === '/ui/conversations?local=idq1worker&peer=idq1peer',
+    'conversation href navigation',
+  );
+
+  assert.equal(requests[0].body.kind, 'open-conversation');
+  assert.equal(requests[0].body.payload.peerGlobalMetaId, 'idq1peer');
+  assert.equal(context.window.location.href, '/ui/conversations?local=idq1worker&peer=idq1peer');
 });
 
 test('browser renders the no-Bot and owner toolbar launch chrome in Simplified Chinese', () => {

@@ -213,6 +213,12 @@ function safeUrl(rawValue) {
   }
 }
 
+function mapPinHref(protocolPath, pinId) {
+  var protocol = textValue(protocolPath).replace(/^\\/protocols\\//, '');
+  var id = textValue(pinId);
+  return protocol && isBrowserPinId(id) ? 'map://' + protocol + '/pin/' + encodeURIComponent(id.toLowerCase()) : '';
+}
+
 function shortId(value) {
   var text = textValue(value);
   if (!text) return '';
@@ -224,6 +230,10 @@ function txidFromPinId(value) {
   var text = textValue(value);
   var match = text.match(/^([0-9a-f]{64})i[0-9]+$/i);
   return match ? match[1] : '';
+}
+
+function isBrowserPinId(value) {
+  return /^[0-9a-f]{64}i[0-9]+$/i.test(textValue(value));
 }
 
 function proofTxid(proof) {
@@ -324,6 +334,7 @@ function proofIconHtml(value) {
 }
 
 function actionIconName(kind) {
+  if (kind === 'open-conversation') return 'message';
   if (kind === 'private-chat') return 'message';
   if (kind === 'service-call' || kind === 'service-list') return 'service';
   if (kind === 'copy') return 'copy';
@@ -413,19 +424,29 @@ function browserSettingsEndpoint() {
   return browserEndpoints.settings;
 }
 
-function browserUriFromPath(pathname) {
-  var match = textValue(pathname).match(/^\\/browser\\/(metaid|metaapp|metafile)\\/([^/?#]+)$/);
-  if (!match) return '';
-  var rawId = match[2];
-  var decodedId = rawId;
+function decodeURIComponentSafe(value) {
   try {
-    decodedId = decodeURIComponent(rawId);
+    return decodeURIComponent(value);
   } catch (error) {
-    decodedId = rawId;
+    return value;
   }
-  var id = textValue(decodedId);
-  if (!id) return '';
-  return match[1] + '://' + id;
+}
+
+function browserUriFromPath(pathname, search) {
+  var path = textValue(pathname);
+  var match = path.match(/^\\/browser\\/(metaid|metaapp|metafile)\\/([^/?#]+)$/);
+  if (match) {
+    var decodedId = decodeURIComponentSafe(match[2]);
+    var resourceId = textValue(decodedId);
+    return resourceId ? match[1] + '://' + resourceId : '';
+  }
+
+  var mapMatch = path.match(/^\\/browser\\/map\\/([^/?#]+)\\/(.+)$/);
+  if (!mapMatch) return '';
+  var authority = textValue(decodeURIComponentSafe(mapMatch[1]));
+  var rest = mapMatch[2].split('/').map(decodeURIComponentSafe).join('/');
+  var mapPath = textValue(rest);
+  return authority && mapPath ? 'map://' + authority + '/' + mapPath + textValue(search) : '';
 }
 
 function findBrowserMenuItem(itemId) {
@@ -814,23 +835,24 @@ function ownerActionPayload(owner) {
 function openTrustedActionHref(result) {
   var href = result && result.data && result.data.href;
   if (!href) return;
-  var safeHref = safeOwnerManagementHref(href);
+  var safeHref = safeTrustedActionHref(href);
   if (!safeHref) {
-    setStatus('error', 'Unsafe owner action route blocked.');
+    setStatus('error', 'Unsafe action route blocked.');
     return;
   }
   window.location.href = safeHref;
 }
 
-function safeOwnerManagementHref(value) {
+function safeTrustedActionHref(value) {
   var href = textValue(value);
   if (!href) return '';
-  if (href.indexOf('/ui/bot?') === 0) return href;
+  if (href.indexOf('/ui/bot?') === 0 || href.indexOf('/ui/conversations?') === 0) return href;
   try {
     var origin = window.location && window.location.origin ? window.location.origin : '';
     if (!origin) return '';
     var url = new URL(href, origin);
-    if (url.origin === origin && url.pathname === '/ui/bot' && url.search) {
+    if (url.origin !== origin || !url.search) return '';
+    if (url.pathname === '/ui/bot' || url.pathname === '/ui/conversations') {
       return url.pathname + url.search + url.hash;
     }
   } catch (error) {
@@ -1141,6 +1163,25 @@ function renderInspector() {
     '</dl>' + renderHomepageV3Inspector(current) + (source.raw ? '<pre>' + escapeHtml(JSON.stringify(source.raw || {}, null, 2)) + '</pre>' : '') + '</section>';
 }
 
+function actionPayloadAttribute(action) {
+  if (!action || !action.payload || typeof action.payload !== 'object') return '';
+  try {
+    return ' data-browser-action-payload="' + escapeHtml(JSON.stringify(action.payload)) + '"';
+  } catch (error) {
+    return '';
+  }
+}
+
+function parseActionPayloadAttribute(target) {
+  var raw = target && target.getAttribute ? target.getAttribute('data-browser-action-payload') : '';
+  if (!raw) return {};
+  try {
+    return objectValue(JSON.parse(raw));
+  } catch (error) {
+    return {};
+  }
+}
+
 function openInspector() {
   state.inspectorOpen = true;
   if (elements.inspector) {
@@ -1164,7 +1205,8 @@ function renderActionButtons(actions) {
     var kind = textValue(action && action.kind);
     var label = textValue(action && action.label) || kind || 'Action';
     var disabled = action && action.enabled === false ? ' disabled' : '';
-    return '<button type="button" data-browser-action="' + escapeHtml(kind) + '" data-browser-action-id="' + escapeHtml(textValue(action && action.id)) + '"' + disabled + '>' +
+    return '<button type="button" data-browser-action="' + escapeHtml(kind) + '" data-browser-action-id="' + escapeHtml(textValue(action && action.id)) + '"' +
+      actionPayloadAttribute(action) + disabled + '>' +
       iconHtml(actionIconName(kind)) + '<span>' + escapeHtml(label) + '</span></button>';
   }).join('') + '</div>';
 }
@@ -1207,11 +1249,17 @@ function botHomepageSectionItems(data, sectionId) {
 
 function normalizeBotHomepageListItem(item, index, fallbackLabel) {
   if (item && typeof item === 'object' && !Array.isArray(item)) {
+    var rawPinId = textValue(item.currentPinId || item.servicePinId || item.pinId);
+    var pinId = isBrowserPinId(rawPinId) ? rawPinId : '';
+    var protocolPath = textValue(item.protocolPath);
     var title = textValue(item.title || item.name || item.displayName || item.serviceName || item.appName || item.label || item.content || item.id || item.pinId) ||
       fallbackLabel + ' ' + (index + 1);
     var detail = readableText(item.description || item.summary || item.detail || item.content || item.text || item.bio);
     return {
-      id: textValue(item.currentPinId || item.servicePinId || item.pinId || item.id || item.uri || title),
+      id: rawPinId || textValue(item.id || item.uri || title),
+      pinId: pinId,
+      protocolPath: protocolPath,
+      mapHref: mapPinHref(protocolPath, pinId),
       title: title,
       detail: detail,
       raw: item
@@ -1236,7 +1284,9 @@ function normalizeBotHomepageList(items, fallbackLabel) {
 function normalizeBotHomepageServices(items) {
   return firstArray(items).map(function (service, index) {
     var normalized = normalizeBotHomepageListItem(service, index, 'Service');
-    normalized.serviceId = textValue(service && (service.currentPinId || service.servicePinId || service.pinId || service.id)) || normalized.id;
+    normalized.serviceId = textValue(service && (service.serviceId || service.id)) || normalized.id;
+    normalized.protocolPath = normalized.protocolPath || textValue(service && service.protocolPath) || '/protocols/skill-service';
+    normalized.mapHref = mapPinHref(normalized.protocolPath, normalized.pinId);
     return normalized;
   });
 }
@@ -1308,8 +1358,11 @@ function normalizeBotHomepagePayload(current) {
 function renderServiceRows(services) {
   return services.length
     ? services.map(function (service) {
+      var title = escapeHtml(service.name || service.title || service.id || 'Service');
+      var href = service.mapHref || mapPinHref(service.protocolPath || '/protocols/skill-service', service.pinId);
+      var titleHtml = href ? '<a href="' + escapeHtml(href) + '" data-browser-map-link>' + title + '</a>' : title;
       return '<article class="browser-service-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('service') + '</span>' +
-        '<div><strong>' + escapeHtml(service.title) + '</strong>' +
+        '<div><strong>' + titleHtml + '</strong>' +
         (service.detail ? '<p>' + escapeHtml(service.detail) + '</p>' : '') + '</div>' +
         '<button type="button" data-browser-action="service-call" data-service-id="' + escapeHtml(service.serviceId || service.id) + '">Request</button></article>';
     }).join('')
@@ -1319,8 +1372,10 @@ function renderServiceRows(services) {
 function renderGenericRows(items, emptyText, iconName) {
   return items.length
     ? items.slice(0, 6).map(function (item) {
+      var title = escapeHtml(item.title);
+      var titleHtml = item.mapHref ? '<a href="' + escapeHtml(item.mapHref) + '" data-browser-map-link>' + title + '</a>' : title;
       return '<article class="browser-activity-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml(iconName || 'activity') + '</span>' +
-        '<div><strong>' + escapeHtml(item.title) + '</strong>' +
+        '<div><strong>' + titleHtml + '</strong>' +
         (item.detail ? '<p>' + escapeHtml(item.detail) + '</p>' : '') + '</div></article>';
     }).join('')
     : '<p class="browser-muted-row">' + escapeHtml(emptyText) + '</p>';
@@ -1556,6 +1611,7 @@ async function confirmPrivateChat(messageText) {
   });
   closeModal();
   setStatus('sent', '');
+  openTrustedActionHref(result);
   return result;
 }
 
@@ -1660,6 +1716,19 @@ async function handleTrustedAction(action) {
   var kind = textValue(action && action.kind);
   if (kind === 'copy') return copyUri(action);
   if (kind === 'private-chat') return openPrivateChatModal(action);
+  if (kind === 'open-conversation') {
+    var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        resourceUri: currentResourceUri(),
+        kind: 'open-conversation',
+        payload: objectValue(action && action.payload)
+      })
+    });
+    openTrustedActionHref(result);
+    return result;
+  }
   if (kind === 'service-call') return openServiceCallModal(action);
   if (kind === 'service-list') return openServiceCallModal(action);
   if (kind === 'proof' || kind === 'creator') return openInspector();
@@ -1769,6 +1838,13 @@ async function initialize() {
   bindElements();
   if (elements.viewport) {
     elements.viewport.addEventListener('click', function (event) {
+      var mapLink = closestWithAttribute(event && event.target, 'data-browser-map-link');
+      var mapHref = mapLink && mapLink.getAttribute ? mapLink.getAttribute('href') : '';
+      if (mapHref) {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        navigateTo(mapHref);
+        return;
+      }
       var target = closestWithAttribute(event && event.target, 'data-browser-action');
       if (!target) return;
       var kind = target.getAttribute('data-browser-action');
@@ -1776,7 +1852,8 @@ async function initialize() {
       handleTrustedAction({
         kind: kind,
         id: target.getAttribute('data-browser-action-id') || '',
-        serviceId: target.getAttribute('data-service-id') || ''
+        serviceId: target.getAttribute('data-service-id') || '',
+        payload: parseActionPayloadAttribute(target)
       });
     });
   }
@@ -1915,7 +1992,7 @@ async function initialize() {
   if (elements.statusTxid) elements.statusTxid.addEventListener('click', openInspector);
 
   var queryUri = new URLSearchParams(window.location.search || '').get('uri') || '';
-  var pathUri = queryUri ? '' : browserUriFromPath(window.location && window.location.pathname);
+  var pathUri = queryUri ? '' : browserUriFromPath(window.location && window.location.pathname, window.location && window.location.search);
   var runtime = await loadRuntime();
   var initialUri = queryUri || pathUri;
   if (initialUri) {

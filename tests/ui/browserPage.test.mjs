@@ -60,9 +60,10 @@ test('Browser client script exposes mature endpoints and path/default URI boot l
   assert.match(definition.script, /settings: '\/api\/browser\/settings'/);
   assert.match(definition.script, /cache: '\/api\/browser\/cache'/);
   assert.match(definition.script, /actions: '\/api\/browser\/actions'/);
-  assert.match(definition.script, /function browserUriFromPath\(pathname\)/);
+  assert.match(definition.script, /function decodeURIComponentSafe\(value\)/);
+  assert.match(definition.script, /function browserUriFromPath\(pathname, search\)/);
   assert.match(definition.script, /var queryUri = new URLSearchParams\(window\.location\.search \|\| ''\)\.get\('uri'\) \|\| '';/);
-  assert.match(definition.script, /var pathUri = queryUri \? '' : browserUriFromPath\(window\.location && window\.location\.pathname\);/);
+  assert.match(definition.script, /var pathUri = queryUri \? '' : browserUriFromPath\(window\.location && window\.location\.pathname, window\.location && window\.location\.search\);/);
   assert.match(definition.script, /if \(runtime && runtime\.defaultUri\) \{/);
   assert.match(definition.script, /globalThis\.browserUriFromPath = browserUriFromPath;/);
   assert.match(definition.script, /globalThis\.browserEndpoints = browserEndpoints;/);

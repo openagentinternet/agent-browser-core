@@ -160,6 +160,22 @@ test('standalone Browser server exposes runtime resolve settings cache and actio
   }
 });
 
+test('standalone returns manual action for open-conversation', async () => {
+  const adapter = standalone.createStandaloneBrowserHostAdapter();
+  const result = await adapter.runTrustedAction({
+    resourceUri: 'map://simplemsg/conversation?peer=idq1peer',
+    kind: 'open-conversation',
+    payload: {
+      conversationUri: 'map://simplemsg/conversation?peer=idq1peer',
+      peerGlobalMetaId: 'idq1peer',
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.state, 'manual_action_required');
+  assert.equal(result.code, 'browser_identity_required');
+});
+
 test('standalone Browser server maps bad client requests to explicit failures', async (t) => {
   const server = standalone.createStandaloneBrowserServer();
   t.after(() => new Promise((resolve) => server.close(resolve)));

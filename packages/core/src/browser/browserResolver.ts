@@ -1,5 +1,6 @@
 import { createBotHomepageClient } from './botHomepageClient.js';
 import { buildBotPageResolveResult } from './botPageResolver.js';
+import { resolveMapUriToResource } from './mapProtocolResolver.js';
 import { resolveMetafilePinToResource } from './metafileResolver.js';
 import { buildMetaAppResolveResult } from './metaAppResolver.js';
 import { parseBrowserUri, type ParsedBrowserUri } from './uri.js';
@@ -173,6 +174,14 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
       templateId: input.config.botHomepageTemplateId,
       metafileContentBaseUrl: input.config.metafileContentBaseUrl,
     }));
+  }
+
+  if (parsed.scheme === 'map') {
+    return resolveMapUriToResource({
+      uri: parsed.normalizedUri,
+      fetch: input.fetch,
+      manApiBaseUrl: input.config.manApiBaseUrl,
+    });
   }
 
   if (parsed.scheme === 'metafile') {

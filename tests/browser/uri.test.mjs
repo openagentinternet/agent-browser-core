@@ -26,6 +26,12 @@ test('parseBrowserUri normalizes supported Browser URI schemes', () => {
     scheme: 'metafile',
     id: 'abcdef123i0.pdf',
   });
+  assert.deepEqual(parseBrowserUri(' map://simplebuzz/pin/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0[0] '), {
+    originalUri: 'map://simplebuzz/pin/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0[0]',
+    normalizedUri: 'map://simplebuzz/pin/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0?version=0',
+    scheme: 'map',
+    id: 'simplebuzz/pin/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0?version=0',
+  });
 });
 
 test('parseBrowserUri treats a bare valid Global MetaID as a metaid URI', () => {

@@ -4,6 +4,7 @@ import type {
   BrowserResourceEnvelope,
   BrowserResourceSection,
 } from '@openagentinternet/agent-browser-host-contract';
+import { renderProtocolPinHtml } from '@openagentinternet/agent-browser-renderers';
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -43,11 +44,28 @@ function sectionItemDescription(item: Record<string, unknown>): string {
   return text(item.description) || text(item.summary) || text(item.bio);
 }
 
+function actionPayloadAttribute(action: BrowserResolveAction): string {
+  if (!action.payload || typeof action.payload !== 'object') return '';
+  try {
+    return ` data-browser-action-payload="${escapeHtml(JSON.stringify(action.payload))}"`;
+  } catch {
+    return '';
+  }
+}
+
 function renderActions(actions: readonly BrowserResolveAction[]): string {
   if (actions.length === 0) return '';
   return `<div class="browser-action-row">${actions.map((action) => (
-    `<button type="button" data-browser-action="${escapeHtml(action.kind)}" data-browser-action-id="${escapeHtml(action.id)}"${action.enabled ? '' : ' disabled'}>${escapeHtml(action.label)}</button>`
+    `<button type="button" data-browser-action="${escapeHtml(action.kind)}" data-browser-action-id="${escapeHtml(action.id)}"${actionPayloadAttribute(action)}${action.enabled === false ? ' disabled' : ''}>${escapeHtml(action.label)}</button>`
   )).join('')}</div>`;
+}
+
+function renderHostAction(resource: BrowserResourceEnvelope): string {
+  const primary = resource.actions.find((action) => action.enabled !== false);
+  return `<section class="browser-empty-state browser-host-action">
+    <h2>${escapeHtml(resource.title || 'Action required')}</h2>
+    ${primary ? renderActions([primary]) : '<p>No host action is available.</p>'}
+  </section>`;
 }
 
 function renderSection(section: BrowserResourceSection): string {
@@ -107,6 +125,8 @@ export function renderResourceHtml(resource: BrowserResourceEnvelope): string {
   if (renderer.type === 'pdf') return renderUrlRenderer(renderer, 'browser-pdf', 'iframe');
   if (renderer.type === 'image') return renderUrlRenderer(renderer, 'browser-image', 'img');
   if (renderer.type === 'video') return renderUrlRenderer(renderer, 'browser-video', 'video');
+  if (renderer.type === 'protocol-pin') return renderProtocolPinHtml(resource);
+  if (renderer.type === 'host-action') return renderHostAction(resource);
   const downloadUrl = safeResourceUrl(renderer.url);
   return `<section class="browser-empty-state"><h2>Unsupported renderer</h2><p>${escapeHtml(renderer.error || renderer.contentType || 'This resource type is not supported yet.')}</p>${downloadUrl ? `<a href="${escapeHtml(downloadUrl)}" target="_blank" rel="noopener">Download file</a>` : ''}</section>`;
 }

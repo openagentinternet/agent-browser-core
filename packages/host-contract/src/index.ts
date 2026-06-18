@@ -92,7 +92,15 @@ export type BrowserTrustedActionKind =
   | 'edit-profile'
   | 'configure-chat'
   | 'view-messages'
+  | 'open-conversation'
   | 'share-resource';
+
+export interface BrowserOpenConversationPayload {
+  conversationUri: string;
+  peerGlobalMetaId: string;
+  peerName?: string;
+  initialComposerText?: string;
+}
 
 export interface BrowserTrustedActionDescriptor {
   id: string;
@@ -152,9 +160,9 @@ export interface BrowserOwnerAffinity {
 
 export type BrowserResolutionState = 'resolved' | 'loading' | 'not_found' | 'error';
 export type BrowserVerificationState = 'verified' | 'partial' | 'unverified';
-export type BrowserResourceType = 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'unsupported' | 'unknown';
-export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'unsupported';
-export type BrowserResolveActionKind = 'private-chat' | 'service-list' | 'service-call' | 'copy' | 'proof' | 'creator';
+export type BrowserResourceType = 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'protocol' | 'conversation' | 'unsupported' | 'unknown';
+export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'protocol-pin' | 'host-action' | 'unsupported';
+export type BrowserResolveActionKind = 'private-chat' | 'service-list' | 'service-call' | 'copy' | 'proof' | 'creator' | 'open-conversation';
 
 export interface BrowserResolutionStatus {
   state: BrowserResolutionState;

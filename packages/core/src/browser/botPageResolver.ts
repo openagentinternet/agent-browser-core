@@ -261,7 +261,7 @@ function normalizeAction(value: unknown): BrowserTrustedAction | null {
   const id = stringField(value, 'id');
   const label = stringField(value, 'label');
   const kind = stringField(value, 'kind') as BrowserTrustedAction['kind'];
-  if (!id || !label || !['private-chat', 'service-list', 'service-call', 'copy', 'proof', 'creator'].includes(kind)) {
+  if (!id || !label || !['private-chat', 'service-list', 'service-call', 'copy', 'proof', 'creator', 'open-conversation'].includes(kind)) {
     return null;
   }
 
@@ -276,9 +276,14 @@ function normalizeAction(value: unknown): BrowserTrustedAction | null {
   return action;
 }
 
-function mergeActions(rawActions: unknown, normalizedUri: string): BrowserTrustedAction[] {
+function mergeActions(input: {
+  rawActions: unknown;
+  normalizedUri: string;
+  peerGlobalMetaId: string;
+  peerName: string;
+}): BrowserTrustedAction[] {
   const actions = new Map<string, BrowserTrustedAction>();
-  const homepageActions = Array.isArray(rawActions) ? rawActions : [];
+  const homepageActions = Array.isArray(input.rawActions) ? input.rawActions : [];
   for (const rawAction of homepageActions) {
     const action = normalizeAction(rawAction);
     if (action) {
@@ -286,11 +291,35 @@ function mergeActions(rawActions: unknown, normalizedUri: string): BrowserTruste
     }
   }
 
-  for (const action of [
-    { id: 'message', label: 'Message', kind: 'private-chat' as const, enabled: true, requiresUsingIdentity: true },
+  const defaultActions: BrowserTrustedAction[] = [
+    {
+      id: 'message',
+      label: 'Message',
+      kind: 'private-chat',
+      enabled: true,
+      requiresUsingIdentity: true,
+      payload: { targetGlobalMetaId: input.peerGlobalMetaId },
+    },
     { id: 'services', label: 'Services', kind: 'service-list' as const, enabled: true, requiresUsingIdentity: true },
-    { id: 'copy-uri', label: 'Copy URI', kind: 'copy' as const, enabled: true, uri: normalizedUri },
-  ]) {
+    { id: 'copy-uri', label: 'Copy URI', kind: 'copy' as const, enabled: true, uri: input.normalizedUri },
+  ];
+
+  if (input.peerGlobalMetaId) {
+    defaultActions.splice(1, 0, {
+      id: 'conversation',
+      label: 'Conversation',
+      kind: 'open-conversation',
+      enabled: true,
+      requiresUsingIdentity: true,
+      payload: {
+        conversationUri: `map://simplemsg/conversation?peer=${encodeURIComponent(input.peerGlobalMetaId)}`,
+        peerGlobalMetaId: input.peerGlobalMetaId,
+        ...(input.peerName ? { peerName: input.peerName } : {}),
+      },
+    });
+  }
+
+  for (const action of defaultActions) {
     if (!actions.has(action.id)) {
       actions.set(action.id, action);
     }
@@ -359,6 +388,11 @@ export function buildBotPageResolveResult(input: {
       schemaVersion: stringField(input.homepage, 'schemaVersion') || undefined,
       raw: input.homepage,
     },
-    actions: mergeActions(input.homepage.actions, input.normalizedUri),
+    actions: mergeActions({
+      rawActions: input.homepage.actions,
+      normalizedUri: input.normalizedUri,
+      peerGlobalMetaId: globalMetaId,
+      peerName: title,
+    }),
   };
 }

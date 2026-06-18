@@ -17,6 +17,10 @@ const WORKSPACES = [
     manifestUrl: new URL('../../packages/core/package.json', import.meta.url),
   },
   {
+    name: '@openagentinternet/agent-browser-renderers',
+    manifestUrl: new URL('../../packages/renderers/package.json', import.meta.url),
+  },
+  {
     name: '@openagentinternet/agent-browser-ui',
     manifestUrl: new URL('../../packages/ui/package.json', import.meta.url),
   },
