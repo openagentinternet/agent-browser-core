@@ -219,11 +219,14 @@ function createNameAliasProviders(input: {
   ensNameAliasProviderFactory: CreateStandaloneBrowserHostAdapterInput['ensNameAliasProviderFactory'];
   config: ReturnType<typeof resolveBrowserConfig>;
 }): BrowserNameAliasProvider[] {
+  const nameResolution = input.config.nameResolution;
+  if (!nameResolution.enabled) {
+    return [];
+  }
   if (input.configured) {
     return input.configured;
   }
-  const nameResolution = input.config.nameResolution;
-  if (!nameResolution.enabled || !nameResolution.ens.enabled) {
+  if (!nameResolution.ens.enabled) {
     return [];
   }
   return [

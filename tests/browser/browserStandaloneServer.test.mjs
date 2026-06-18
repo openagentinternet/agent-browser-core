@@ -106,6 +106,59 @@ test('standalone server resolves metaid ENS alias through injected provider', as
   assert.equal(payload.data.source.raw.nameAlias.canonicalUri, `metaid://${canonicalGlobalMetaId}`);
 });
 
+test('standalone server does not use injected name alias providers when name resolution is disabled', async (t) => {
+  let providerCalls = 0;
+  const server = createStandaloneBrowserServer({
+    fetch: async () => {
+      throw new Error('network fetch should not run for disabled name alias resolution');
+    },
+    nameAliasProviders: [{
+      id: 'ens',
+      supportsName: (name) => String(name).toLowerCase() === 'disabled.eth',
+      async resolveNameAlias() {
+        providerCalls += 1;
+        return {
+          ok: true,
+          state: 'success',
+          data: {
+            provider: 'ens',
+            normalizedName: 'disabled.eth',
+            textKey: 'org.openagentinternet.uri',
+            canonicalUri: 'metaid://idq1disabled',
+            resolvedAt: 1780761234567,
+            verificationState: 'partial',
+          },
+        };
+      },
+    }],
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const settings = await readJson(await fetch(`${baseUrl}/api/browser/settings`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      browser: {
+        nameResolution: {
+          enabled: false,
+          ens: { enabled: false },
+        },
+      },
+    }),
+  }));
+  assert.equal(settings.ok, true);
+  assert.equal(settings.data.effectiveBrowser.nameResolution.enabled, false);
+
+  const response = await fetch(`${baseUrl}/api/browser/resolve?uri=metaid%3A%2F%2Fdisabled.eth`);
+  const payload = await readJson(response);
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.code, 'name_resolution_unavailable');
+  assert.equal(providerCalls, 0);
+});
+
 test('standalone server constructs ENS provider from configured RPC URLs', async (t) => {
   const canonicalGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
   const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
