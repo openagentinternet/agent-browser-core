@@ -55,3 +55,26 @@ test('core and ui do not import standalone host packages', async () => {
 
   assert.deepEqual(violations, []);
 });
+
+test('core and ui do not import ENS or Ethereum resolver code', async () => {
+  const { stdout } = await execFileAsync('git', ['ls-files', 'packages/core/src', 'packages/ui/src']);
+  const sourceFiles = stdout.split('\n').filter((file) => file.endsWith('.ts'));
+  const forbiddenEnsImports = [
+    '@openagentinternet/agent-browser-name-resolvers',
+    'viem',
+    'ethers',
+    'createPublicClient',
+  ];
+  const violations = [];
+
+  for (const filePath of sourceFiles) {
+    const contents = await readFile(path.join(repoRoot, filePath), 'utf8');
+    for (const value of forbiddenEnsImports) {
+      if (contents.includes(value)) {
+        violations.push(`${filePath} imports ENS or Ethereum resolver code: ${value}`);
+      }
+    }
+  }
+
+  assert.deepEqual(violations, []);
+});
