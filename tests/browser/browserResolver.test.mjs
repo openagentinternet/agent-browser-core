@@ -471,6 +471,117 @@ test('resolveBrowserResource dispatches map ENS aliases to injected map resolver
   assert.equal(result.data.source.raw.nameAlias.canonicalUri, canonicalMapUri);
 });
 
+test('resolveBrowserResource rejects invalid MAP alias-like names before map resolver dispatch', async () => {
+  let mapResolveCalled = false;
+  const result = await resolveBrowserResource({
+    uri: 'map://sunny..eth',
+    config: browserConfig(),
+    mapResolve: async () => {
+      mapResolveCalled = true;
+      return {
+        ok: true,
+        state: 'success',
+        data: {
+          uri: 'map://sunny..eth',
+          normalizedUri: 'map://sunny..eth',
+          resourceType: 'unknown',
+          title: 'Invalid alias',
+          owner: { kind: 'unknown', globalMetaId: '', name: 'Unknown', verificationState: 'partial' },
+          renderer: { type: 'unsupported', contentType: 'application/vnd.metaid.map' },
+          status: { state: 'resolved', verificationState: 'partial', message: 'Resolved MAP resource.' },
+          source: { resolver: 'map-test' },
+          actions: [],
+        },
+      };
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'invalid_browser_uri');
+  assert.equal(mapResolveCalled, false);
+});
+
+test('resolveBrowserResource preserves MAP alias context when map resolver is unavailable', async () => {
+  const canonicalMapUri = `map://simplebuzz/pin/${validEnsMetaAppPinId}`;
+  const result = await resolveBrowserResource({
+    uri: 'map://buzz.sunny.eth',
+    config: browserConfig(),
+    nameAliasProviders: [ensProvider(canonicalMapUri)],
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'map_resolution_unavailable');
+  assert.equal(result.data.inputUri, 'map://buzz.sunny.eth');
+  assert.equal(result.data.aliasUri, 'map://buzz.sunny.eth');
+  assert.equal(result.data.aliasName, 'buzz.sunny.eth');
+  assert.equal(result.data.provider, 'ens');
+  assert.equal(result.data.canonicalUri, canonicalMapUri);
+});
+
+test('resolveBrowserResource preserves MAP alias context when map resolver fails', async () => {
+  const canonicalMapUri = `map://simplebuzz/pin/${validEnsMetaAppPinId}`;
+  const result = await resolveBrowserResource({
+    uri: 'map://buzz.sunny.eth',
+    config: browserConfig(),
+    nameAliasProviders: [ensProvider(canonicalMapUri)],
+    mapResolve: async () => ({
+      ok: false,
+      state: 'failed',
+      code: 'map_resolve_failed',
+      message: 'MAP lookup failed.',
+      data: { attempt: 1 },
+    }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'map_resolve_failed');
+  assert.equal(result.data.attempt, 1);
+  assert.equal(result.data.inputUri, 'map://buzz.sunny.eth');
+  assert.equal(result.data.aliasUri, 'map://buzz.sunny.eth');
+  assert.equal(result.data.aliasName, 'buzz.sunny.eth');
+  assert.equal(result.data.provider, 'ens');
+  assert.equal(result.data.canonicalUri, canonicalMapUri);
+});
+
+test('resolveBrowserResource reports direct MAP resolver availability without alias context', async () => {
+  const canonicalMapUri = `map://simplebuzz/pin/${validEnsMetaAppPinId}`;
+  let directMapResolveUri = '';
+  const directResolved = await resolveBrowserResource({
+    uri: canonicalMapUri,
+    config: browserConfig(),
+    mapResolve: async (uri) => {
+      directMapResolveUri = uri;
+      return {
+        ok: true,
+        state: 'success',
+        data: {
+          uri,
+          normalizedUri: uri,
+          resourceType: 'unknown',
+          title: 'Buzz Resource',
+          owner: { kind: 'unknown', globalMetaId: '', name: 'Unknown', verificationState: 'partial' },
+          renderer: { type: 'unsupported', contentType: 'application/vnd.metaid.map' },
+          status: { state: 'resolved', verificationState: 'partial', message: 'Resolved MAP resource.' },
+          source: { resolver: 'map-test' },
+          actions: [],
+        },
+      };
+    },
+  });
+
+  assert.equal(directResolved.ok, true);
+  assert.equal(directMapResolveUri, canonicalMapUri);
+
+  const missingDirectResolver = await resolveBrowserResource({
+    uri: canonicalMapUri,
+    config: browserConfig(),
+  });
+
+  assert.equal(missingDirectResolver.ok, false);
+  assert.equal(missingDirectResolver.code, 'map_resolution_unavailable');
+  assert.equal(missingDirectResolver.data, undefined);
+});
+
 test('resolveBrowserResource fails closed for ENS alias errors', async () => {
   const missingProvider = await resolveBrowserResource({
     uri: 'metaid://sunny.eth',

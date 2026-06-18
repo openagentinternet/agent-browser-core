@@ -4,7 +4,9 @@ import { resolveMetafilePinToResource } from './metafileResolver.js';
 import { buildMetaAppResolveResult } from './metaAppResolver.js';
 import {
   aliasBrowserResolveResult,
+  isSupportedNameAliasId,
   resolveBrowserNameAlias,
+  type BrowserNameAliasContext,
 } from './nameAlias.js';
 import { parseBrowserUri, type ParsedBrowserUri } from './uri.js';
 import {
@@ -31,7 +33,7 @@ export interface ResolveBrowserResourceInput {
 function parseMapNameAliasUri(input: string): ParsedBrowserUri | null {
   const originalUri = String(input ?? '').trim();
   const match = originalUri.match(/^map:\/\/([^/?#]+)$/iu);
-  if (!match || !match[1].toLowerCase().endsWith('.eth')) {
+  if (!match || !isSupportedNameAliasId(match[1])) {
     return null;
   }
   const id = match[1];
@@ -45,6 +47,27 @@ function parseMapNameAliasUri(input: string): ParsedBrowserUri | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function withCanonicalAliasFailureContext<T>(
+  result: BrowserCommandResult<T>,
+  alias: BrowserNameAliasContext,
+): BrowserCommandResult<T> {
+  if (result.ok) {
+    return result;
+  }
+  return {
+    ...result,
+    data: {
+      ...(isRecord(result.data) ? result.data : {}),
+      inputUri: alias.aliasUri,
+      aliasUri: alias.aliasUri,
+      aliasName: alias.normalizedName,
+      provider: alias.provider,
+      canonicalUri: alias.canonicalUri,
+      textKey: alias.textKey,
+    },
+  };
 }
 
 function text(value: unknown): string {
@@ -154,7 +177,7 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
         skipNameAliasResolution: true,
       });
       if (!canonicalResolved.ok) {
-        return canonicalResolved;
+        return withCanonicalAliasFailureContext(canonicalResolved, alias.data);
       }
       return browserCommandSuccess(aliasBrowserResolveResult({
         result: canonicalResolved.data,
