@@ -23,6 +23,13 @@ const PACKAGES = [
     },
   },
   {
+    name: '@openagentinternet/agent-browser-renderers',
+    exports: {
+      DEFAULT_PROTOCOL_RENDERERS: 'object',
+      renderProtocolPinHtml: 'function',
+    },
+  },
+  {
     name: '@openagentinternet/agent-browser-ui',
     exports: {
       BROWSER_MENU_SECTIONS: 'object',
