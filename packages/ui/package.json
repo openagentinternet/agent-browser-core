@@ -33,7 +33,8 @@
   },
   "dependencies": {
     "@openagentinternet/agent-browser-core": "0.3.0",
-    "@openagentinternet/agent-browser-host-contract": "0.3.0"
+    "@openagentinternet/agent-browser-host-contract": "0.3.0",
+    "@openagentinternet/agent-browser-renderers": "0.3.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"

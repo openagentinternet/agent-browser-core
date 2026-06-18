@@ -10,6 +10,7 @@
   ],
   "references": [
     { "path": "../host-contract" },
-    { "path": "../core" }
+    { "path": "../core" },
+    { "path": "../renderers" }
   ]
 }

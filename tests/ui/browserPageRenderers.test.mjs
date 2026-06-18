@@ -135,6 +135,8 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.match(html, /Published a v3 homepage fixture/);
   assert.match(html, /data-browser-action="private-chat"/);
   assert.match(html, /data-browser-action="service-list"/);
+  assert.match(html, /href="map:\/\/skill-service\/pin\/service-current-pin"/);
+  assert.match(html, /href="map:\/\/simplebuzz\/pin\/buzz-pin"/);
   assert.match(html, /https:\/\/file\.metaid\.io\/metafile-indexer\/content\/avatar-pin/);
 });
 
@@ -173,6 +175,7 @@ test('bot-page renderer truncates buzz detail longer than 200 characters with el
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Long Buzz Bot'), 'long buzz render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
   assert.match(html, /Recent Activity/);
+  assert.match(html, /href="map:\/\/simplebuzz\/pin\/buzz-long-pin"/);
   assert.ok(html.includes('A'.repeat(200) + '......'), 'buzz detail should be truncated to 200 characters followed by ellipsis');
   assert.ok(!html.includes('A'.repeat(280)), 'full untruncated buzz content must not be rendered');
 });
