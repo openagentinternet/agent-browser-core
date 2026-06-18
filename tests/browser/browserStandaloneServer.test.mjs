@@ -70,6 +70,9 @@ test('standalone server resolves metaid ENS alias through injected provider', as
   fixture.identity.display = 'idq1qypq-w5z8n';
   fixture.profile.name = 'ENS Fixture Bot';
   const server = createStandaloneBrowserServer({
+    env: {
+      METABOT_BROWSER_ENS_RPC_URLS: 'https://rpc.example',
+    },
     fetch: async (url) => {
       assert.match(String(url), new RegExp(canonicalGlobalMetaId));
       return {
@@ -151,6 +154,60 @@ test('standalone server does not use injected name alias providers when name res
   assert.equal(settings.data.effectiveBrowser.nameResolution.enabled, false);
 
   const response = await fetch(`${baseUrl}/api/browser/resolve?uri=metaid%3A%2F%2Fdisabled.eth`);
+  const payload = await readJson(response);
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.code, 'name_resolution_unavailable');
+  assert.equal(providerCalls, 0);
+});
+
+test('standalone server filters injected ENS providers when ENS resolution is disabled', async (t) => {
+  let providerCalls = 0;
+  const server = createStandaloneBrowserServer({
+    fetch: async () => {
+      throw new Error('network fetch should not run when ENS name alias resolution is disabled');
+    },
+    nameAliasProviders: [{
+      id: 'ens',
+      supportsName: (name) => String(name).toLowerCase() === 'ensoff.eth',
+      async resolveNameAlias() {
+        providerCalls += 1;
+        return {
+          ok: true,
+          state: 'success',
+          data: {
+            provider: 'ens',
+            normalizedName: 'ensoff.eth',
+            textKey: 'org.openagentinternet.uri',
+            canonicalUri: 'metaid://idq1disabled',
+            resolvedAt: 1780761234567,
+            verificationState: 'partial',
+          },
+        };
+      },
+    }],
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const settings = await readJson(await fetch(`${baseUrl}/api/browser/settings`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      browser: {
+        nameResolution: {
+          enabled: true,
+          ens: { enabled: false },
+        },
+      },
+    }),
+  }));
+  assert.equal(settings.ok, true);
+  assert.equal(settings.data.effectiveBrowser.nameResolution.enabled, true);
+  assert.equal(settings.data.effectiveBrowser.nameResolution.ens.enabled, false);
+
+  const response = await fetch(`${baseUrl}/api/browser/resolve?uri=metaid%3A%2F%2Fensoff.eth`);
   const payload = await readJson(response);
 
   assert.equal(response.status, 400);

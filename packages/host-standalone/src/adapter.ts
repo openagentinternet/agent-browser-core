@@ -224,6 +224,9 @@ function createNameAliasProviders(input: {
     return [];
   }
   if (input.configured) {
+    if (!nameResolution.ens.enabled) {
+      return input.configured.filter((provider) => provider.id.trim().toLowerCase() !== 'ens');
+    }
     return input.configured;
   }
   if (!nameResolution.ens.enabled) {
