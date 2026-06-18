@@ -98,3 +98,17 @@ test('parseMapUri rejects aliases and invalid selectors', () => {
   assert.throws(() => core.parseMapUri('map://simplebuzz/pin/abc?version=latest'), /version/i);
   assert.throws(() => core.parseMapUri('map://simplemsg/conversation'), /peer/i);
 });
+
+test('parseMapUri rejects unsafe authorities and unsupported components', () => {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+
+  assert.throws(() => core.parseMapUri(`map://buzz%2Eeth/pin/${pinId}`), /alias|authority|unsupported/i);
+  assert.throws(() => core.parseMapUri(`map://simple%2fbuzz/pin/${pinId}`), /alias|authority|unsupported|complete/i);
+  assert.throws(() => core.parseMapUri(`map://simple_buzz/pin/${pinId}`), /alias|authority|unsupported/i);
+  assert.throws(() => core.parseMapUri(`map://simplebuzz/pin/${pinId}#fragment`), /fragment|unsupported/i);
+  assert.throws(() => core.parseMapUri(`map://simplebuzz/pin/${pinId}?version=1&foo=bar`), /query|unsupported/i);
+  assert.throws(() => core.parseMapUri(`map://simplebuzz/pin/${pinId}?version=1&version=2`), /version|unsupported/i);
+  assert.throws(() => core.parseMapUri(`map://simplebuzz/pin/${pinId}[2]?version=1`), /version|unsupported/i);
+  assert.throws(() => core.parseMapUri('map://simplemsg/conversation?peer=idq1peer&extra=1'), /query|unsupported/i);
+  assert.throws(() => core.parseMapUri('map://simplemsg/conversation?peer=idq1peer#fragment'), /fragment|unsupported/i);
+});
