@@ -56,6 +56,23 @@ test('buildBotPageResolveResult maps homepage JSON into BrowserResolveResult', a
   assert.equal(result.proof.protocolPath, '/info/name');
   assert.equal(result.actions.some((action) => action.kind === 'private-chat'), true);
   assert.equal(result.actions.some((action) => action.kind === 'service-list'), true);
+  const message = result.actions.find((action) => action.id === 'message');
+  assert.equal(message.kind, 'private-chat');
+  assert.equal(message.payload.targetGlobalMetaId, 'idq1fixturebot');
+
+  const conversation = result.actions.find((action) => action.id === 'conversation');
+  assert.deepEqual(conversation, {
+    id: 'conversation',
+    label: 'Conversation',
+    kind: 'open-conversation',
+    enabled: true,
+    requiresUsingIdentity: true,
+    payload: {
+      conversationUri: 'map://simplemsg/conversation?peer=idq1fixturebot',
+      peerGlobalMetaId: 'idq1fixturebot',
+      peerName: 'Fixture Bot',
+    },
+  });
 });
 
 test('buildBotPageResolveResult accepts a selected Bot homepage template', async () => {
