@@ -1,10 +1,34 @@
 import type { BotHomepageTemplateId } from './botHomepageTemplates.js';
 
-export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile';
+export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile' | 'map';
 export type BrowserResourceType = 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'unsupported' | 'unknown';
 export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'unsupported';
 export type BrowserResolutionState = 'resolved' | 'loading' | 'not_found' | 'error';
 export type BrowserVerificationState = 'verified' | 'partial' | 'unverified';
+export type MapUriTargetKind = 'pin' | 'conversation';
+export type MapPinVersionSelector = 'latest' | 'history-index';
+
+export interface ParsedMapPinUri {
+  originalUri: string;
+  normalizedUri: string;
+  authority: string;
+  protocolPath: string;
+  targetKind: 'pin';
+  pinId: string;
+  versionSelector: MapPinVersionSelector;
+  historyIndex?: number;
+}
+
+export interface ParsedMapConversationUri {
+  originalUri: string;
+  normalizedUri: string;
+  authority: 'simplemsg';
+  protocolPath: '/protocols/simplemsg';
+  targetKind: 'conversation';
+  peerGlobalMetaId: string;
+}
+
+export type ParsedMapUri = ParsedMapPinUri | ParsedMapConversationUri;
 
 export interface BrowserBaseConfig {
   metasoP2PBaseUrl: string;
