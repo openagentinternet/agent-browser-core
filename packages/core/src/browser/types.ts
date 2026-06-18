@@ -217,3 +217,25 @@ export type MetaAppPreviewSessionFactory = (input: {
   protocol: Record<string, unknown>;
   pinRecord: Record<string, unknown>;
 }) => Promise<{ localPreviewUrl: string; previewId?: string }> | { localPreviewUrl: string; previewId?: string };
+
+export interface BrowserNameAliasRequest {
+  inputUri: string;
+  inputScheme: BrowserUriScheme;
+  name: string;
+}
+
+export interface BrowserNameAliasResult {
+  provider: 'ens' | string;
+  normalizedName: string;
+  textKey: string;
+  canonicalUri: string;
+  resolvedAt: number;
+  verificationState: BrowserVerificationState;
+  raw?: Record<string, unknown>;
+}
+
+export interface BrowserNameAliasProvider {
+  id: string;
+  supportsName(name: string): boolean;
+  resolveNameAlias(request: BrowserNameAliasRequest): Promise<BrowserCommandResult<BrowserNameAliasResult>>;
+}

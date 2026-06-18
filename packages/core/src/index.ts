@@ -33,3 +33,4 @@ export * from './browser/browserResolver.js';
 export * from './browser/metafileResolver.js';
 export * from './browser/metaAppResolver.js';
 export * from './browser/metaAppPinResolver.js';
+export * from './browser/nameAlias.js';
