@@ -7,6 +7,10 @@ import vm from 'node:vm';
 const require = createRequire(import.meta.url);
 const { buildBrowserPageDefinition } = require('../../packages/ui/dist/browser/app.js');
 
+const servicePinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+const buzzPinId = '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+const longBuzzPinId = '8ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+
 class FakeElement {
   constructor() {
     this.value = '';
@@ -106,6 +110,8 @@ function result(renderer, overrides = {}) {
 
 test('bot-page renderer shows profile, services, and trusted buttons from homepage JSON', async () => {
   const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
+  fixture.sections[0].items[0].pinId = servicePinId;
+  fixture.sections[1].items[0].pinId = buzzPinId;
   const avatarUrl = 'https://file.metaid.io/metafile-indexer/content/avatar-pin';
   const { nodes } = runWithResolve(result({
     type: 'bot-page',
@@ -135,9 +141,41 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.match(html, /Published a v3 homepage fixture/);
   assert.match(html, /data-browser-action="private-chat"/);
   assert.match(html, /data-browser-action="service-list"/);
-  assert.match(html, /href="map:\/\/skill-service\/pin\/service-current-pin"/);
-  assert.match(html, /href="map:\/\/simplebuzz\/pin\/buzz-pin"/);
+  assert.match(html, new RegExp(`href="map://skill-service/pin/${servicePinId}"`));
+  assert.match(html, new RegExp(`href="map://simplebuzz/pin/${buzzPinId}"`));
   assert.match(html, /https:\/\/file\.metaid\.io\/metafile-indexer\/content\/avatar-pin/);
+});
+
+test('bot-page renderer does not create MAP links from non-pin service ids', async () => {
+  const homepage = {
+    globalMetaId: 'idq1servicebot',
+    profile: { name: 'Service Bot' },
+    services: [
+      {
+        id: 'callable-service-id',
+        displayName: 'Callable Service',
+        description: 'This service is callable but has no published pin id.',
+      },
+    ],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    resourceType: 'bot',
+    title: 'Service Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1servicebot', name: 'Service Bot', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Callable Service'), 'service without pin render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /Callable Service/);
+  assert.match(html, /data-browser-action="service-call"/);
+  assert.match(html, /data-service-id="callable-service-id"/);
+  assert.doesNotMatch(html, /map:\/\/skill-service\/pin\/callable-service-id/);
+  assert.doesNotMatch(html, /data-browser-map-link/);
 });
 
 test('bot-page renderer truncates buzz detail longer than 200 characters with ellipsis', async () => {
@@ -152,7 +190,7 @@ test('bot-page renderer truncates buzz detail longer than 200 characters with el
         protocolPath: '/protocols/simplebuzz',
         items: [
           {
-            pinId: 'buzz-long-pin',
+            pinId: longBuzzPinId,
             protocolPath: '/protocols/simplebuzz',
             timestamp: 1780760002,
             data: { payload: { content: longContent } },
@@ -175,7 +213,7 @@ test('bot-page renderer truncates buzz detail longer than 200 characters with el
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Long Buzz Bot'), 'long buzz render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
   assert.match(html, /Recent Activity/);
-  assert.match(html, /href="map:\/\/simplebuzz\/pin\/buzz-long-pin"/);
+  assert.match(html, new RegExp(`href="map://simplebuzz/pin/${longBuzzPinId}"`));
   assert.ok(html.includes('A'.repeat(200) + '......'), 'buzz detail should be truncated to 200 characters followed by ellipsis');
   assert.ok(!html.includes('A'.repeat(280)), 'full untruncated buzz content must not be rendered');
 });

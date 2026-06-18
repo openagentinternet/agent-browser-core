@@ -110,6 +110,33 @@ test('resolveMapUriToResource parses SimpleBuzz payload from contentSummary when
   assert.equal(result.data.renderer.data.contentSummary.content, 'Summary buzz text');
 });
 
+test('resolveMapUriToResource preserves payload object when content is empty', async () => {
+  const payload = {
+    content: 'Payload body should survive',
+    images: ['metafile://payload-image-pin'],
+  };
+  const result = await resolveMapUriToResource({
+    uri: `map://simplebuzz/pin/${buzzPinId}`,
+    manApiBaseUrl: 'https://man.example.test',
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: manPin({
+          content: '',
+          payload,
+          contentSummary: JSON.stringify({ content: 'Summary fallback' }),
+        }),
+      }),
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.renderer.data.payload.content, 'Payload body should survive');
+  assert.deepEqual(result.data.renderer.data.payload.images, ['metafile://payload-image-pin']);
+  assert.deepEqual(result.data.renderer.data.rawPayload, payload);
+});
+
 test('resolveMapUriToResource parses skill-service payload from contentSummary', async () => {
   const result = await resolveMapUriToResource({
     uri: `map://skill-service/pin/${buzzPinId}`,

@@ -44,6 +44,12 @@ function parsePayload(content: unknown, contentType: string): unknown {
   return raw;
 }
 
+function meaningfulPayloadSource(pinRecord: Record<string, unknown>): unknown {
+  if (record(pinRecord.content) || text(pinRecord.content)) return pinRecord.content;
+  if (pinRecord.payload !== undefined && pinRecord.payload !== null) return pinRecord.payload;
+  return pinRecord.contentSummary ?? pinRecord.content_summary ?? pinRecord.summary ?? '';
+}
+
 function parseJsonObject(value: unknown): Record<string, unknown> | null {
   const parsed = parsePayload(value, 'application/json');
   return record(parsed);
@@ -168,7 +174,8 @@ export async function resolveMapUriToResource(input: ResolveMapUriToResourceInpu
   };
   const contentType = text(pinRecord.contentType ?? pinRecord.content_type) || 'application/octet-stream';
   const summaryPayload = contentSummary(pinRecord);
-  const contentPayload = parsePayload(pinRecord.content ?? pinRecord.payload, contentType);
+  const rawPayload = meaningfulPayloadSource(pinRecord);
+  const contentPayload = parsePayload(rawPayload, contentType);
   const payload = mergePayload(contentPayload, summaryPayload);
   const payloadRecord = record(payload) ?? {};
   const ownerGlobalMetaId = text(pinRecord.ownerGlobalMetaId ?? pinRecord.globalMetaId ?? pinRecord.global_meta_id ?? pinRecord.metaid ?? pinRecord.metaId);
@@ -195,7 +202,7 @@ export async function resolveMapUriToResource(input: ResolveMapUriToResourceInpu
         protocolPath: parsed.protocolPath,
         version,
         payload,
-        rawPayload: pinRecord.content ?? pinRecord.payload ?? pinRecord.contentSummary ?? pinRecord.content_summary ?? '',
+        rawPayload,
         contentSummary: summaryPayload ?? undefined,
         pin: pinRecord,
       },

@@ -216,7 +216,7 @@ function safeUrl(rawValue) {
 function mapPinHref(protocolPath, pinId) {
   var protocol = textValue(protocolPath).replace(/^\\/protocols\\//, '');
   var id = textValue(pinId);
-  return protocol && id ? 'map://' + protocol + '/pin/' + encodeURIComponent(id) : '';
+  return protocol && isBrowserPinId(id) ? 'map://' + protocol + '/pin/' + encodeURIComponent(id.toLowerCase()) : '';
 }
 
 function shortId(value) {
@@ -230,6 +230,10 @@ function txidFromPinId(value) {
   var text = textValue(value);
   var match = text.match(/^([0-9a-f]{64})i[0-9]+$/i);
   return match ? match[1] : '';
+}
+
+function isBrowserPinId(value) {
+  return /^[0-9a-f]{64}i[0-9]+$/i.test(textValue(value));
 }
 
 function proofTxid(proof) {
@@ -1245,13 +1249,14 @@ function botHomepageSectionItems(data, sectionId) {
 
 function normalizeBotHomepageListItem(item, index, fallbackLabel) {
   if (item && typeof item === 'object' && !Array.isArray(item)) {
-    var pinId = textValue(item.currentPinId || item.servicePinId || item.pinId);
+    var rawPinId = textValue(item.currentPinId || item.servicePinId || item.pinId);
+    var pinId = isBrowserPinId(rawPinId) ? rawPinId : '';
     var protocolPath = textValue(item.protocolPath);
     var title = textValue(item.title || item.name || item.displayName || item.serviceName || item.appName || item.label || item.content || item.id || item.pinId) ||
       fallbackLabel + ' ' + (index + 1);
     var detail = readableText(item.description || item.summary || item.detail || item.content || item.text || item.bio);
     return {
-      id: pinId || textValue(item.id || item.uri || title),
+      id: rawPinId || textValue(item.id || item.uri || title),
       pinId: pinId,
       protocolPath: protocolPath,
       mapHref: mapPinHref(protocolPath, pinId),
@@ -1279,9 +1284,8 @@ function normalizeBotHomepageList(items, fallbackLabel) {
 function normalizeBotHomepageServices(items) {
   return firstArray(items).map(function (service, index) {
     var normalized = normalizeBotHomepageListItem(service, index, 'Service');
-    normalized.serviceId = textValue(service && (service.currentPinId || service.servicePinId || service.pinId || service.id)) || normalized.id;
+    normalized.serviceId = textValue(service && (service.serviceId || service.id)) || normalized.id;
     normalized.protocolPath = normalized.protocolPath || textValue(service && service.protocolPath) || '/protocols/skill-service';
-    normalized.pinId = normalized.pinId || normalized.serviceId;
     normalized.mapHref = mapPinHref(normalized.protocolPath, normalized.pinId);
     return normalized;
   });
@@ -1355,7 +1359,7 @@ function renderServiceRows(services) {
   return services.length
     ? services.map(function (service) {
       var title = escapeHtml(service.name || service.title || service.id || 'Service');
-      var href = service.mapHref || mapPinHref(service.protocolPath || '/protocols/skill-service', service.pinId || service.id);
+      var href = service.mapHref || mapPinHref(service.protocolPath || '/protocols/skill-service', service.pinId);
       var titleHtml = href ? '<a href="' + escapeHtml(href) + '" data-browser-map-link>' + title + '</a>' : title;
       return '<article class="browser-service-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('service') + '</span>' +
         '<div><strong>' + titleHtml + '</strong>' +
