@@ -365,6 +365,65 @@ test('Inspector refreshes to ENS alias error when open resource resolve fails', 
   assert.doesNotMatch(html, /txid-fixture/);
 });
 
+test('Inspector refreshes from ENS alias error to successful alias evidence', async () => {
+  const badAliasUri = 'metaid://bad.eth';
+  const goodAliasUri = 'metaid://good.eth';
+  const { context, nodes } = createContext({
+    responses: {
+      [goodAliasUri]: browserResult(goodAliasUri, {
+        normalizedUri: goodAliasUri,
+        title: 'Good Alias Bot',
+        owner: { kind: 'bot', globalMetaId: 'idq1goodalias', name: 'Good Alias Bot', verificationState: 'partial' },
+        source: {
+          resolver: 'metaso-p2p',
+          raw: {
+            nameAlias: {
+              aliasUri: goodAliasUri,
+              provider: 'ens',
+              normalizedName: 'good.eth',
+              textKey: 'org.openagentinternet.uri',
+              canonicalUri: 'metaid://idq1goodalias',
+              resolvedAt: 1780761234567,
+              verificationState: 'partial',
+            },
+          },
+        },
+      }),
+    },
+    failures: {
+      [badAliasUri]: {
+        ok: false,
+        state: 'failed',
+        code: 'name_alias_not_found',
+        message: 'ENS text record was missing or empty.',
+        data: {
+          inputUri: badAliasUri,
+          aliasName: 'bad.eth',
+          provider: 'ens',
+          textKey: 'org.openagentinternet.uri',
+        },
+      },
+    },
+  });
+
+  await waitFor(() => context.state.current, 'initial resource');
+  nodes['[data-browser-resource-chip]'].click();
+
+  await context.navigateTo(badAliasUri);
+  await waitFor(() => context.state.lastResolveError, 'bad alias failure');
+  assert.match(nodes['[data-browser-inspector]'].innerHTML, /<h3>Name Alias Error<\/h3>/);
+
+  await context.navigateTo(goodAliasUri);
+  await waitFor(() => context.state.current && context.state.current.uri === goodAliasUri, 'good alias resource');
+  const html = nodes['[data-browser-inspector]'].innerHTML;
+
+  assert.doesNotMatch(html, /<h3>Name Alias Error<\/h3>/);
+  assert.match(html, /<h3>Name Alias<\/h3>/);
+  assert.match(html, /good\.eth/);
+  assert.match(html, /metaid:\/\/idq1goodalias/);
+  assert.match(html, /org\.openagentinternet\.uri/);
+});
+
 test('Inspector renders generic resolve failure context for non-alias errors', async () => {
   const failedUri = 'metaid://broken';
   const { context, nodes } = createContext({

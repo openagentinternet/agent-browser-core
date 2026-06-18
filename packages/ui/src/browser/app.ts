@@ -1869,6 +1869,9 @@ async function resolveUri(uri, options) {
     recordVisit(result);
     setStatus('resolved', '');
     renderCurrent();
+    if (state.inspectorOpen) {
+      renderInspector();
+    }
     return result;
   } catch (error) {
     state.lastResolveError = {
