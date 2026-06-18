@@ -61,8 +61,12 @@ test('core and ui do not import ENS or Ethereum resolver code', async () => {
   const sourceFiles = stdout.split('\n').filter((file) => file.endsWith('.ts'));
   const forbiddenEnsImports = [
     '@openagentinternet/agent-browser-name-resolvers',
+    '@ensdomains/ensjs',
+    '@metamask/providers',
+    'wagmi',
     'viem',
     'ethers',
+    'web3',
     'createPublicClient',
   ];
   const violations = [];
