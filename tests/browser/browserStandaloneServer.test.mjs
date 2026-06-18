@@ -40,7 +40,15 @@ test('standalone Browser server serves Browser pages and shared CSS', async (t) 
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const baseUrl = await listen(server);
 
-  for (const pathname of ['/', '/browser', '/ui/browser', '/browser/metaid/idq1fixturebot']) {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  for (const pathname of [
+    '/',
+    '/browser',
+    '/ui/browser',
+    '/browser/metaid/idq1fixturebot',
+    '/browser/map/buzz.sunny.eth',
+    `/browser/map/simplebuzz/pin/${pinId}?version=0`,
+  ]) {
     const response = await fetch(`${baseUrl}${pathname}`);
     const html = await response.text();
     assert.equal(response.status, 200);
@@ -53,6 +61,94 @@ test('standalone Browser server serves Browser pages and shared CSS', async (t) 
   assert.equal(cssResponse.status, 200);
   assert.match(cssResponse.headers.get('content-type'), /text\/css/);
   assert.match(await cssResponse.text(), /MetaBot UI/);
+});
+
+test('standalone server resolves metaid ENS alias through injected provider', async (t) => {
+  const canonicalGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
+  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
+  fixture.identity.globalMetaId = canonicalGlobalMetaId;
+  fixture.identity.display = 'idq1qypq-w5z8n';
+  fixture.profile.name = 'ENS Fixture Bot';
+  const server = createStandaloneBrowserServer({
+    fetch: async (url) => {
+      assert.match(String(url), new RegExp(canonicalGlobalMetaId));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ code: 0, message: '', data: fixture }),
+      };
+    },
+    nameAliasProviders: [{
+      id: 'ens',
+      supportsName: (name) => String(name).toLowerCase() === 'fixture.eth',
+      async resolveNameAlias() {
+        return {
+          ok: true,
+          state: 'success',
+          data: {
+            provider: 'ens',
+            normalizedName: 'fixture.eth',
+            textKey: 'org.openagentinternet.uri',
+            canonicalUri: `metaid://${canonicalGlobalMetaId}`,
+            resolvedAt: 1780761234567,
+            verificationState: 'partial',
+          },
+        };
+      },
+    }],
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const payload = await readJson(await fetch(`${baseUrl}/api/browser/resolve?uri=metaid%3A%2F%2Ffixture.eth`));
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data.normalizedUri, 'metaid://fixture.eth');
+  assert.equal(payload.data.source.raw.nameAlias.canonicalUri, `metaid://${canonicalGlobalMetaId}`);
+});
+
+test('standalone server constructs ENS provider from configured RPC URLs', async (t) => {
+  const canonicalGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
+  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
+  fixture.identity.globalMetaId = canonicalGlobalMetaId;
+  const factoryCalls = [];
+  const server = createStandaloneBrowserServer({
+    env: {
+      METABOT_BROWSER_ENS_RPC_URLS: 'https://rpc.example',
+    },
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ code: 0, message: '', data: fixture }),
+    }),
+    ensNameAliasProviderFactory: (config) => {
+      factoryCalls.push(config);
+      return {
+        id: 'ens',
+        supportsName: (name) => String(name).toLowerCase() === 'env.eth',
+        async resolveNameAlias() {
+          return {
+            ok: true,
+            state: 'success',
+            data: {
+              provider: 'ens',
+              normalizedName: 'env.eth',
+              textKey: config.textKey,
+              canonicalUri: `metaid://${canonicalGlobalMetaId}`,
+              resolvedAt: 1780761234567,
+              verificationState: 'partial',
+            },
+          };
+        },
+      };
+    },
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const payload = await readJson(await fetch(`${baseUrl}/api/browser/resolve?uri=metaid%3A%2F%2Fenv.eth`));
+  assert.equal(payload.ok, true);
+  assert.equal(factoryCalls[0].rpcUrls[0], 'https://rpc.example');
+  assert.equal(factoryCalls[0].textKey, 'org.openagentinternet.uri');
 });
 
 test('standalone Browser server exposes runtime, settings, cache, and action routes', async (t) => {

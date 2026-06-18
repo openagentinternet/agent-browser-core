@@ -433,6 +433,28 @@ test('Browser Metafile deep link path is decoded into the address bar and resolv
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metafile%3A%2F%2F${pinId}&actorId=worker`);
 });
 
+test('Browser MAP deep link path is decoded into the address bar and resolved', async () => {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  const { elements, fetchCalls } = createBrowserContext({
+    pathname: `/browser/map/simplebuzz/pin/${pinId}`,
+    search: '?version=0',
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and MAP deep link resolve');
+
+  assert.equal(elements['[data-browser-uri-input]'].value, `map://simplebuzz/pin/${pinId}?version=0`);
+  assert.equal(fetchCalls[1], `/api/browser/resolve?uri=map%3A%2F%2Fsimplebuzz%2Fpin%2F${pinId}%3Fversion%3D0&actorId=worker`);
+});
+
+test('Browser MAP alias deep link path is decoded into the address bar and resolved', async () => {
+  const { elements, fetchCalls } = createBrowserContext({ pathname: '/browser/map/buzz.sunny.eth' });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and MAP alias resolve');
+
+  assert.equal(elements['[data-browser-uri-input]'].value, 'map://buzz.sunny.eth');
+  assert.equal(fetchCalls[1], '/api/browser/resolve?uri=map%3A%2F%2Fbuzz.sunny.eth&actorId=worker');
+});
+
 test('Browser status TXID falls back to the proof pin transaction id', async () => {
   const txid = '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
   const pinId = `${txid}i0`;
