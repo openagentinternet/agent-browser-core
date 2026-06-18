@@ -544,6 +544,39 @@ function renderBaseUrlSettings() {
   '</form>';
 }
 
+function nameResolutionConfig() {
+  var data = state.settingsData || {};
+  var effective = objectValue(objectValue(data.effectiveBrowser).nameResolution);
+  var browser = objectValue(objectValue(data.browser).nameResolution);
+  var defaults = objectValue(objectValue(data.defaults).nameResolution);
+  var source = Object.keys(browser).length ? browser : (Object.keys(effective).length ? effective : defaults);
+  var ens = objectValue(source.ens);
+  return {
+    enabled: source.enabled !== false,
+    ensEnabled: ens.enabled === true,
+    rpcUrls: Array.isArray(ens.rpcUrls) ? ens.rpcUrls.join(', ') : '',
+    textKey: textValue(ens.textKey) || 'org.openagentinternet.uri'
+  };
+}
+
+function renderNameResolutionSettings() {
+  var config = nameResolutionConfig();
+  return '<form class="browser-settings-form" data-browser-settings-form>' +
+    '<label class="browser-settings-field"><span>Name Resolution</span>' +
+      '<button type="button" class="browser-switch" role="switch" data-browser-name-resolution-enabled aria-checked="' + (config.enabled ? 'true' : 'false') + '">' +
+        '<span class="browser-switch-track" aria-hidden="true"><span class="browser-switch-thumb"></span></span>' +
+        '<span class="browser-switch-label">' + (config.enabled ? 'On' : 'Off') + '</span></button></label>' +
+    '<label class="browser-settings-field"><span>ENS</span>' +
+      '<button type="button" class="browser-switch" role="switch" data-browser-ens-enabled aria-checked="' + (config.ensEnabled ? 'true' : 'false') + '">' +
+        '<span class="browser-switch-track" aria-hidden="true"><span class="browser-switch-thumb"></span></span>' +
+        '<span class="browser-switch-label">' + (config.ensEnabled ? 'On' : 'Off') + '</span></button></label>' +
+    '<label class="browser-settings-field"><span>ENS RPC URLs</span>' +
+      '<input data-browser-ens-rpc-urls value="' + escapeHtml(config.rpcUrls) + '" placeholder="https://rpc.example" /></label>' +
+    '<label class="browser-settings-field"><span>ENS Text Key</span>' +
+      '<input data-browser-ens-text-key value="' + escapeHtml(config.textKey) + '" placeholder="org.openagentinternet.uri" /></label>' +
+  '</form>';
+}
+
 function botHomepageTemplateById(templateId) {
   var targetId = textValue(templateId) || 'document';
   for (var index = 0; index < browserBotHomepageTemplates.length; index += 1) {
@@ -626,8 +659,10 @@ function renderBrowserSettingsModal() {
   if (!elements.modalRoot) return;
   var body = state.settingsTab === 'cache'
     ? renderCacheSettings()
-    : (state.settingsTab === 'templates' ? renderTemplateSettings() : renderBaseUrlSettings());
-  var saveButton = state.settingsTab === 'baseUrls'
+    : (state.settingsTab === 'templates'
+      ? renderTemplateSettings()
+      : (state.settingsTab === 'nameResolution' ? renderNameResolutionSettings() : renderBaseUrlSettings()));
+  var saveButton = state.settingsTab === 'baseUrls' || state.settingsTab === 'nameResolution'
     ? '<button type="button" data-browser-settings-save>Save</button>'
     : '';
   elements.modalRoot.hidden = false;
@@ -668,7 +703,13 @@ async function openBrowserSettings(tabId) {
 
 async function handleBrowserMenuAction(itemId) {
   var item = findBrowserMenuItem(itemId);
-  if (!item) return null;
+  if (!item) {
+    var tabId = settingsTabExists(itemId);
+    if (tabId !== textValue(itemId)) return null;
+    closeBrowserMenu();
+    await openBrowserSettings(tabId);
+    return { id: tabId, action: 'open-settings', settingsTab: tabId };
+  }
   closeBrowserMenu();
   if (item.action === 'open-settings') {
     await openBrowserSettings(item.settingsTab);
@@ -684,8 +725,42 @@ async function switchBrowserSettingsTab(tabId) {
   renderBrowserSettingsModal();
 }
 
+async function saveNameResolutionSettings() {
+  if (!elements.modalRoot || typeof elements.modalRoot.querySelector !== 'function') return null;
+  var rpcUrlsInput = elements.modalRoot.querySelector('[data-browser-ens-rpc-urls]');
+  var textKeyInput = elements.modalRoot.querySelector('[data-browser-ens-text-key]');
+  var enabledSwitch = elements.modalRoot.querySelector('[data-browser-name-resolution-enabled]');
+  var ensSwitch = elements.modalRoot.querySelector('[data-browser-ens-enabled]');
+  var rpcUrls = textValue(rpcUrlsInput && rpcUrlsInput.value)
+    .split(',')
+    .map(function (item) { return textValue(item); })
+    .filter(Boolean);
+  var browser = {
+    nameResolution: {
+      enabled: !enabledSwitch || enabledSwitch.getAttribute('aria-checked') !== 'false',
+      ens: {
+        enabled: !!ensSwitch && ensSwitch.getAttribute('aria-checked') === 'true',
+        rpcUrls: rpcUrls,
+        textKey: textValue(textKeyInput && textKeyInput.value) || 'org.openagentinternet.uri'
+      }
+    }
+  };
+  var result = await api(browserSettingsEndpoint(), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ browser: browser })
+  });
+  state.settingsData = result;
+  setStatus('saved', '');
+  renderBrowserSettingsModal();
+  return result;
+}
+
 async function saveBrowserSettings() {
   if (!elements.modalRoot || typeof elements.modalRoot.querySelector !== 'function') return null;
+  if (state.settingsTab === 'nameResolution') {
+    return saveNameResolutionSettings();
+  }
   var browser = {};
   browserBaseUrlFields.forEach(function (field) {
     var key = textValue(field.key);
@@ -701,6 +776,18 @@ async function saveBrowserSettings() {
   setStatus('saved', '');
   renderBrowserSettingsModal();
   return result;
+}
+
+function toggleBrowserSwitch(switchElement) {
+  if (!switchElement || typeof switchElement.getAttribute !== 'function') return;
+  var checked = switchElement.getAttribute('aria-checked') !== 'true';
+  if (typeof switchElement.setAttribute === 'function') {
+    switchElement.setAttribute('aria-checked', checked ? 'true' : 'false');
+  }
+  if (typeof switchElement.querySelector === 'function') {
+    var label = switchElement.querySelector('.browser-switch-label');
+    if (label) label.textContent = checked ? 'On' : 'Off';
+  }
 }
 
 async function selectBotHomepageTemplate(templateId) {
@@ -1800,6 +1887,16 @@ async function initialize() {
         });
         return;
       }
+      var nameResolutionToggle = closestWithAttribute(event && event.target, 'data-browser-name-resolution-enabled');
+      if (nameResolutionToggle) {
+        toggleBrowserSwitch(nameResolutionToggle);
+        return;
+      }
+      var ensToggle = closestWithAttribute(event && event.target, 'data-browser-ens-enabled');
+      if (ensToggle) {
+        toggleBrowserSwitch(ensToggle);
+        return;
+      }
       if (closestWithAttribute(event && event.target, 'data-browser-custom-pages-toggle')) {
         toggleCustomBotPages().catch(function (error) {
           setStatus('error', error && error.message ? error.message : 'Custom Bot Page setting failed.');
@@ -1956,6 +2053,7 @@ globalThis.handleBrowserMenuAction = handleBrowserMenuAction;
 globalThis.openBrowserSettings = openBrowserSettings;
 globalThis.switchBrowserSettingsTab = switchBrowserSettingsTab;
 globalThis.saveBrowserSettings = saveBrowserSettings;
+globalThis.saveNameResolutionSettings = saveNameResolutionSettings;
 globalThis.selectBotHomepageTemplate = selectBotHomepageTemplate;
 globalThis.toggleCustomBotPages = toggleCustomBotPages;
 globalThis.clearBrowserCache = clearBrowserCache;

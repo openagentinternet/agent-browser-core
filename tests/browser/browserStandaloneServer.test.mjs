@@ -91,11 +91,27 @@ test('standalone Browser server exposes runtime, settings, cache, and action rou
   const updated = await readJson(await fetch(`${baseUrl}/api/browser/settings`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ browser: { botHomepageTemplateId: 'compact-list', renderCustomBotPages: false } }),
+    body: JSON.stringify({
+      browser: {
+        botHomepageTemplateId: 'compact-list',
+        renderCustomBotPages: false,
+        nameResolution: {
+          enabled: true,
+          ens: {
+            enabled: true,
+            rpcUrls: ['https://rpc.example'],
+            textKey: 'org.openagentinternet.uri',
+          },
+        },
+      },
+    }),
   }));
   assert.equal(updated.ok, true);
   assert.equal(updated.data.effectiveBrowser.botHomepageTemplateId, 'compact-list');
   assert.equal(updated.data.effectiveBrowser.renderCustomBotPages, false);
+  assert.equal(updated.data.effectiveBrowser.nameResolution.enabled, true);
+  assert.equal(updated.data.effectiveBrowser.nameResolution.ens.enabled, true);
+  assert.deepEqual(updated.data.effectiveBrowser.nameResolution.ens.rpcUrls, ['https://rpc.example']);
 
   const missingActorSettings = await readJson(await fetch(`${baseUrl}/api/browser/settings?actorId=missing`));
   assert.equal(missingActorSettings.ok, true);

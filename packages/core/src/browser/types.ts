@@ -30,6 +30,18 @@ export interface ParsedMapConversationUri {
 
 export type ParsedMapUri = ParsedMapPinUri | ParsedMapConversationUri;
 
+export interface BrowserEnsNameResolutionConfig {
+  enabled: boolean;
+  chainId: 1;
+  rpcUrls: string[];
+  textKey: string;
+}
+
+export interface BrowserNameResolutionConfig {
+  enabled: boolean;
+  ens: BrowserEnsNameResolutionConfig;
+}
+
 export interface BrowserBaseConfig {
   metasoP2PBaseUrl: string;
   metafileContentBaseUrl: string;
@@ -38,6 +50,7 @@ export interface BrowserBaseConfig {
   walletApiBaseUrl?: string;
   botHomepageTemplateId: BotHomepageTemplateId;
   renderCustomBotPages: boolean;
+  nameResolution: BrowserNameResolutionConfig;
   localMode: boolean;
 }
 
