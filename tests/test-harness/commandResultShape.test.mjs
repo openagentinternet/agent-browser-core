@@ -30,3 +30,18 @@ test('assertBrowserCommandResultShape rejects invalid command state objects', ()
     /bad state/,
   );
 });
+
+test('Browser command shape accepts conversation href follow-up actions', () => {
+  harness.assertBrowserCommandResultShape(
+    contract.browserManualActionRequired('identity_required', 'Select a local Bot.', {
+      action: {
+        label: 'Open conversation',
+        href: '/ui/conversations?local=idq1local&peer=idq1peer',
+      },
+      data: {
+        conversationUri: 'map://simplemsg/conversation?peer=idq1peer',
+      },
+    }),
+    'open-conversation',
+  );
+});

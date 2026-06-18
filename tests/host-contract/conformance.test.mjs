@@ -218,3 +218,44 @@ test('host conformance accepts manual-action trusted actions', async () => {
     sampleUri: 'metaid://idq1fake',
   });
 });
+
+test('host conformance accepts protocol resources and open-conversation actions', async () => {
+  const adapter = createConformantAdapter({
+    async resolveResource(input) {
+      return browserSuccess(createResolveResult(input.uri, {
+        resourceType: 'protocol',
+        title: 'Protocol Buzz',
+        renderer: {
+          type: 'protocol-pin',
+          contentType: 'application/json',
+          data: {
+            rendererId: 'simplebuzz.detail',
+            protocolPath: '/protocols/simplebuzz',
+          },
+        },
+        actions: [{
+          id: 'open-conversation',
+          label: 'Conversation',
+          kind: 'open-conversation',
+          enabled: true,
+          requiresUsingIdentity: true,
+          payload: {
+            conversationUri: 'map://simplemsg/conversation?peer=idq1peer',
+            peerGlobalMetaId: 'idq1peer',
+          },
+        }],
+        proof: {
+          pinId: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+          protocolPath: '/protocols/simplebuzz',
+          verificationState: 'partial',
+        },
+      }));
+    },
+  });
+
+  await assertBrowserHostConformance({
+    adapter,
+    expectedHostKind: 'standalone',
+    sampleUri: 'map://simplebuzz/pin/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+  });
+});
