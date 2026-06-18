@@ -15,8 +15,8 @@
     "packages/*"
   ],
   "scripts": {
-    "build:esm": "tsc -b packages/host-contract packages/core packages/ui packages/host-standalone packages/test-harness",
-    "build:cjs": "tsc -p packages/host-contract/tsconfig.cjs.json && tsc -p packages/core/tsconfig.cjs.json && tsc -p packages/ui/tsconfig.cjs.json && tsc -p packages/host-standalone/tsconfig.cjs.json && tsc -p packages/test-harness/tsconfig.cjs.json && node scripts/write-cjs-package-markers.mjs",
+    "build:esm": "tsc -b packages/host-contract packages/core packages/name-resolvers packages/ui packages/host-standalone packages/test-harness",
+    "build:cjs": "tsc -p packages/host-contract/tsconfig.cjs.json && tsc -p packages/core/tsconfig.cjs.json && tsc -p packages/name-resolvers/tsconfig.cjs.json && tsc -p packages/ui/tsconfig.cjs.json && tsc -p packages/host-standalone/tsconfig.cjs.json && tsc -p packages/test-harness/tsconfig.cjs.json && node scripts/write-cjs-package-markers.mjs",
     "build": "npm run build:esm && npm run build:cjs",
     "test": "npm run build && node --test tests/**/*.test.mjs",
     "test:browser-parity": "npm run build && node --test tests/browser/*.test.mjs tests/ui/browserPage*.test.mjs",

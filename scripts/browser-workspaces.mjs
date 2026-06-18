@@ -8,6 +8,10 @@ export const BROWSER_WORKSPACES = [
     path: "packages/core",
   },
   {
+    name: "@openagentinternet/agent-browser-name-resolvers",
+    path: "packages/name-resolvers",
+  },
+  {
     name: "@openagentinternet/agent-browser-ui",
     path: "packages/ui",
   },
