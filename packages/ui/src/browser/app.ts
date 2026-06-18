@@ -162,7 +162,8 @@ var state = {
   pendingServiceCall: null,
   visits: [],
   status: 'loading',
-  error: ''
+  error: '',
+  lastResolveError: null
 };
 
 var elements = {};
@@ -1196,6 +1197,38 @@ function renderHomepageV3Inspector(current) {
     '</dl>';
 }
 
+function renderNameAliasInspector(source) {
+  var raw = objectValue(source && source.raw);
+  var alias = objectValue(raw.nameAlias);
+  if (!Object.keys(alias).length) return '';
+  return '<h3>Name Alias</h3><dl>' +
+    keyValue('alias URI', alias.aliasUri) +
+    keyValue('provider', alias.provider) +
+    keyValue('name', alias.normalizedName) +
+    keyValue('text key', alias.textKey) +
+    keyValue('canonical URI', alias.canonicalUri) +
+    keyValue('resolved at', alias.resolvedAt) +
+    keyValue('verification', alias.verificationState) +
+    '</dl>';
+}
+
+function renderResolveErrorInspector() {
+  if (!elements.inspector || !state.lastResolveError) return;
+  var error = state.lastResolveError || {};
+  var data = objectValue(error.data);
+  elements.inspector.innerHTML = '<section class="browser-inspector-panel">' +
+    '<header class="browser-panel-header"><h2>Inspector</h2><button type="button" class="browser-icon-button" data-browser-inspector-close aria-label="Close inspector">' + iconHtml('close') + '</button></header>' +
+    '<div class="browser-proof-summary">' + proofIconHtml('unverified') + '<span>unverified</span></div>' +
+    '<h3>Name Alias Error</h3><dl>' +
+      keyValue('code', error.code) +
+      keyValue('message', error.message) +
+      keyValue('input URI', data.inputUri || error.inputUri) +
+      keyValue('provider', data.provider) +
+      keyValue('name', data.aliasName) +
+      keyValue('text key', data.textKey) +
+    '</dl></section>';
+}
+
 function renderInspector() {
   if (!elements.inspector || !state.current) return;
   var current = state.current;
@@ -1237,7 +1270,7 @@ function renderInspector() {
     keyValue('local path', source.localPath || source.path) +
     keyValue('fetched at', source.fetchedAt || source.cachedAt || source.resolvedAt) +
     keyValue('schema', source.schemaVersion) +
-    '</dl>' + renderHomepageV3Inspector(current) + (source.raw ? '<pre>' + escapeHtml(JSON.stringify(source.raw || {}, null, 2)) + '</pre>' : '') + '</section>';
+    '</dl>' + renderNameAliasInspector(source) + renderHomepageV3Inspector(current) + (source.raw ? '<pre>' + escapeHtml(JSON.stringify(source.raw || {}, null, 2)) + '</pre>' : '') + '</section>';
 }
 
 function openInspector() {
@@ -1246,6 +1279,10 @@ function openInspector() {
     elements.inspector.hidden = false;
   }
   syncPanelState();
+  if (state.lastResolveError && !state.current) {
+    renderResolveErrorInspector();
+    return;
+  }
   renderInspector();
 }
 
@@ -1809,17 +1846,25 @@ async function resolveUri(uri, options) {
   if (elements.input) elements.input.value = normalizedUri;
   if (shouldRecord) pushHistory(normalizedUri);
   setStatus('loading', '');
+  state.lastResolveError = null;
   try {
     var result = await api(resolveUrl(normalizedUri));
     var resolvedUri = textValue(result && (result.normalizedUri || result.uri)) || normalizedUri;
     if (elements.input) elements.input.value = resolvedUri;
     if (shouldRecord && state.historyIndex >= 0) state.history[state.historyIndex] = resolvedUri;
     state.current = result;
+    state.lastResolveError = null;
     recordVisit(result);
     setStatus('resolved', '');
     renderCurrent();
     return result;
   } catch (error) {
+    state.lastResolveError = {
+      inputUri: normalizedUri,
+      code: error && error.payload && error.payload.code,
+      message: error && error.message ? error.message : 'Resolve failed.',
+      data: error && error.payload && error.payload.data
+    };
     setStatus('error', error && error.message ? error.message : 'Resolve failed.');
     state.current = null;
     renderOwnerToolbar();
