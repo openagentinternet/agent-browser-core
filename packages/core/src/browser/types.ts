@@ -54,8 +54,20 @@ export interface BrowserBaseConfig {
   localMode: boolean;
 }
 
+export type BrowserEnsNameResolutionConfigInput = Partial<BrowserEnsNameResolutionConfig>;
+
+export type BrowserNameResolutionConfigInput =
+  Omit<Partial<BrowserNameResolutionConfig>, 'ens'> & {
+    ens?: BrowserEnsNameResolutionConfigInput;
+  };
+
+export type BrowserBaseConfigInput =
+  Omit<Partial<BrowserBaseConfig>, 'nameResolution'> & {
+    nameResolution?: BrowserNameResolutionConfigInput;
+  };
+
 export interface BrowserConfigContainer {
-  browser?: Partial<BrowserBaseConfig>;
+  browser?: BrowserBaseConfigInput;
 }
 
 export interface BotBrowserConfig extends Partial<BrowserBaseConfig> {
@@ -158,7 +170,7 @@ export interface BrowserContextResult {
 }
 
 export interface BrowserSettingsSnapshot {
-  browser: Partial<BrowserBaseConfig>;
+  browser: BrowserBaseConfigInput;
   effectiveBrowser: BrowserBaseConfig;
   defaults: BrowserBaseConfig;
   configPath?: string;

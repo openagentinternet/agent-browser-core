@@ -124,3 +124,18 @@ test('Browser settings update and validate name resolution fields', () => {
     /browser\.nameResolution\.ens\.textKey must be a non-empty string/,
   );
 });
+
+test('Browser settings reject malformed name resolution settings objects', () => {
+  assert.throws(
+    () => applyBrowserSettingsUpdate({}, { nameResolution: true }),
+    /browser\.nameResolution must be an object/,
+  );
+  assert.throws(
+    () => applyBrowserSettingsUpdate({}, { nameResolution: { ens: true } }),
+    /browser\.nameResolution\.ens must be an object/,
+  );
+  assert.throws(
+    () => applyBrowserSettingsUpdate({}, { nameResolution: { ens: { rpcUrls: 123 } } }),
+    /browser\.nameResolution\.ens\.rpcUrls must be a string or string array/,
+  );
+});

@@ -2,6 +2,7 @@ import { BOT_HOMEPAGE_TEMPLATES, isBotHomepageTemplateId } from './botHomepageTe
 import { createDefaultBrowserConfig, resolveBrowserConfig } from './config.js';
 import type {
   BrowserBaseConfig,
+  BrowserBaseConfigInput,
   BrowserConfigContainer,
   BrowserSettingsSnapshot,
 } from './types.js';
@@ -58,8 +59,15 @@ function validateHttpUrl(value: unknown, message: string): string {
 }
 
 function validateHttpUrlList(value: unknown): string[] {
+  const typeMessage = 'browser.nameResolution.ens.rpcUrls must be a string or string array.';
   const message = 'browser.nameResolution.ens.rpcUrls must contain http(s) URLs.';
-  const rawItems = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
+  if (typeof value !== 'string' && !Array.isArray(value)) {
+    throw new Error(typeMessage);
+  }
+  const rawItems = Array.isArray(value) ? value : value.split(',');
+  if (rawItems.some((item) => typeof item !== 'string')) {
+    throw new Error(typeMessage);
+  }
   return rawItems.map((item) => validateHttpUrl(item, message));
 }
 
@@ -73,8 +81,15 @@ function readObject(value: unknown): Record<string, unknown> {
     : {};
 }
 
+function readRequiredObject(value: unknown, message: string): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  throw new Error(message);
+}
+
 function readNameResolutionConfig(
-  value: Partial<BrowserBaseConfig>['nameResolution'] | undefined,
+  value: BrowserBaseConfigInput['nameResolution'] | undefined,
   defaults: BrowserBaseConfig['nameResolution'],
 ): BrowserBaseConfig['nameResolution'] {
   return {
@@ -97,13 +112,15 @@ function readOptionalBoolean(value: unknown, fallback: boolean, message: string)
 }
 
 function mergeNameResolutionSettings(
-  current: Partial<BrowserBaseConfig>['nameResolution'],
+  current: BrowserBaseConfigInput['nameResolution'],
   input: unknown,
   defaults: BrowserBaseConfig['nameResolution'],
 ): BrowserBaseConfig['nameResolution'] {
-  const value = readObject(input);
+  const value = readRequiredObject(input, 'browser.nameResolution must be an object.');
   const existing = readNameResolutionConfig(current, defaults);
-  const ensInput = readObject(value.ens);
+  const ensInput = hasOwn(value, 'ens')
+    ? readRequiredObject(value.ens, 'browser.nameResolution.ens must be an object.')
+    : {};
   const next = {
     enabled: readOptionalBoolean(value.enabled, existing.enabled, 'browser.nameResolution.enabled must be a boolean.'),
     ens: {
@@ -140,10 +157,10 @@ export function createBrowserSettingsSnapshot(input: {
 export function applyBrowserSettingsUpdate<TConfig extends BrowserConfigContainer>(
   current: TConfig,
   rawBrowserInput: unknown,
-): TConfig & { browser: Partial<BrowserBaseConfig> } {
+): TConfig & { browser: BrowserBaseConfigInput } {
   const browserInput = readObject(rawBrowserInput);
   const defaults = createDefaultBrowserConfig();
-  const nextBrowser: Partial<BrowserBaseConfig> = {
+  const nextBrowser: BrowserBaseConfigInput = {
     ...(current.browser ?? {}),
   };
 
