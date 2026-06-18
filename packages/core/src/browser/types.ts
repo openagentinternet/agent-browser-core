@@ -1,8 +1,8 @@
 import type { BotHomepageTemplateId } from './botHomepageTemplates.js';
 
-export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile';
-export type BrowserResourceType = 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'unsupported' | 'unknown';
-export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'unsupported';
+export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile' | 'map';
+export type BrowserResourceType = 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'protocol' | 'conversation' | 'unsupported' | 'unknown';
+export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'protocol-pin' | 'host-action' | 'unsupported';
 export type BrowserResolutionState = 'resolved' | 'loading' | 'not_found' | 'error';
 export type BrowserVerificationState = 'verified' | 'partial' | 'unverified';
 
@@ -85,13 +85,46 @@ export interface BrowserSourceSummary {
 export interface BrowserTrustedAction {
   id: string;
   label: string;
-  kind: 'private-chat' | 'service-list' | 'service-call' | 'copy' | 'proof' | 'creator';
+  kind: 'private-chat' | 'service-list' | 'service-call' | 'copy' | 'proof' | 'creator' | 'open-conversation';
   enabled?: boolean;
   requiresUsingIdentity?: boolean;
   uri?: string;
   serviceId?: string;
   payload?: Record<string, unknown>;
 }
+
+export type MapUriTargetKind = 'pin' | 'conversation';
+export type MapPinVersionSelector = 'latest' | 'history-index' | 'exact';
+
+export interface MapResolvedPinVersion {
+  requestedPinId: string;
+  rootPinId?: string;
+  resolvedPinId: string;
+  versionSelector: MapPinVersionSelector;
+  historyIndex?: number;
+}
+
+export interface ParsedMapPinUri {
+  originalUri: string;
+  normalizedUri: string;
+  authority: string;
+  protocolPath: string;
+  targetKind: 'pin';
+  pinId: string;
+  versionSelector: 'latest' | 'history-index';
+  historyIndex?: number;
+}
+
+export interface ParsedMapConversationUri {
+  originalUri: string;
+  normalizedUri: string;
+  authority: 'simplemsg';
+  protocolPath: '/protocols/simplemsg';
+  targetKind: 'conversation';
+  peerGlobalMetaId: string;
+}
+
+export type ParsedMapUri = ParsedMapPinUri | ParsedMapConversationUri;
 
 export interface BrowserResolveResult {
   uri: string;
