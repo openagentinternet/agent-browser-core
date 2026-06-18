@@ -21,6 +21,10 @@ const WORKSPACES = [
     manifestUrl: new URL('../../packages/renderers/package.json', import.meta.url),
   },
   {
+    name: '@openagentinternet/agent-browser-name-resolvers',
+    manifestUrl: new URL('../../packages/name-resolvers/package.json', import.meta.url),
+  },
+  {
     name: '@openagentinternet/agent-browser-ui',
     manifestUrl: new URL('../../packages/ui/package.json', import.meta.url),
   },
@@ -132,6 +136,11 @@ test('published Browser packages include declared entrypoints', async () => {
       assertPackIncludes(files, 'dist-cjs/browserClientScript.js', workspace.name);
       assertPackIncludes(files, 'dist-cjs/browserShell.js', workspace.name);
       assertPackIncludes(files, 'dist-cjs/browserStyles.js', workspace.name);
+    }
+
+    if (workspace.name === '@openagentinternet/agent-browser-name-resolvers') {
+      assertPackIncludes(files, 'dist/ens.js', workspace.name);
+      assertPackIncludes(files, 'dist-cjs/ens.js', workspace.name);
     }
 
     if (workspace.name === '@openagentinternet/agent-browser-host-standalone') {

@@ -9,6 +9,7 @@ import {
   resolveBrowserResource,
   type BrowserCommandResult as CoreBrowserCommandResult,
   type BrowserConfigContainer,
+  type BrowserNameAliasProvider,
   type BrowserResolveResult,
   type BrowserSettingsSnapshot as CoreBrowserSettingsSnapshot,
   resolveMetaAppPinToRecord,
@@ -34,6 +35,7 @@ import {
   type BrowserTrustedActionInput,
   type BrowserTrustedActionResult,
 } from '@openagentinternet/agent-browser-host-contract';
+import { createEnsOpenAgentInternetResolver } from '@openagentinternet/agent-browser-name-resolvers';
 import {
   createStandaloneMetaAppArtifactCacheStore,
   normalizeMetaAppModifyHistory,
@@ -175,6 +177,12 @@ export interface CreateStandaloneBrowserHostAdapterInput {
   now?: () => number;
   cacheRoot?: string;
   maxZipArchiveBytes?: number;
+  nameAliasProviders?: BrowserNameAliasProvider[];
+  ensNameAliasProviderFactory?: (config: {
+    chainId: 1;
+    rpcUrls: string[];
+    textKey: string;
+  }) => BrowserNameAliasProvider;
 }
 
 interface PreviewSession {
@@ -196,13 +204,41 @@ function normalizeText(value: unknown): string {
 }
 
 function createStandaloneConfig(): BrowserConfigContainer {
+  const { nameResolution: _nameResolution, ...defaults } = createDefaultBrowserConfig();
   return {
     browser: {
-      ...createDefaultBrowserConfig(),
+      ...defaults,
       metafileContentBaseUrl: STANDALONE_METAFILE_CONTENT_BASE_URL,
       localMode: false,
     },
   };
+}
+
+function createNameAliasProviders(input: {
+  configured: BrowserNameAliasProvider[] | undefined;
+  ensNameAliasProviderFactory: CreateStandaloneBrowserHostAdapterInput['ensNameAliasProviderFactory'];
+  config: ReturnType<typeof resolveBrowserConfig>;
+}): BrowserNameAliasProvider[] {
+  const nameResolution = input.config.nameResolution;
+  if (!nameResolution.enabled) {
+    return [];
+  }
+  if (input.configured) {
+    if (!nameResolution.ens.enabled) {
+      return input.configured.filter((provider) => provider.id.trim().toLowerCase() !== 'ens');
+    }
+    return input.configured;
+  }
+  if (!nameResolution.ens.enabled) {
+    return [];
+  }
+  return [
+    (input.ensNameAliasProviderFactory ?? createEnsOpenAgentInternetResolver)({
+      chainId: nameResolution.ens.chainId,
+      rpcUrls: nameResolution.ens.rpcUrls,
+      textKey: nameResolution.ens.textKey,
+    }),
+  ];
 }
 
 function buildStandaloneActor(): BrowserActor {
@@ -444,10 +480,16 @@ export function createStandaloneBrowserHostAdapter(
     resolveFetch: typeof fetch,
   ): Promise<CoreBrowserCommandResult<BrowserResolveResult>> {
     const browserConfig = resolveBrowserConfig(config, env);
+    const nameAliasProviders = createNameAliasProviders({
+      configured: input.nameAliasProviders,
+      ensNameAliasProviderFactory: input.ensNameAliasProviderFactory,
+      config: browserConfig,
+    });
     return resolveBrowserResource({
       uri: resolveInput.uri,
       config: browserConfig,
       fetch: resolveFetch,
+      nameAliasProviders,
       metaAppResolve: (pinId) => resolveMetaAppPinToRecord({
         pinId,
         fetch: resolveFetch,

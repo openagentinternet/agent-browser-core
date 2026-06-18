@@ -1,8 +1,7 @@
 export {
   parseBrowserUri,
+  isValidGlobalMetaId,
   type BrowserUriScheme,
   type ParsedBrowserUri,
 } from '../uri/browserUri.js';
-export {
-  parseMapUri,
-} from './mapUri.js';
+export { parseMapUri, type ParsedMapUri } from './mapUri.js';

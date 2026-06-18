@@ -87,7 +87,7 @@ function browserResult(uri, overrides = {}) {
   };
 }
 
-function createContext() {
+function createContext(overrides = {}) {
   const nodes = elements();
   const responses = new Map([
     ['metaid://idq1fixturebot', browserResult('metaid://idq1fixturebot')],
@@ -108,6 +108,10 @@ function createContext() {
       },
     })],
   ]);
+  for (const [uri, result] of Object.entries(overrides.responses ?? {})) {
+    responses.set(uri, result);
+  }
+  const failures = overrides.failures ?? {};
   const context = {
     console,
     URL,
@@ -128,6 +132,9 @@ function createContext() {
     },
     fetch: async (url) => {
       const uri = new URLSearchParams(String(url).split('?')[1] || '').get('uri') || '';
+      if (failures[uri]) {
+        return { ok: true, json: async () => failures[uri] };
+      }
       return { ok: true, json: async () => ({ ok: true, data: responses.get(uri) || browserResult(uri) }) };
     },
   };
@@ -252,6 +259,200 @@ test('Inspector summarizes homepage v3 sections', async () => {
   assert.match(html, /buzz-pin/);
   assert.match(html, /metaapps/);
   assert.match(html, /metaapp-pin/);
+});
+
+test('Inspector renders ENS alias metadata from source raw nameAlias', async () => {
+  const aliasUri = 'metaid://sunny.eth';
+  const { context, nodes } = createContext({
+    responses: {
+      [aliasUri]: browserResult(aliasUri, {
+        normalizedUri: aliasUri,
+        title: 'Sunny',
+        owner: { kind: 'bot', globalMetaId: 'idq1target', name: 'Sunny', verificationState: 'partial' },
+        source: {
+          resolver: 'metaso-p2p',
+          raw: {
+            nameAlias: {
+              aliasUri,
+              provider: 'ens',
+              normalizedName: 'sunny.eth',
+              textKey: 'org.openagentinternet.uri',
+              canonicalUri: 'metaid://idq1target',
+              resolvedAt: 1780761234567,
+              verificationState: 'partial',
+            },
+          },
+        },
+      }),
+    },
+  });
+
+  await waitFor(() => context.state.current, 'initial resource');
+  await context.navigateTo(aliasUri);
+  await waitFor(() => context.state.current && context.state.current.uri === aliasUri, 'alias resource');
+  nodes['[data-browser-resource-chip]'].click();
+  const html = nodes['[data-browser-inspector]'].innerHTML;
+
+  assert.match(html, /<h3>Name Alias<\/h3>/);
+  assert.match(html, /sunny\.eth/);
+  assert.match(html, /org\.openagentinternet\.uri/);
+  assert.match(html, /metaid:\/\/idq1target/);
+  assert.match(html, /partial/);
+});
+
+test('Inspector renders ENS alias failure context after resolve error', async () => {
+  const aliasUri = 'metaid://missing.eth';
+  const { context, nodes } = createContext({
+    failures: {
+      [aliasUri]: {
+        ok: false,
+        state: 'failed',
+        code: 'name_alias_not_found',
+        message: 'ENS text record was missing or empty.',
+        data: {
+          inputUri: aliasUri,
+          aliasName: 'missing.eth',
+          provider: 'ens',
+          textKey: 'org.openagentinternet.uri',
+        },
+      },
+    },
+  });
+
+  await waitFor(() => context.state.current, 'initial resource');
+  await context.navigateTo(aliasUri);
+  await waitFor(() => context.state.lastResolveError, 'alias failure');
+  nodes['[data-browser-status-proof]'].click();
+  const html = nodes['[data-browser-inspector]'].innerHTML;
+
+  assert.match(html, /<h3>Name Alias Error<\/h3>/);
+  assert.match(html, /name_alias_not_found/);
+  assert.match(html, /missing\.eth/);
+  assert.match(html, /org\.openagentinternet\.uri/);
+  assert.match(html, /metaid:\/\/missing\.eth/);
+});
+
+test('Inspector refreshes to ENS alias error when open resource resolve fails', async () => {
+  const aliasUri = 'metaid://missing.eth';
+  const { context, nodes } = createContext({
+    failures: {
+      [aliasUri]: {
+        ok: false,
+        state: 'failed',
+        code: 'name_alias_not_found',
+        message: 'ENS text record was missing or empty.',
+        data: {
+          inputUri: aliasUri,
+          aliasName: 'missing.eth',
+          provider: 'ens',
+          textKey: 'org.openagentinternet.uri',
+        },
+      },
+    },
+  });
+
+  await waitFor(() => context.state.current, 'initial resource');
+  nodes['[data-browser-status-txid]'].click();
+  assert.match(nodes['[data-browser-inspector]'].innerHTML, /txid-fixture/);
+
+  await context.navigateTo(aliasUri);
+  await waitFor(() => context.state.lastResolveError, 'alias failure');
+  const html = nodes['[data-browser-inspector]'].innerHTML;
+
+  assert.match(html, /<h3>Name Alias Error<\/h3>/);
+  assert.match(html, /name_alias_not_found/);
+  assert.match(html, /missing\.eth/);
+  assert.doesNotMatch(html, /txid-fixture/);
+});
+
+test('Inspector refreshes from ENS alias error to successful alias evidence', async () => {
+  const badAliasUri = 'metaid://bad.eth';
+  const goodAliasUri = 'metaid://good.eth';
+  const { context, nodes } = createContext({
+    responses: {
+      [goodAliasUri]: browserResult(goodAliasUri, {
+        normalizedUri: goodAliasUri,
+        title: 'Good Alias Bot',
+        owner: { kind: 'bot', globalMetaId: 'idq1goodalias', name: 'Good Alias Bot', verificationState: 'partial' },
+        source: {
+          resolver: 'metaso-p2p',
+          raw: {
+            nameAlias: {
+              aliasUri: goodAliasUri,
+              provider: 'ens',
+              normalizedName: 'good.eth',
+              textKey: 'org.openagentinternet.uri',
+              canonicalUri: 'metaid://idq1goodalias',
+              resolvedAt: 1780761234567,
+              verificationState: 'partial',
+            },
+          },
+        },
+      }),
+    },
+    failures: {
+      [badAliasUri]: {
+        ok: false,
+        state: 'failed',
+        code: 'name_alias_not_found',
+        message: 'ENS text record was missing or empty.',
+        data: {
+          inputUri: badAliasUri,
+          aliasName: 'bad.eth',
+          provider: 'ens',
+          textKey: 'org.openagentinternet.uri',
+        },
+      },
+    },
+  });
+
+  await waitFor(() => context.state.current, 'initial resource');
+  nodes['[data-browser-resource-chip]'].click();
+
+  await context.navigateTo(badAliasUri);
+  await waitFor(() => context.state.lastResolveError, 'bad alias failure');
+  assert.match(nodes['[data-browser-inspector]'].innerHTML, /<h3>Name Alias Error<\/h3>/);
+
+  await context.navigateTo(goodAliasUri);
+  await waitFor(() => context.state.current && context.state.current.uri === goodAliasUri, 'good alias resource');
+  const html = nodes['[data-browser-inspector]'].innerHTML;
+
+  assert.doesNotMatch(html, /<h3>Name Alias Error<\/h3>/);
+  assert.match(html, /<h3>Name Alias<\/h3>/);
+  assert.match(html, /good\.eth/);
+  assert.match(html, /metaid:\/\/idq1goodalias/);
+  assert.match(html, /org\.openagentinternet\.uri/);
+});
+
+test('Inspector renders generic resolve failure context for non-alias errors', async () => {
+  const failedUri = 'metaid://broken';
+  const { context, nodes } = createContext({
+    failures: {
+      [failedUri]: {
+        ok: false,
+        state: 'failed',
+        code: 'resolver_unavailable',
+        message: 'Resolver is unavailable.',
+        data: {
+          inputUri: failedUri,
+        },
+      },
+    },
+  });
+
+  await waitFor(() => context.state.current, 'initial resource');
+  await context.navigateTo(failedUri);
+  await waitFor(() => context.state.lastResolveError, 'generic failure');
+  nodes['[data-browser-status-proof]'].click();
+  const html = nodes['[data-browser-inspector]'].innerHTML;
+
+  assert.match(html, /<h3>Resolve Error<\/h3>/);
+  assert.doesNotMatch(html, /<h3>Name Alias Error<\/h3>/);
+  assert.match(html, /resolver_unavailable/);
+  assert.match(html, /metaid:\/\/broken/);
+  assert.doesNotMatch(html, /<dt>provider<\/dt>/);
+  assert.doesNotMatch(html, /<dt>name<\/dt>/);
+  assert.doesNotMatch(html, /<dt>text key<\/dt>/);
 });
 
 test('Inspector TXID falls back to the proof pin transaction id', async () => {

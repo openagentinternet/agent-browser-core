@@ -121,6 +121,11 @@ function normalizeBareGlobalMetaId(input: string): string | null {
 
   return normalized;
 }
+
+export function isValidGlobalMetaId(input: string): boolean {
+  return normalizeBareGlobalMetaId(input) !== null;
+}
+
 export function parseBrowserUri(input: string): ParsedBrowserUri {
   const originalUri = String(input ?? '').trim();
   const schemeMatch = originalUri.match(/^([a-z][a-z0-9+.-]*):\/\/(.*)$/i);

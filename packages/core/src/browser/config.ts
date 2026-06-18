@@ -8,10 +8,33 @@ import type { BrowserBaseConfig, BrowserConfigContainer } from './types.js';
 const DEFAULT_METASO_P2P_BASE_URL = 'https://so.metaid.io';
 const DEFAULT_MANAPI_BASE_URL = 'https://manapi.metaid.io';
 const DEFAULT_BLOCK_EXPLORER_BASE_URL = 'https://www.mvcscan.com/tx';
+const DEFAULT_ENS_TEXT_KEY = 'org.openagentinternet.uri';
+const DEFAULT_ENS_RPC_URLS = ['https://ethereum-rpc.publicnode.com'];
 
 function normalizeUrl(value: unknown): string {
   const text = typeof value === 'string' ? value.trim() : '';
   return text.replace(/\/+$/, '');
+}
+
+function normalizeBoolean(value: unknown): boolean | null {
+  if (typeof value === 'boolean') return value;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes') return true;
+  if (normalized === 'false' || normalized === '0' || normalized === 'no') return false;
+  return null;
+}
+
+function normalizeUrlList(value: unknown): string[] {
+  const text = typeof value === 'string' ? value : Array.isArray(value) ? value.join(',') : '';
+  return text
+    .split(',')
+    .map((item) => normalizeUrl(item))
+    .filter(Boolean);
+}
+
+function normalizeText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 export function createDefaultBrowserConfig(): BrowserBaseConfig {
@@ -23,6 +46,15 @@ export function createDefaultBrowserConfig(): BrowserBaseConfig {
     walletApiBaseUrl: '',
     botHomepageTemplateId: DEFAULT_BOT_HOMEPAGE_TEMPLATE_ID,
     renderCustomBotPages: true,
+    nameResolution: {
+      enabled: true,
+      ens: {
+        enabled: true,
+        chainId: 1,
+        rpcUrls: [...DEFAULT_ENS_RPC_URLS],
+        textKey: DEFAULT_ENS_TEXT_KEY,
+      },
+    },
     localMode: false,
   };
 }
@@ -33,6 +65,22 @@ export function resolveBrowserConfig(
 ): BrowserBaseConfig {
   const defaults = createDefaultBrowserConfig();
   const browser = config.browser ?? {};
+  const browserNameResolution = (browser.nameResolution ?? {}) as Partial<BrowserBaseConfig['nameResolution']>;
+  const browserEns = (browserNameResolution.ens ?? {}) as Partial<BrowserBaseConfig['nameResolution']['ens']>;
+  const envRpcUrls = normalizeUrlList(env.METABOT_BROWSER_ENS_RPC_URLS);
+  const browserRpcUrls = normalizeUrlList(browserEns.rpcUrls);
+  const configuredRpcUrls = envRpcUrls.length > 0
+    ? envRpcUrls
+    : browserRpcUrls.length > 0
+      ? browserRpcUrls
+      : [...defaults.nameResolution.ens.rpcUrls];
+  const nameResolutionEnabled = normalizeBoolean(env.METABOT_BROWSER_NAME_RESOLUTION_ENABLED)
+    ?? (typeof browserNameResolution.enabled === 'boolean' ? browserNameResolution.enabled : defaults.nameResolution.enabled);
+  const ensEnabledInput = normalizeBoolean(env.METABOT_BROWSER_ENS_ENABLED)
+    ?? (typeof browserEns.enabled === 'boolean' ? browserEns.enabled : configuredRpcUrls.length > 0);
+  const ensTextKey = normalizeText(env.METABOT_BROWSER_ENS_TEXT_KEY)
+    || normalizeText(browserEns.textKey)
+    || defaults.nameResolution.ens.textKey;
   return {
     metasoP2PBaseUrl: normalizeUrl(env.METABOT_BROWSER_METASO_P2P_BASE_URL)
       || normalizeUrl(browser.metasoP2PBaseUrl)
@@ -53,6 +101,15 @@ export function resolveBrowserConfig(
     renderCustomBotPages: typeof browser.renderCustomBotPages === 'boolean'
       ? browser.renderCustomBotPages
       : defaults.renderCustomBotPages,
+    nameResolution: {
+      enabled: nameResolutionEnabled,
+      ens: {
+        enabled: nameResolutionEnabled && ensEnabledInput && configuredRpcUrls.length > 0,
+        chainId: 1,
+        rpcUrls: configuredRpcUrls,
+        textKey: ensTextKey,
+      },
+    },
     localMode: typeof browser.localMode === 'boolean' ? browser.localMode : defaults.localMode,
   };
 }

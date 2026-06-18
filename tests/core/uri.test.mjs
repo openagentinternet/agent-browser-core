@@ -26,6 +26,16 @@ test('parseBrowserUri normalizes supported Browser URI schemes', () => {
   });
 });
 
+test('parseBrowserUri normalizes map scheme resources', () => {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  assert.deepEqual(core.parseBrowserUri(` MAP://simplebuzz/pin/${pinId}[0] `), {
+    originalUri: `MAP://simplebuzz/pin/${pinId}[0]`,
+    normalizedUri: `map://simplebuzz/pin/${pinId}?version=0`,
+    scheme: 'map',
+    id: `simplebuzz/pin/${pinId}?version=0`,
+  });
+});
+
 test('parseBrowserUri treats a bare valid Global MetaID as a metaid URI', () => {
   assert.deepEqual(core.parseBrowserUri(`  ${validGlobalMetaId.toUpperCase()}  `), {
     originalUri: validGlobalMetaId.toUpperCase(),
@@ -42,7 +52,12 @@ test('parseBrowserUri rejects missing, empty, and unsupported schemes', () => {
   assert.throws(() => core.parseBrowserUri('https://example.com'), /unsupported URI scheme/i);
 });
 
-test('parseMapUri parses protocol pins and conversation targets', () => {
+test('core exports Global MetaID validation helper', () => {
+  assert.equal(core.isValidGlobalMetaId(validGlobalMetaId), true);
+  assert.equal(core.isValidGlobalMetaId('idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8p'), false);
+});
+
+test('parseMapUri accepts canonical MAP pin and conversation targets', () => {
   const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
 
   assert.deepEqual(core.parseMapUri(`map://simplebuzz/pin/${pinId}`), {
@@ -76,10 +91,26 @@ test('parseMapUri parses protocol pins and conversation targets', () => {
   });
 });
 
-test('parseMapUri rejects aliases, empty paths, and invalid history selectors', () => {
+test('parseMapUri rejects aliases and invalid selectors', () => {
+  assert.throws(() => core.parseMapUri('map://buzz.eth'), /unsupported MAP path|complete MAP URI|authority/i);
   assert.throws(() => core.parseMapUri('map://buzz/pin/abc'), /pinId/i);
+  assert.throws(() => core.parseMapUri('map://simplebuzz/pin/abc'), /pinId/i);
   assert.throws(() => core.parseMapUri('map://simplebuzz/pin/abc[-1]'), /history/i);
   assert.throws(() => core.parseMapUri('map://simplebuzz/pin/abc?version=latest'), /version/i);
   assert.throws(() => core.parseMapUri('map://simplemsg/conversation'), /peer/i);
   assert.throws(() => core.parseMapUri('map://simplebuzz/render/abc'), /unsupported MAP path/i);
+});
+
+test('parseMapUri rejects unsafe authorities and unsupported components', () => {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+
+  assert.throws(() => core.parseMapUri(`map://buzz%2Eeth/pin/${pinId}`), /alias|authority|unsupported/i);
+  assert.throws(() => core.parseMapUri(`map://simple%2fbuzz/pin/${pinId}`), /alias|authority|unsupported|complete/i);
+  assert.throws(() => core.parseMapUri(`map://simple_buzz/pin/${pinId}`), /alias|authority|unsupported/i);
+  assert.throws(() => core.parseMapUri(`map://simplebuzz/pin/${pinId}#fragment`), /fragment|unsupported/i);
+  assert.throws(() => core.parseMapUri(`map://simplebuzz/pin/${pinId}?version=1&foo=bar`), /query|unsupported/i);
+  assert.throws(() => core.parseMapUri(`map://simplebuzz/pin/${pinId}?version=1&version=2`), /version|unsupported/i);
+  assert.throws(() => core.parseMapUri(`map://simplebuzz/pin/${pinId}[2]?version=1`), /version|unsupported/i);
+  assert.throws(() => core.parseMapUri('map://simplemsg/conversation?peer=idq1peer&extra=1'), /query|unsupported/i);
+  assert.throws(() => core.parseMapUri('map://simplemsg/conversation?peer=idq1peer#fragment'), /fragment|unsupported/i);
 });

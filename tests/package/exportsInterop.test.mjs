@@ -30,6 +30,12 @@ const PACKAGES = [
     },
   },
   {
+    name: '@openagentinternet/agent-browser-name-resolvers',
+    exports: {
+      createEnsOpenAgentInternetResolver: 'function',
+    },
+  },
+  {
     name: '@openagentinternet/agent-browser-ui',
     exports: {
       BROWSER_MENU_SECTIONS: 'object',

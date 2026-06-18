@@ -40,7 +40,15 @@ test('standalone Browser server serves Browser pages and shared CSS', async (t) 
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const baseUrl = await listen(server);
 
-  for (const pathname of ['/', '/browser', '/ui/browser', '/browser/metaid/idq1fixturebot']) {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  for (const pathname of [
+    '/',
+    '/browser',
+    '/ui/browser',
+    '/browser/metaid/idq1fixturebot',
+    '/browser/map/buzz.sunny.eth',
+    `/browser/map/simplebuzz/pin/${pinId}?version=0`,
+  ]) {
     const response = await fetch(`${baseUrl}${pathname}`);
     const html = await response.text();
     assert.equal(response.status, 200);
@@ -82,6 +90,204 @@ test('standalone Browser serves map protocol pin deep links', async (t) => {
   assert.match(html, /data-browser-shell/);
 });
 
+test('standalone server resolves metaid ENS alias through injected provider', async (t) => {
+  const canonicalGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
+  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
+  fixture.identity.globalMetaId = canonicalGlobalMetaId;
+  fixture.identity.display = 'idq1qypq-w5z8n';
+  fixture.profile.name = 'ENS Fixture Bot';
+  const server = createStandaloneBrowserServer({
+    env: {
+      METABOT_BROWSER_ENS_RPC_URLS: 'https://rpc.example',
+    },
+    fetch: async (url) => {
+      assert.match(String(url), new RegExp(canonicalGlobalMetaId));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ code: 0, message: '', data: fixture }),
+      };
+    },
+    nameAliasProviders: [{
+      id: 'ens',
+      supportsName: (name) => String(name).toLowerCase() === 'fixture.eth',
+      async resolveNameAlias() {
+        return {
+          ok: true,
+          state: 'success',
+          data: {
+            provider: 'ens',
+            normalizedName: 'fixture.eth',
+            textKey: 'org.openagentinternet.uri',
+            canonicalUri: `metaid://${canonicalGlobalMetaId}`,
+            resolvedAt: 1780761234567,
+            verificationState: 'partial',
+          },
+        };
+      },
+    }],
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const payload = await readJson(await fetch(`${baseUrl}/api/browser/resolve?uri=metaid%3A%2F%2Ffixture.eth`));
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data.normalizedUri, 'metaid://fixture.eth');
+  assert.equal(payload.data.source.raw.nameAlias.canonicalUri, `metaid://${canonicalGlobalMetaId}`);
+});
+
+test('standalone server does not use injected name alias providers when name resolution is disabled', async (t) => {
+  let providerCalls = 0;
+  const server = createStandaloneBrowserServer({
+    fetch: async () => {
+      throw new Error('network fetch should not run for disabled name alias resolution');
+    },
+    nameAliasProviders: [{
+      id: 'ens',
+      supportsName: (name) => String(name).toLowerCase() === 'disabled.eth',
+      async resolveNameAlias() {
+        providerCalls += 1;
+        return {
+          ok: true,
+          state: 'success',
+          data: {
+            provider: 'ens',
+            normalizedName: 'disabled.eth',
+            textKey: 'org.openagentinternet.uri',
+            canonicalUri: 'metaid://idq1disabled',
+            resolvedAt: 1780761234567,
+            verificationState: 'partial',
+          },
+        };
+      },
+    }],
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const settings = await readJson(await fetch(`${baseUrl}/api/browser/settings`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      browser: {
+        nameResolution: {
+          enabled: false,
+          ens: { enabled: false },
+        },
+      },
+    }),
+  }));
+  assert.equal(settings.ok, true);
+  assert.equal(settings.data.effectiveBrowser.nameResolution.enabled, false);
+
+  const response = await fetch(`${baseUrl}/api/browser/resolve?uri=metaid%3A%2F%2Fdisabled.eth`);
+  const payload = await readJson(response);
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.code, 'name_resolution_unavailable');
+  assert.equal(providerCalls, 0);
+});
+
+test('standalone server filters injected ENS providers when ENS resolution is disabled', async (t) => {
+  let providerCalls = 0;
+  const server = createStandaloneBrowserServer({
+    fetch: async () => {
+      throw new Error('network fetch should not run when ENS name alias resolution is disabled');
+    },
+    nameAliasProviders: [{
+      id: 'ens',
+      supportsName: (name) => String(name).toLowerCase() === 'ensoff.eth',
+      async resolveNameAlias() {
+        providerCalls += 1;
+        return {
+          ok: true,
+          state: 'success',
+          data: {
+            provider: 'ens',
+            normalizedName: 'ensoff.eth',
+            textKey: 'org.openagentinternet.uri',
+            canonicalUri: 'metaid://idq1disabled',
+            resolvedAt: 1780761234567,
+            verificationState: 'partial',
+          },
+        };
+      },
+    }],
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const settings = await readJson(await fetch(`${baseUrl}/api/browser/settings`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      browser: {
+        nameResolution: {
+          enabled: true,
+          ens: { enabled: false },
+        },
+      },
+    }),
+  }));
+  assert.equal(settings.ok, true);
+  assert.equal(settings.data.effectiveBrowser.nameResolution.enabled, true);
+  assert.equal(settings.data.effectiveBrowser.nameResolution.ens.enabled, false);
+
+  const response = await fetch(`${baseUrl}/api/browser/resolve?uri=metaid%3A%2F%2Fensoff.eth`);
+  const payload = await readJson(response);
+
+  assert.equal(response.status, 400);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.code, 'name_resolution_unavailable');
+  assert.equal(providerCalls, 0);
+});
+
+test('standalone server constructs ENS provider from configured RPC URLs', async (t) => {
+  const canonicalGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
+  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
+  fixture.identity.globalMetaId = canonicalGlobalMetaId;
+  const factoryCalls = [];
+  const server = createStandaloneBrowserServer({
+    env: {
+      METABOT_BROWSER_ENS_RPC_URLS: 'https://rpc.example',
+    },
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ code: 0, message: '', data: fixture }),
+    }),
+    ensNameAliasProviderFactory: (config) => {
+      factoryCalls.push(config);
+      return {
+        id: 'ens',
+        supportsName: (name) => String(name).toLowerCase() === 'env.eth',
+        async resolveNameAlias() {
+          return {
+            ok: true,
+            state: 'success',
+            data: {
+              provider: 'ens',
+              normalizedName: 'env.eth',
+              textKey: config.textKey,
+              canonicalUri: `metaid://${canonicalGlobalMetaId}`,
+              resolvedAt: 1780761234567,
+              verificationState: 'partial',
+            },
+          };
+        },
+      };
+    },
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const payload = await readJson(await fetch(`${baseUrl}/api/browser/resolve?uri=metaid%3A%2F%2Fenv.eth`));
+  assert.equal(payload.ok, true);
+  assert.equal(factoryCalls[0].rpcUrls[0], 'https://rpc.example');
+  assert.equal(factoryCalls[0].textKey, 'org.openagentinternet.uri');
+});
+
 test('standalone Browser server exposes runtime, settings, cache, and action routes', async (t) => {
   const cacheDir = await mkdtemp(join(tmpdir(), 'abc-standalone-runtime-cache-'));
   t.after(() => rm(cacheDir, { recursive: true, force: true }));
@@ -118,11 +324,27 @@ test('standalone Browser server exposes runtime, settings, cache, and action rou
   const updated = await readJson(await fetch(`${baseUrl}/api/browser/settings`, {
     method: 'PUT',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ browser: { botHomepageTemplateId: 'compact-list', renderCustomBotPages: false } }),
+    body: JSON.stringify({
+      browser: {
+        botHomepageTemplateId: 'compact-list',
+        renderCustomBotPages: false,
+        nameResolution: {
+          enabled: true,
+          ens: {
+            enabled: true,
+            rpcUrls: ['https://rpc.example'],
+            textKey: 'org.openagentinternet.uri',
+          },
+        },
+      },
+    }),
   }));
   assert.equal(updated.ok, true);
   assert.equal(updated.data.effectiveBrowser.botHomepageTemplateId, 'compact-list');
   assert.equal(updated.data.effectiveBrowser.renderCustomBotPages, false);
+  assert.equal(updated.data.effectiveBrowser.nameResolution.enabled, true);
+  assert.equal(updated.data.effectiveBrowser.nameResolution.ens.enabled, true);
+  assert.deepEqual(updated.data.effectiveBrowser.nameResolution.ens.rpcUrls, ['https://rpc.example']);
 
   const missingActorSettings = await readJson(await fetch(`${baseUrl}/api/browser/settings?actorId=missing`));
   assert.equal(missingActorSettings.ok, true);

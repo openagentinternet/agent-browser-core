@@ -8,7 +8,7 @@ export interface BrowserMenuItemDefinition {
   label: string;
   icon: string;
   action: 'open-settings';
-  settingsTab: 'baseUrls' | 'templates' | 'cache';
+  settingsTab: 'baseUrls' | 'templates' | 'nameResolution' | 'cache';
 }
 
 export interface BrowserMenuSectionDefinition {
@@ -17,7 +17,7 @@ export interface BrowserMenuSectionDefinition {
 }
 
 export interface BrowserSettingsTabDefinition {
-  id: 'baseUrls' | 'templates' | 'cache';
+  id: 'baseUrls' | 'templates' | 'nameResolution' | 'cache';
   label: string;
 }
 
@@ -37,6 +37,13 @@ export const BROWSER_MENU_SECTIONS: BrowserMenuSectionDefinition[] = [
         icon: 'settings',
         action: 'open-settings',
         settingsTab: 'baseUrls',
+      },
+      {
+        id: 'name-resolution',
+        label: 'Name Resolution',
+        icon: 'link',
+        action: 'open-settings',
+        settingsTab: 'nameResolution',
       },
       {
         id: 'templates',
@@ -59,6 +66,7 @@ export const BROWSER_MENU_SECTIONS: BrowserMenuSectionDefinition[] = [
 export const BROWSER_SETTINGS_TABS: BrowserSettingsTabDefinition[] = [
   { id: 'baseUrls', label: 'Base URLs' },
   { id: 'templates', label: 'Templates' },
+  { id: 'nameResolution', label: 'Name Resolution' },
   { id: 'cache', label: 'Cache' },
 ];
 

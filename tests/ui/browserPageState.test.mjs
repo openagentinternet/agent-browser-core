@@ -66,6 +66,16 @@ class FakeElement {
     return Object.prototype.hasOwnProperty.call(this.attrs, name);
   }
 
+  querySelector(selector) {
+    const match = String(selector).match(/^\[([^=\]]+)(?:="([^"]+)")?\]$/);
+    if (!match) return null;
+    const [, attribute, value] = match;
+    const key = value === undefined ? attribute : `${attribute}:${value}`;
+    if (!this.children) this.children = new Map();
+    if (!this.children.has(key)) this.children.set(key, new FakeElement());
+    return this.children.get(key);
+  }
+
   click() {
     this.listeners.get('click')?.({ preventDefault() {} });
   }
@@ -185,6 +195,15 @@ function createBrowserContext(options = {}) {
       blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
       renderCustomBotPages: true,
+      nameResolution: {
+        enabled: true,
+        ens: {
+          enabled: false,
+          chainId: 1,
+          rpcUrls: [],
+          textKey: 'org.openagentinternet.uri',
+        },
+      },
       defaultChainName: 'mvc',
       localMode: true,
     },
@@ -195,6 +214,15 @@ function createBrowserContext(options = {}) {
       blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
       renderCustomBotPages: true,
+      nameResolution: {
+        enabled: true,
+        ens: {
+          enabled: false,
+          chainId: 1,
+          rpcUrls: [],
+          textKey: 'org.openagentinternet.uri',
+        },
+      },
       defaultChainName: 'mvc',
       localMode: true,
     },
@@ -205,6 +233,15 @@ function createBrowserContext(options = {}) {
       blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
       renderCustomBotPages: true,
+      nameResolution: {
+        enabled: true,
+        ens: {
+          enabled: false,
+          chainId: 1,
+          rpcUrls: [],
+          textKey: 'org.openagentinternet.uri',
+        },
+      },
       defaultChainName: 'mvc',
       localMode: true,
     },
@@ -408,6 +445,28 @@ test('Browser Metafile deep link path is decoded into the address bar and resolv
 
   assert.equal(elements['[data-browser-uri-input]'].value, `metafile://${pinId}`);
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metafile%3A%2F%2F${pinId}&actorId=worker`);
+});
+
+test('Browser MAP deep link path is decoded into the address bar and resolved', async () => {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  const { elements, fetchCalls } = createBrowserContext({
+    pathname: `/browser/map/simplebuzz/pin/${pinId}`,
+    search: '?version=0',
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and MAP deep link resolve');
+
+  assert.equal(elements['[data-browser-uri-input]'].value, `map://simplebuzz/pin/${pinId}?version=0`);
+  assert.equal(fetchCalls[1], `/api/browser/resolve?uri=map%3A%2F%2Fsimplebuzz%2Fpin%2F${pinId}%3Fversion%3D0&actorId=worker`);
+});
+
+test('Browser MAP alias deep link path is decoded into the address bar and resolved', async () => {
+  const { elements, fetchCalls } = createBrowserContext({ pathname: '/browser/map/buzz.sunny.eth' });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and MAP alias resolve');
+
+  assert.equal(elements['[data-browser-uri-input]'].value, 'map://buzz.sunny.eth');
+  assert.equal(fetchCalls[1], '/api/browser/resolve?uri=map%3A%2F%2Fbuzz.sunny.eth&actorId=worker');
 });
 
 test('Browser status TXID falls back to the proof pin transaction id', async () => {
@@ -770,13 +829,15 @@ test('Browser menu is data-driven and opens cache management settings', async ()
 
   assert.ok(Array.isArray(context.browserMenuSections));
   assert.equal(context.browserMenuSections[0].items[0].id, 'settings');
-  assert.equal(context.browserMenuSections[0].items[1].id, 'templates');
-  assert.equal(context.browserMenuSections[0].items[2].id, 'cache');
+  assert.equal(context.browserMenuSections[0].items[1].id, 'name-resolution');
+  assert.equal(context.browserMenuSections[0].items[2].id, 'templates');
+  assert.equal(context.browserMenuSections[0].items[3].id, 'cache');
 
   elements['[data-browser-menu-trigger]'].click();
   assert.equal(elements['[data-browser-menu]'].hidden, false);
   assert.equal(elements['[data-browser-menu-trigger]'].getAttribute('aria-expanded'), 'true');
   assert.match(elements['[data-browser-menu]'].innerHTML, /Settings/);
+  assert.match(elements['[data-browser-menu]'].innerHTML, /Name Resolution/);
   assert.match(elements['[data-browser-menu]'].innerHTML, /Bot Page Templates/);
   assert.match(elements['[data-browser-menu]'].innerHTML, /Cache Management/);
 
@@ -790,6 +851,31 @@ test('Browser menu is data-driven and opens cache management settings', async ()
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /2 artifacts/);
   assert.equal(fetchCalls.at(-2), '/api/browser/settings');
   assert.equal(fetchCalls.at(-1), '/api/browser/cache?actorId=worker');
+});
+
+test('Browser name resolution settings save ENS fields globally', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext();
+
+  await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
+  await context.handleBrowserMenuAction('nameResolution');
+
+  const modal = elements['[data-browser-modal-root]'];
+  assert.match(modal.innerHTML, /Name Resolution/);
+  assert.match(modal.innerHTML, /data-browser-name-resolution-enabled/);
+  assert.match(modal.innerHTML, /data-browser-ens-enabled/);
+  assert.match(modal.innerHTML, /data-browser-ens-rpc-urls/);
+  assert.match(modal.innerHTML, /org\.openagentinternet\.uri/);
+
+  modal.querySelector('[data-browser-ens-rpc-urls]').value = 'https://rpc-one.example/rpc, https://rpc-two.example/rpc';
+  modal.querySelector('[data-browser-ens-text-key]').value = 'org.openagentinternet.uri';
+  await context.saveBrowserSettings();
+
+  assert.deepEqual(context.state.settingsData.browser.nameResolution.ens.rpcUrls, [
+    'https://rpc-one.example/rpc',
+    'https://rpc-two.example/rpc',
+  ]);
+  assert.equal(context.state.settingsData.browser.nameResolution.ens.textKey, 'org.openagentinternet.uri');
+  assert.equal(fetchCalls.includes('/api/browser/settings?actorId=worker'), false);
 });
 
 test('Browser template settings select the default Bot homepage template', async () => {

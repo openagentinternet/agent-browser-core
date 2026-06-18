@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import test from 'node:test';
 
 const require = createRequire(import.meta.url);
-const { parseBrowserUri } = require('../../packages/core/dist/browser/uri.js');
+const { parseBrowserUri, isValidGlobalMetaId } = require('../../packages/core/dist/browser/uri.js');
 
 const validGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
 
@@ -34,6 +34,16 @@ test('parseBrowserUri normalizes supported Browser URI schemes', () => {
   });
 });
 
+test('parseBrowserUri normalizes map scheme resources', () => {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  assert.deepEqual(parseBrowserUri(` MAP://simplebuzz/pin/${pinId}[0] `), {
+    originalUri: `MAP://simplebuzz/pin/${pinId}[0]`,
+    normalizedUri: `map://simplebuzz/pin/${pinId}?version=0`,
+    scheme: 'map',
+    id: `simplebuzz/pin/${pinId}?version=0`,
+  });
+});
+
 test('parseBrowserUri treats a bare valid Global MetaID as a metaid URI', () => {
   assert.deepEqual(parseBrowserUri(`  ${validGlobalMetaId.toUpperCase()}  `), {
     originalUri: validGlobalMetaId.toUpperCase(),
@@ -48,4 +58,9 @@ test('parseBrowserUri rejects missing, empty, and unsupported schemes', () => {
   assert.throws(() => parseBrowserUri('idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8p'), /valid Global MetaID/i);
   assert.throws(() => parseBrowserUri('metaid://'), /empty resource id/i);
   assert.throws(() => parseBrowserUri('https://example.com'), /unsupported URI scheme/i);
+});
+
+test('browser uri module exports Global MetaID validation helper', () => {
+  assert.equal(isValidGlobalMetaId(validGlobalMetaId), true);
+  assert.equal(isValidGlobalMetaId('idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8p'), false);
 });

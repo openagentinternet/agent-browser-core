@@ -162,7 +162,8 @@ var state = {
   pendingServiceCall: null,
   visits: [],
   status: 'loading',
-  error: ''
+  error: '',
+  lastResolveError: null
 };
 
 var elements = {};
@@ -441,12 +442,11 @@ function browserUriFromPath(pathname, search) {
     return resourceId ? match[1] + '://' + resourceId : '';
   }
 
-  var mapMatch = path.match(/^\\/browser\\/map\\/([^/?#]+)\\/(.+)$/);
+  var mapMatch = path.match(/^\\/browser\\/map\\/(.+)$/);
   if (!mapMatch) return '';
-  var authority = textValue(decodeURIComponentSafe(mapMatch[1]));
-  var rest = mapMatch[2].split('/').map(decodeURIComponentSafe).join('/');
-  var mapPath = textValue(rest);
-  return authority && mapPath ? 'map://' + authority + '/' + mapPath + textValue(search) : '';
+  var mapPath = mapMatch[1].split('/').map(decodeURIComponentSafe).join('/');
+  var mapId = textValue(mapPath);
+  return mapId ? 'map://' + mapId + textValue(search) : '';
 }
 
 function findBrowserMenuItem(itemId) {
@@ -565,6 +565,39 @@ function renderBaseUrlSettings() {
   '</form>';
 }
 
+function nameResolutionConfig() {
+  var data = state.settingsData || {};
+  var effective = objectValue(objectValue(data.effectiveBrowser).nameResolution);
+  var browser = objectValue(objectValue(data.browser).nameResolution);
+  var defaults = objectValue(objectValue(data.defaults).nameResolution);
+  var source = Object.keys(browser).length ? browser : (Object.keys(effective).length ? effective : defaults);
+  var ens = objectValue(source.ens);
+  return {
+    enabled: source.enabled !== false,
+    ensEnabled: ens.enabled === true,
+    rpcUrls: Array.isArray(ens.rpcUrls) ? ens.rpcUrls.join(', ') : '',
+    textKey: textValue(ens.textKey) || 'org.openagentinternet.uri'
+  };
+}
+
+function renderNameResolutionSettings() {
+  var config = nameResolutionConfig();
+  return '<form class="browser-settings-form" data-browser-settings-form>' +
+    '<label class="browser-settings-field"><span>Name Resolution</span>' +
+      '<button type="button" class="browser-switch" role="switch" data-browser-name-resolution-enabled aria-checked="' + (config.enabled ? 'true' : 'false') + '">' +
+        '<span class="browser-switch-track" aria-hidden="true"><span class="browser-switch-thumb"></span></span>' +
+        '<span class="browser-switch-label">' + (config.enabled ? 'On' : 'Off') + '</span></button></label>' +
+    '<label class="browser-settings-field"><span>ENS</span>' +
+      '<button type="button" class="browser-switch" role="switch" data-browser-ens-enabled aria-checked="' + (config.ensEnabled ? 'true' : 'false') + '">' +
+        '<span class="browser-switch-track" aria-hidden="true"><span class="browser-switch-thumb"></span></span>' +
+        '<span class="browser-switch-label">' + (config.ensEnabled ? 'On' : 'Off') + '</span></button></label>' +
+    '<label class="browser-settings-field"><span>ENS RPC URLs</span>' +
+      '<input data-browser-ens-rpc-urls value="' + escapeHtml(config.rpcUrls) + '" placeholder="https://rpc.example" /></label>' +
+    '<label class="browser-settings-field"><span>ENS Text Key</span>' +
+      '<input data-browser-ens-text-key value="' + escapeHtml(config.textKey) + '" placeholder="org.openagentinternet.uri" /></label>' +
+  '</form>';
+}
+
 function botHomepageTemplateById(templateId) {
   var targetId = textValue(templateId) || 'document';
   for (var index = 0; index < browserBotHomepageTemplates.length; index += 1) {
@@ -647,8 +680,10 @@ function renderBrowserSettingsModal() {
   if (!elements.modalRoot) return;
   var body = state.settingsTab === 'cache'
     ? renderCacheSettings()
-    : (state.settingsTab === 'templates' ? renderTemplateSettings() : renderBaseUrlSettings());
-  var saveButton = state.settingsTab === 'baseUrls'
+    : (state.settingsTab === 'templates'
+      ? renderTemplateSettings()
+      : (state.settingsTab === 'nameResolution' ? renderNameResolutionSettings() : renderBaseUrlSettings()));
+  var saveButton = state.settingsTab === 'baseUrls' || state.settingsTab === 'nameResolution'
     ? '<button type="button" data-browser-settings-save>Save</button>'
     : '';
   elements.modalRoot.hidden = false;
@@ -689,7 +724,13 @@ async function openBrowserSettings(tabId) {
 
 async function handleBrowserMenuAction(itemId) {
   var item = findBrowserMenuItem(itemId);
-  if (!item) return null;
+  if (!item) {
+    var tabId = settingsTabExists(itemId);
+    if (tabId !== textValue(itemId)) return null;
+    closeBrowserMenu();
+    await openBrowserSettings(tabId);
+    return { id: tabId, action: 'open-settings', settingsTab: tabId };
+  }
   closeBrowserMenu();
   if (item.action === 'open-settings') {
     await openBrowserSettings(item.settingsTab);
@@ -705,8 +746,42 @@ async function switchBrowserSettingsTab(tabId) {
   renderBrowserSettingsModal();
 }
 
+async function saveNameResolutionSettings() {
+  if (!elements.modalRoot || typeof elements.modalRoot.querySelector !== 'function') return null;
+  var rpcUrlsInput = elements.modalRoot.querySelector('[data-browser-ens-rpc-urls]');
+  var textKeyInput = elements.modalRoot.querySelector('[data-browser-ens-text-key]');
+  var enabledSwitch = elements.modalRoot.querySelector('[data-browser-name-resolution-enabled]');
+  var ensSwitch = elements.modalRoot.querySelector('[data-browser-ens-enabled]');
+  var rpcUrls = textValue(rpcUrlsInput && rpcUrlsInput.value)
+    .split(',')
+    .map(function (item) { return textValue(item); })
+    .filter(Boolean);
+  var browser = {
+    nameResolution: {
+      enabled: !enabledSwitch || enabledSwitch.getAttribute('aria-checked') !== 'false',
+      ens: {
+        enabled: !!ensSwitch && ensSwitch.getAttribute('aria-checked') === 'true',
+        rpcUrls: rpcUrls,
+        textKey: textValue(textKeyInput && textKeyInput.value) || 'org.openagentinternet.uri'
+      }
+    }
+  };
+  var result = await api(browserSettingsEndpoint(), {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ browser: browser })
+  });
+  state.settingsData = result;
+  setStatus('saved', '');
+  renderBrowserSettingsModal();
+  return result;
+}
+
 async function saveBrowserSettings() {
   if (!elements.modalRoot || typeof elements.modalRoot.querySelector !== 'function') return null;
+  if (state.settingsTab === 'nameResolution') {
+    return saveNameResolutionSettings();
+  }
   var browser = {};
   browserBaseUrlFields.forEach(function (field) {
     var key = textValue(field.key);
@@ -722,6 +797,18 @@ async function saveBrowserSettings() {
   setStatus('saved', '');
   renderBrowserSettingsModal();
   return result;
+}
+
+function toggleBrowserSwitch(switchElement) {
+  if (!switchElement || typeof switchElement.getAttribute !== 'function') return;
+  var checked = switchElement.getAttribute('aria-checked') !== 'true';
+  if (typeof switchElement.setAttribute === 'function') {
+    switchElement.setAttribute('aria-checked', checked ? 'true' : 'false');
+  }
+  if (typeof switchElement.querySelector === 'function') {
+    var label = switchElement.querySelector('.browser-switch-label');
+    if (label) label.textContent = checked ? 'On' : 'Off';
+  }
 }
 
 async function selectBotHomepageTemplate(templateId) {
@@ -1119,6 +1206,50 @@ function renderHomepageV3Inspector(current) {
     '</dl>';
 }
 
+function renderNameAliasInspector(source) {
+  var raw = objectValue(source && source.raw);
+  var alias = objectValue(raw.nameAlias);
+  if (!Object.keys(alias).length) return '';
+  return '<h3>Name Alias</h3><dl>' +
+    keyValue('alias URI', alias.aliasUri) +
+    keyValue('provider', alias.provider) +
+    keyValue('name', alias.normalizedName) +
+    keyValue('text key', alias.textKey) +
+    keyValue('canonical URI', alias.canonicalUri) +
+    keyValue('resolved at', alias.resolvedAt) +
+    keyValue('verification', alias.verificationState) +
+    '</dl>';
+}
+
+function isNameAliasResolveError(error, data) {
+  var code = textValue(error && error.code).toLowerCase();
+  return !!(
+    textValue(data && data.aliasName) ||
+    textValue(data && data.provider) ||
+    textValue(data && data.textKey) ||
+    code.indexOf('name_alias') === 0 ||
+    code.indexOf('name_resolution') === 0
+  );
+}
+
+function renderResolveErrorInspector() {
+  if (!elements.inspector || !state.lastResolveError) return;
+  var error = state.lastResolveError || {};
+  var data = objectValue(error.data);
+  var aliasError = isNameAliasResolveError(error, data);
+  elements.inspector.innerHTML = '<section class="browser-inspector-panel">' +
+    '<header class="browser-panel-header"><h2>Inspector</h2><button type="button" class="browser-icon-button" data-browser-inspector-close aria-label="Close inspector">' + iconHtml('close') + '</button></header>' +
+    '<div class="browser-proof-summary">' + proofIconHtml('unverified') + '<span>unverified</span></div>' +
+    '<h3>' + (aliasError ? 'Name Alias Error' : 'Resolve Error') + '</h3><dl>' +
+      keyValue('code', error.code) +
+      keyValue('message', error.message) +
+      keyValue('input URI', data.inputUri || error.inputUri) +
+      (aliasError ? keyValue('provider', data.provider) : '') +
+      (aliasError ? keyValue('name', data.aliasName) : '') +
+      (aliasError ? keyValue('text key', data.textKey) : '') +
+    '</dl></section>';
+}
+
 function renderInspector() {
   if (!elements.inspector || !state.current) return;
   var current = state.current;
@@ -1160,7 +1291,7 @@ function renderInspector() {
     keyValue('local path', source.localPath || source.path) +
     keyValue('fetched at', source.fetchedAt || source.cachedAt || source.resolvedAt) +
     keyValue('schema', source.schemaVersion) +
-    '</dl>' + renderHomepageV3Inspector(current) + (source.raw ? '<pre>' + escapeHtml(JSON.stringify(source.raw || {}, null, 2)) + '</pre>' : '') + '</section>';
+    '</dl>' + renderNameAliasInspector(source) + renderHomepageV3Inspector(current) + (source.raw ? '<pre>' + escapeHtml(JSON.stringify(source.raw || {}, null, 2)) + '</pre>' : '') + '</section>';
 }
 
 function actionPayloadAttribute(action) {
@@ -1188,6 +1319,10 @@ function openInspector() {
     elements.inspector.hidden = false;
   }
   syncPanelState();
+  if (state.lastResolveError && !state.current) {
+    renderResolveErrorInspector();
+    return;
+  }
   renderInspector();
 }
 
@@ -1779,22 +1914,36 @@ async function resolveUri(uri, options) {
   if (elements.input) elements.input.value = normalizedUri;
   if (shouldRecord) pushHistory(normalizedUri);
   setStatus('loading', '');
+  state.lastResolveError = null;
   try {
     var result = await api(resolveUrl(normalizedUri));
     var resolvedUri = textValue(result && (result.normalizedUri || result.uri)) || normalizedUri;
     if (elements.input) elements.input.value = resolvedUri;
     if (shouldRecord && state.historyIndex >= 0) state.history[state.historyIndex] = resolvedUri;
     state.current = result;
+    state.lastResolveError = null;
     recordVisit(result);
     setStatus('resolved', '');
     renderCurrent();
+    if (state.inspectorOpen) {
+      renderInspector();
+    }
     return result;
   } catch (error) {
+    state.lastResolveError = {
+      inputUri: normalizedUri,
+      code: error && error.payload && error.payload.code,
+      message: error && error.message ? error.message : 'Resolve failed.',
+      data: error && error.payload && error.payload.data
+    };
     setStatus('error', error && error.message ? error.message : 'Resolve failed.');
     state.current = null;
     renderOwnerToolbar();
     if (elements.viewport) {
       elements.viewport.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(state.error) + '</p></section>';
+    }
+    if (state.inspectorOpen) {
+      renderResolveErrorInspector();
     }
     return null;
   }
@@ -1875,6 +2024,16 @@ async function initialize() {
         saveBrowserSettings().catch(function (error) {
           setStatus('error', error && error.message ? error.message : 'Settings save failed.');
         });
+        return;
+      }
+      var nameResolutionToggle = closestWithAttribute(event && event.target, 'data-browser-name-resolution-enabled');
+      if (nameResolutionToggle) {
+        toggleBrowserSwitch(nameResolutionToggle);
+        return;
+      }
+      var ensToggle = closestWithAttribute(event && event.target, 'data-browser-ens-enabled');
+      if (ensToggle) {
+        toggleBrowserSwitch(ensToggle);
         return;
       }
       if (closestWithAttribute(event && event.target, 'data-browser-custom-pages-toggle')) {
@@ -2033,6 +2192,7 @@ globalThis.handleBrowserMenuAction = handleBrowserMenuAction;
 globalThis.openBrowserSettings = openBrowserSettings;
 globalThis.switchBrowserSettingsTab = switchBrowserSettingsTab;
 globalThis.saveBrowserSettings = saveBrowserSettings;
+globalThis.saveNameResolutionSettings = saveNameResolutionSettings;
 globalThis.selectBotHomepageTemplate = selectBotHomepageTemplate;
 globalThis.toggleCustomBotPages = toggleCustomBotPages;
 globalThis.clearBrowserCache = clearBrowserCache;

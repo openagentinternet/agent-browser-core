@@ -5,6 +5,7 @@ const ui = await import('../../packages/ui/dist/index.js');
 
 test('client script includes runtime menu settings template cache and actor flows', () => {
   const script = ui.buildBrowserClientScript({ apiBasePath: '/api/browser', initialUri: 'metaid://idq1fixturebot' });
+  const browserPageScript = ui.buildBrowserPageDefinition().script;
 
   assert.match(script, /const browserEndpoints = \{/);
   assert.match(script, /settings: apiBasePath \+ '\/settings'/);
@@ -12,12 +13,16 @@ test('client script includes runtime menu settings template cache and actor flow
   assert.match(script, /function renderBrowserMenu\(/);
   assert.match(script, /function openBrowserSettings\(/);
   assert.match(script, /function renderTemplateSettings\(/);
+  assert.match(browserPageScript, /function renderNameResolutionSettings\(/);
   assert.match(script, /function toggleCustomBotPages\(/);
+  assert.match(browserPageScript, /function saveNameResolutionSettings\(/);
   assert.match(script, /function clearBrowserCache\(/);
   assert.match(script, /function openActorSelector\(/);
   assert.match(script, /data-browser-settings-tab/);
   assert.match(script, /data-browser-template-select/);
   assert.match(script, /data-browser-custom-pages-toggle/);
+  assert.match(browserPageScript, /data-browser-name-resolution-enabled/);
+  assert.match(browserPageScript, /data-browser-ens-rpc-urls/);
   assert.match(script, /data-browser-custom-pages-help/);
   assert.match(script, /browser-help-tooltip/);
   assert.match(script, /browser-info-dot/);

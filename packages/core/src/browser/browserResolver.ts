@@ -3,12 +3,19 @@ import { buildBotPageResolveResult } from './botPageResolver.js';
 import { resolveMapUriToResource } from './mapProtocolResolver.js';
 import { resolveMetafilePinToResource } from './metafileResolver.js';
 import { buildMetaAppResolveResult } from './metaAppResolver.js';
+import {
+  aliasBrowserResolveResult,
+  isSupportedNameAliasId,
+  resolveBrowserNameAlias,
+  type BrowserNameAliasContext,
+} from './nameAlias.js';
 import { parseBrowserUri, type ParsedBrowserUri } from './uri.js';
 import {
   browserCommandFailed,
   browserCommandSuccess,
   type BotBrowserConfig,
   type BrowserCommandResult,
+  type BrowserNameAliasProvider,
   type BrowserResolveResult,
   type MetaAppGalleryRecord,
 } from './types.js';
@@ -19,10 +26,49 @@ export interface ResolveBrowserResourceInput {
   fetch?: typeof fetch;
   metaAppLookup?: (pinId: string) => Promise<MetaAppGalleryRecord | null>;
   metaAppResolve?: (pinId: string) => Promise<BrowserCommandResult<MetaAppGalleryRecord>>;
+  mapResolve?: (uri: string, parsed: ParsedBrowserUri) => Promise<BrowserCommandResult<BrowserResolveResult>>;
+  nameAliasProviders?: BrowserNameAliasProvider[];
+  skipNameAliasResolution?: boolean;
+}
+
+function parseMapNameAliasUri(input: string): ParsedBrowserUri | null {
+  const originalUri = String(input ?? '').trim();
+  const match = originalUri.match(/^map:\/\/([^/?#]+)$/iu);
+  if (!match || !isSupportedNameAliasId(match[1])) {
+    return null;
+  }
+  const id = match[1];
+  return {
+    originalUri,
+    normalizedUri: `map://${id}`,
+    scheme: 'map',
+    id,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function withCanonicalAliasFailureContext<T>(
+  result: BrowserCommandResult<T>,
+  alias: BrowserNameAliasContext,
+): BrowserCommandResult<T> {
+  if (result.ok) {
+    return result;
+  }
+  return {
+    ...result,
+    data: {
+      ...(isRecord(result.data) ? result.data : {}),
+      inputUri: alias.aliasUri,
+      aliasUri: alias.aliasUri,
+      aliasName: alias.normalizedName,
+      provider: alias.provider,
+      canonicalUri: alias.canonicalUri,
+      textKey: alias.textKey,
+    },
+  };
 }
 
 function text(value: unknown): string {
@@ -109,7 +155,36 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
   try {
     parsed = parseBrowserUri(input.uri);
   } catch (error) {
-    return browserCommandFailed('invalid_browser_uri', error instanceof Error ? error.message : String(error));
+    const mapNameAlias = parseMapNameAliasUri(input.uri);
+    if (mapNameAlias) {
+      parsed = mapNameAlias;
+    } else {
+      return browserCommandFailed('invalid_browser_uri', error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (!input.skipNameAliasResolution) {
+    const alias = await resolveBrowserNameAlias({
+      parsed,
+      providers: input.nameAliasProviders,
+    });
+    if (!alias.ok) {
+      return alias;
+    }
+    if (alias.data) {
+      const canonicalResolved = await resolveBrowserResource({
+        ...input,
+        uri: alias.data.canonicalUri,
+        skipNameAliasResolution: true,
+      });
+      if (!canonicalResolved.ok) {
+        return withCanonicalAliasFailureContext(canonicalResolved, alias.data);
+      }
+      return browserCommandSuccess(aliasBrowserResolveResult({
+        result: canonicalResolved.data,
+        alias: alias.data,
+      }));
+    }
   }
 
   if (parsed.scheme === 'metaid') {
@@ -176,14 +251,6 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
     }));
   }
 
-  if (parsed.scheme === 'map') {
-    return resolveMapUriToResource({
-      uri: parsed.normalizedUri,
-      fetch: input.fetch,
-      manApiBaseUrl: input.config.manApiBaseUrl,
-    });
-  }
-
   if (parsed.scheme === 'metafile') {
     return resolveMetafilePinToResource({
       uri: parsed.originalUri,
@@ -191,6 +258,17 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
       fetch: input.fetch,
       manApiBaseUrl: input.config.manApiBaseUrl,
       metafileContentBaseUrl: input.config.metafileContentBaseUrl,
+    });
+  }
+
+  if (parsed.scheme === 'map') {
+    if (input.mapResolve) {
+      return input.mapResolve(parsed.normalizedUri, parsed);
+    }
+    return resolveMapUriToResource({
+      uri: parsed.normalizedUri,
+      fetch: input.fetch,
+      manApiBaseUrl: input.config.manApiBaseUrl,
     });
   }
 

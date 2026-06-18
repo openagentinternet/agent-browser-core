@@ -15,6 +15,7 @@ test("dry run logs Browser packages in publish order", async () => {
     "DRY RUN publish @openagentinternet/agent-browser-host-contract@0.3.0",
     "DRY RUN publish @openagentinternet/agent-browser-core@0.3.0",
     "DRY RUN publish @openagentinternet/agent-browser-renderers@0.3.0",
+    "DRY RUN publish @openagentinternet/agent-browser-name-resolvers@0.3.0",
     "DRY RUN publish @openagentinternet/agent-browser-ui@0.3.0",
     "DRY RUN publish @openagentinternet/agent-browser-host-standalone@0.3.0",
     "DRY RUN publish @openagentinternet/agent-browser-test-harness@0.3.0",

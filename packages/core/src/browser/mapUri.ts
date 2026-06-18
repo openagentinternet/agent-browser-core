@@ -1,4 +1,5 @@
 import type { ParsedMapUri } from './types.js';
+export type { ParsedMapUri } from './types.js';
 
 const PIN_ID_PATTERN = /^[0-9a-f]{64}i[0-9]+$/iu;
 const AUTHORITY_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/u;
@@ -20,11 +21,28 @@ function protocolPath(authority: string): string {
   return `/protocols/${authority}`;
 }
 
+function requireOnlyQueryParam(searchParams: URLSearchParams, name: string): void {
+  const keys = Array.from(searchParams.keys());
+  if (keys.length > 1 || (keys.length === 1 && keys[0] !== name)) {
+    throw new Error('Unsupported MAP URI query parameter.');
+  }
+}
+
 function readVersion(searchParams: URLSearchParams): { versionSelector: 'latest' | 'history-index'; historyIndex?: number } {
-  const version = searchParams.get('version');
-  if (version == null || version === '') {
+  if (!searchParams.has('version')) {
+    if (Array.from(searchParams.keys()).length > 0) {
+      throw new Error('Unsupported MAP URI query parameter.');
+    }
     return { versionSelector: 'latest' };
   }
+
+  requireOnlyQueryParam(searchParams, 'version');
+  const versions = searchParams.getAll('version');
+  if (versions.length !== 1) {
+    throw new Error('MAP URI version must be a non-negative history index.');
+  }
+
+  const version = versions[0];
   if (!/^[0-9]+$/u.test(version)) {
     throw new Error('MAP URI version must be a non-negative history index.');
   }
@@ -52,6 +70,12 @@ export function parseMapUri(input: string): ParsedMapUri {
   }
   if (url.protocol !== 'map:') {
     throw new Error('MAP parser requires a map:// URI.');
+  }
+  if (url.username || url.password || url.port) {
+    throw new Error('Unsupported MAP path or alias target.');
+  }
+  if (url.hash) {
+    throw new Error('Unsupported MAP URI fragment.');
   }
 
   const authority = normalizeAuthority(url.hostname);
@@ -82,6 +106,7 @@ export function parseMapUri(input: string): ParsedMapUri {
   }
 
   if (authority === 'simplemsg' && normalizedPath.pathname === '/conversation') {
+    requireOnlyQueryParam(url.searchParams, 'peer');
     const peerGlobalMetaId = cleanText(url.searchParams.get('peer'));
     if (!GLOBAL_META_ID_LIKE_PATTERN.test(peerGlobalMetaId)) {
       throw new Error('MAP conversation target requires a peer Global MetaID.');

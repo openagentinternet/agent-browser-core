@@ -13,9 +13,11 @@ export {
 } from './resource/resourceEnvelope.js';
 export {
   parseBrowserUri,
+  isValidGlobalMetaId,
   type BrowserUriScheme,
   type ParsedBrowserUri,
 } from './uri/browserUri.js';
+export { parseMapUri, type ParsedMapUri } from './browser/mapUri.js';
 export {
   buildBotHomepageEnvelope,
   type BuildBotHomepageEnvelopeInput,
@@ -33,3 +35,4 @@ export * from './browser/mapProtocolResolver.js';
 export * from './browser/metafileResolver.js';
 export * from './browser/metaAppResolver.js';
 export * from './browser/metaAppPinResolver.js';
+export * from './browser/nameAlias.js';

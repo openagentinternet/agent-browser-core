@@ -6,6 +6,18 @@ export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' |
 export type BrowserResolutionState = 'resolved' | 'loading' | 'not_found' | 'error';
 export type BrowserVerificationState = 'verified' | 'partial' | 'unverified';
 
+export interface BrowserEnsNameResolutionConfig {
+  enabled: boolean;
+  chainId: 1;
+  rpcUrls: string[];
+  textKey: string;
+}
+
+export interface BrowserNameResolutionConfig {
+  enabled: boolean;
+  ens: BrowserEnsNameResolutionConfig;
+}
+
 export interface BrowserBaseConfig {
   metasoP2PBaseUrl: string;
   metafileContentBaseUrl: string;
@@ -14,11 +26,24 @@ export interface BrowserBaseConfig {
   walletApiBaseUrl?: string;
   botHomepageTemplateId: BotHomepageTemplateId;
   renderCustomBotPages: boolean;
+  nameResolution: BrowserNameResolutionConfig;
   localMode: boolean;
 }
 
+export type BrowserEnsNameResolutionConfigInput = Partial<BrowserEnsNameResolutionConfig>;
+
+export type BrowserNameResolutionConfigInput =
+  Omit<Partial<BrowserNameResolutionConfig>, 'ens'> & {
+    ens?: BrowserEnsNameResolutionConfigInput;
+  };
+
+export type BrowserBaseConfigInput =
+  Omit<Partial<BrowserBaseConfig>, 'nameResolution'> & {
+    nameResolution?: BrowserNameResolutionConfigInput;
+  };
+
 export interface BrowserConfigContainer {
-  browser?: Partial<BrowserBaseConfig>;
+  browser?: BrowserBaseConfigInput;
 }
 
 export interface BotBrowserConfig extends Partial<BrowserBaseConfig> {
@@ -154,7 +179,7 @@ export interface BrowserContextResult {
 }
 
 export interface BrowserSettingsSnapshot {
-  browser: Partial<BrowserBaseConfig>;
+  browser: BrowserBaseConfigInput;
   effectiveBrowser: BrowserBaseConfig;
   defaults: BrowserBaseConfig;
   configPath?: string;
@@ -226,3 +251,25 @@ export type MetaAppPreviewSessionFactory = (input: {
   protocol: Record<string, unknown>;
   pinRecord: Record<string, unknown>;
 }) => Promise<{ localPreviewUrl: string; previewId?: string }> | { localPreviewUrl: string; previewId?: string };
+
+export interface BrowserNameAliasRequest {
+  inputUri: string;
+  inputScheme: BrowserUriScheme;
+  name: string;
+}
+
+export interface BrowserNameAliasResult {
+  provider: 'ens' | string;
+  normalizedName: string;
+  textKey: string;
+  canonicalUri: string;
+  resolvedAt: number;
+  verificationState: BrowserVerificationState;
+  raw?: Record<string, unknown>;
+}
+
+export interface BrowserNameAliasProvider {
+  id: string;
+  supportsName(name: string): boolean;
+  resolveNameAlias(request: BrowserNameAliasRequest): Promise<BrowserCommandResult<BrowserNameAliasResult>>;
+}

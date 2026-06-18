@@ -58,3 +58,87 @@ test('Browser settings reject non-boolean custom rendering values', () => {
     /browser\.renderCustomBotPages must be a boolean/,
   );
 });
+
+test('Browser settings default ENS name resolution to the public validation RPC', () => {
+  const defaults = createDefaultBrowserConfig();
+  const resolved = resolveBrowserConfig({});
+  const snapshot = createBrowserSettingsSnapshot({ config: {} });
+
+  assert.equal(defaults.nameResolution.enabled, true);
+  assert.equal(defaults.nameResolution.ens.enabled, true);
+  assert.deepEqual(defaults.nameResolution.ens.rpcUrls, ['https://ethereum-rpc.publicnode.com']);
+  assert.equal(defaults.nameResolution.ens.textKey, 'org.openagentinternet.uri');
+  assert.equal(resolved.nameResolution.enabled, true);
+  assert.equal(resolved.nameResolution.ens.enabled, true);
+  assert.deepEqual(resolved.nameResolution.ens.rpcUrls, ['https://ethereum-rpc.publicnode.com']);
+  assert.equal(snapshot.effectiveBrowser.nameResolution.ens.enabled, true);
+  assert.deepEqual(snapshot.effectiveBrowser.nameResolution.ens.rpcUrls, ['https://ethereum-rpc.publicnode.com']);
+  assert.equal(snapshot.effectiveBrowser.nameResolution.ens.textKey, 'org.openagentinternet.uri');
+});
+
+test('Browser settings resolve ENS config from env and browser settings', () => {
+  const resolved = resolveBrowserConfig({
+    browser: {
+      nameResolution: {
+        enabled: true,
+        ens: {
+          enabled: true,
+          rpcUrls: ['https://configured.example/rpc'],
+          textKey: 'org.openagentinternet.uri',
+        },
+      },
+    },
+  }, {
+    METABOT_BROWSER_ENS_RPC_URLS: 'https://env-one.example/rpc, https://env-two.example/rpc',
+  });
+
+  assert.equal(resolved.nameResolution.enabled, true);
+  assert.equal(resolved.nameResolution.ens.enabled, true);
+  assert.deepEqual(resolved.nameResolution.ens.rpcUrls, [
+    'https://env-one.example/rpc',
+    'https://env-two.example/rpc',
+  ]);
+  assert.equal(resolved.nameResolution.ens.textKey, 'org.openagentinternet.uri');
+});
+
+test('Browser settings update and validate name resolution fields', () => {
+  const updated = applyBrowserSettingsUpdate({}, {
+    nameResolution: {
+      enabled: true,
+      ens: {
+        enabled: true,
+        rpcUrls: ['https://rpc.example'],
+        textKey: 'org.openagentinternet.uri',
+      },
+    },
+  });
+  const snapshot = createBrowserSettingsSnapshot({ config: updated });
+
+  assert.equal(snapshot.effectiveBrowser.nameResolution.enabled, true);
+  assert.equal(snapshot.effectiveBrowser.nameResolution.ens.enabled, true);
+  assert.deepEqual(snapshot.effectiveBrowser.nameResolution.ens.rpcUrls, ['https://rpc.example']);
+
+  assert.throws(
+    () => applyBrowserSettingsUpdate({}, { nameResolution: { ens: { rpcUrls: ['not-a-url'] } } }),
+    /browser\.nameResolution\.ens\.rpcUrls must contain http\(s\) URLs/,
+  );
+  assert.throws(
+    () => applyBrowserSettingsUpdate({}, { nameResolution: { ens: { textKey: '' } } }),
+    /browser\.nameResolution\.ens\.textKey must be a non-empty string/,
+  );
+});
+
+test('Browser settings reject malformed name resolution settings objects', () => {
+  assert.throws(
+    () => applyBrowserSettingsUpdate({}, { nameResolution: true }),
+    /browser\.nameResolution must be an object/,
+  );
+  assert.throws(
+    () => applyBrowserSettingsUpdate({}, { nameResolution: { ens: true } }),
+    /browser\.nameResolution\.ens must be an object/,
+  );
+  assert.throws(
+    () => applyBrowserSettingsUpdate({}, { nameResolution: { ens: { rpcUrls: 123 } } }),
+    /browser\.nameResolution\.ens\.rpcUrls must be a string or string array/,
+  );
+});
