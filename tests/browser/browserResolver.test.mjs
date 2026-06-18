@@ -364,3 +364,137 @@ test('resolveBrowserResource fails closed when custom homepage target resolution
   assert.equal(result.code, 'browser_resource_not_found');
   assert.equal(result.message, 'Custom target not found.');
 });
+
+const validEnsGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
+const validEnsMetaAppPinId = 'c06b7a2db6efa241560a2356e9966cf9758dae3ec9c795f614a652b113e30329i0';
+
+function ensProvider(canonicalUri, overrides = {}) {
+  return {
+    id: 'ens',
+    supportsName: (name) => String(name).toLowerCase().endsWith('.eth'),
+    async resolveNameAlias(request) {
+      if (overrides.fail) {
+        return { ok: false, code: overrides.fail.code, message: overrides.fail.message, data: { name: request.name } };
+      }
+      return {
+        ok: true,
+        state: 'success',
+        data: {
+          provider: 'ens',
+          normalizedName: request.name.toLowerCase(),
+          textKey: 'org.openagentinternet.uri',
+          canonicalUri,
+          resolvedAt: 1780761234567,
+          verificationState: 'partial',
+          raw: { source: 'test-ens' },
+        },
+      };
+    },
+  };
+}
+
+test('resolveBrowserResource resolves metaid ENS aliases while preserving visible URI', async () => {
+  const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
+  const result = await resolveBrowserResource({
+    uri: 'metaid://sunny.eth',
+    config: browserConfig(),
+    nameAliasProviders: [ensProvider(`metaid://${validEnsGlobalMetaId}`)],
+    fetch: async (url) => {
+      assert.equal(
+        String(url),
+        `https://so.example.test/api/bot-homepage/globalmetaid/${validEnsGlobalMetaId}?version=v3`,
+      );
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ code: 0, message: '', data: fixture }),
+      };
+    },
+    metaAppLookup: async () => null,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.uri, 'metaid://sunny.eth');
+  assert.equal(result.data.normalizedUri, 'metaid://sunny.eth');
+  assert.equal(result.data.source.raw.nameAlias.canonicalUri, `metaid://${validEnsGlobalMetaId}`);
+  assert.equal(result.data.source.raw.nameAlias.provider, 'ens');
+  assert.equal(result.data.actions.find((action) => action.id === 'copy-uri').uri, 'metaid://sunny.eth');
+});
+
+test('resolveBrowserResource resolves metaapp ENS aliases through MetaApp resolver', async () => {
+  const result = await resolveBrowserResource({
+    uri: 'metaapp://app.sunny.eth',
+    config: browserConfig(),
+    nameAliasProviders: [ensProvider(`metaapp://${validEnsMetaAppPinId}`)],
+    metaAppLookup: async (pinId) => {
+      assert.equal(pinId, validEnsMetaAppPinId);
+      return metaAppRecord(pinId);
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.uri, 'metaapp://app.sunny.eth');
+  assert.equal(result.data.normalizedUri, 'metaapp://app.sunny.eth');
+  assert.equal(result.data.resourceType, 'metaapp');
+  assert.equal(result.data.source.raw.nameAlias.canonicalUri, `metaapp://${validEnsMetaAppPinId}`);
+});
+
+test('resolveBrowserResource dispatches map ENS aliases to injected map resolver', async () => {
+  const canonicalMapUri = `map://simplebuzz/pin/${validEnsMetaAppPinId}`;
+  const result = await resolveBrowserResource({
+    uri: 'map://buzz.sunny.eth',
+    config: browserConfig(),
+    nameAliasProviders: [ensProvider(canonicalMapUri)],
+    mapResolve: async (uri) => {
+      assert.equal(uri, canonicalMapUri);
+      return {
+        ok: true,
+        state: 'success',
+        data: {
+          uri,
+          normalizedUri: uri,
+          resourceType: 'unknown',
+          title: 'Buzz Resource',
+          owner: { kind: 'unknown', globalMetaId: '', name: 'Unknown', verificationState: 'partial' },
+          renderer: { type: 'unsupported', contentType: 'application/vnd.metaid.map' },
+          status: { state: 'resolved', verificationState: 'partial', message: 'Resolved MAP resource.' },
+          source: { resolver: 'map-test', raw: { protocol: 'simplebuzz' } },
+          actions: [{ id: 'copy-uri', label: 'Copy URI', kind: 'copy', enabled: true, uri }],
+        },
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.uri, 'map://buzz.sunny.eth');
+  assert.equal(result.data.normalizedUri, 'map://buzz.sunny.eth');
+  assert.equal(result.data.source.raw.nameAlias.canonicalUri, canonicalMapUri);
+});
+
+test('resolveBrowserResource fails closed for ENS alias errors', async () => {
+  const missingProvider = await resolveBrowserResource({
+    uri: 'metaid://sunny.eth',
+    config: browserConfig(),
+  });
+  assert.equal(missingProvider.ok, false);
+  assert.equal(missingProvider.code, 'name_resolution_unavailable');
+
+  const mismatch = await resolveBrowserResource({
+    uri: 'metaid://sunny.eth',
+    config: browserConfig(),
+    nameAliasProviders: [ensProvider(`metaapp://${validEnsMetaAppPinId}`)],
+  });
+  assert.equal(mismatch.ok, false);
+  assert.equal(mismatch.code, 'name_alias_scheme_mismatch');
+
+  const providerFailure = await resolveBrowserResource({
+    uri: 'metaid://sunny.eth',
+    config: browserConfig(),
+    nameAliasProviders: [ensProvider('', { fail: { code: 'name_alias_not_found', message: 'No record.' } })],
+  });
+  assert.equal(providerFailure.ok, false);
+  assert.equal(providerFailure.code, 'name_alias_not_found');
+  assert.equal(providerFailure.data.inputUri, 'metaid://sunny.eth');
+  assert.equal(providerFailure.data.provider, 'ens');
+  assert.equal(providerFailure.data.aliasName, 'sunny.eth');
+});

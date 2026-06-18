@@ -2,12 +2,17 @@ import { createBotHomepageClient } from './botHomepageClient.js';
 import { buildBotPageResolveResult } from './botPageResolver.js';
 import { resolveMetafilePinToResource } from './metafileResolver.js';
 import { buildMetaAppResolveResult } from './metaAppResolver.js';
+import {
+  aliasBrowserResolveResult,
+  resolveBrowserNameAlias,
+} from './nameAlias.js';
 import { parseBrowserUri, type ParsedBrowserUri } from './uri.js';
 import {
   browserCommandFailed,
   browserCommandSuccess,
   type BotBrowserConfig,
   type BrowserCommandResult,
+  type BrowserNameAliasProvider,
   type BrowserResolveResult,
   type MetaAppGalleryRecord,
 } from './types.js';
@@ -18,6 +23,24 @@ export interface ResolveBrowserResourceInput {
   fetch?: typeof fetch;
   metaAppLookup?: (pinId: string) => Promise<MetaAppGalleryRecord | null>;
   metaAppResolve?: (pinId: string) => Promise<BrowserCommandResult<MetaAppGalleryRecord>>;
+  mapResolve?: (uri: string, parsed: ParsedBrowserUri) => Promise<BrowserCommandResult<BrowserResolveResult>>;
+  nameAliasProviders?: BrowserNameAliasProvider[];
+  skipNameAliasResolution?: boolean;
+}
+
+function parseMapNameAliasUri(input: string): ParsedBrowserUri | null {
+  const originalUri = String(input ?? '').trim();
+  const match = originalUri.match(/^map:\/\/([^/?#]+)$/iu);
+  if (!match || !match[1].toLowerCase().endsWith('.eth')) {
+    return null;
+  }
+  const id = match[1];
+  return {
+    originalUri,
+    normalizedUri: `map://${id}`,
+    scheme: 'map',
+    id,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -108,7 +131,36 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
   try {
     parsed = parseBrowserUri(input.uri);
   } catch (error) {
-    return browserCommandFailed('invalid_browser_uri', error instanceof Error ? error.message : String(error));
+    const mapNameAlias = parseMapNameAliasUri(input.uri);
+    if (mapNameAlias) {
+      parsed = mapNameAlias;
+    } else {
+      return browserCommandFailed('invalid_browser_uri', error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  if (!input.skipNameAliasResolution) {
+    const alias = await resolveBrowserNameAlias({
+      parsed,
+      providers: input.nameAliasProviders,
+    });
+    if (!alias.ok) {
+      return alias;
+    }
+    if (alias.data) {
+      const canonicalResolved = await resolveBrowserResource({
+        ...input,
+        uri: alias.data.canonicalUri,
+        skipNameAliasResolution: true,
+      });
+      if (!canonicalResolved.ok) {
+        return canonicalResolved;
+      }
+      return browserCommandSuccess(aliasBrowserResolveResult({
+        result: canonicalResolved.data,
+        alias: alias.data,
+      }));
+    }
   }
 
   if (parsed.scheme === 'metaid') {
@@ -183,6 +235,13 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
       manApiBaseUrl: input.config.manApiBaseUrl,
       metafileContentBaseUrl: input.config.metafileContentBaseUrl,
     });
+  }
+
+  if (parsed.scheme === 'map') {
+    if (!input.mapResolve) {
+      return browserCommandFailed('map_resolution_unavailable', 'MAP resource resolution is not configured.');
+    }
+    return input.mapResolve(parsed.normalizedUri, parsed);
   }
 
   return resolveMetaAppResource({ parsed, request: input });
