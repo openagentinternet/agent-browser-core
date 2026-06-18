@@ -1212,20 +1212,32 @@ function renderNameAliasInspector(source) {
     '</dl>';
 }
 
+function isNameAliasResolveError(error, data) {
+  var code = textValue(error && error.code).toLowerCase();
+  return !!(
+    textValue(data && data.aliasName) ||
+    textValue(data && data.provider) ||
+    textValue(data && data.textKey) ||
+    code.indexOf('name_alias') === 0 ||
+    code.indexOf('name_resolution') === 0
+  );
+}
+
 function renderResolveErrorInspector() {
   if (!elements.inspector || !state.lastResolveError) return;
   var error = state.lastResolveError || {};
   var data = objectValue(error.data);
+  var aliasError = isNameAliasResolveError(error, data);
   elements.inspector.innerHTML = '<section class="browser-inspector-panel">' +
     '<header class="browser-panel-header"><h2>Inspector</h2><button type="button" class="browser-icon-button" data-browser-inspector-close aria-label="Close inspector">' + iconHtml('close') + '</button></header>' +
     '<div class="browser-proof-summary">' + proofIconHtml('unverified') + '<span>unverified</span></div>' +
-    '<h3>Name Alias Error</h3><dl>' +
+    '<h3>' + (aliasError ? 'Name Alias Error' : 'Resolve Error') + '</h3><dl>' +
       keyValue('code', error.code) +
       keyValue('message', error.message) +
       keyValue('input URI', data.inputUri || error.inputUri) +
-      keyValue('provider', data.provider) +
-      keyValue('name', data.aliasName) +
-      keyValue('text key', data.textKey) +
+      (aliasError ? keyValue('provider', data.provider) : '') +
+      (aliasError ? keyValue('name', data.aliasName) : '') +
+      (aliasError ? keyValue('text key', data.textKey) : '') +
     '</dl></section>';
 }
 
@@ -1870,6 +1882,9 @@ async function resolveUri(uri, options) {
     renderOwnerToolbar();
     if (elements.viewport) {
       elements.viewport.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(state.error) + '</p></section>';
+    }
+    if (state.inspectorOpen) {
+      renderResolveErrorInspector();
     }
     return null;
   }

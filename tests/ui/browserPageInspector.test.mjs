@@ -332,6 +332,70 @@ test('Inspector renders ENS alias failure context after resolve error', async ()
   assert.match(html, /metaid:\/\/missing\.eth/);
 });
 
+test('Inspector refreshes to ENS alias error when open resource resolve fails', async () => {
+  const aliasUri = 'metaid://missing.eth';
+  const { context, nodes } = createContext({
+    failures: {
+      [aliasUri]: {
+        ok: false,
+        state: 'failed',
+        code: 'name_alias_not_found',
+        message: 'ENS text record was missing or empty.',
+        data: {
+          inputUri: aliasUri,
+          aliasName: 'missing.eth',
+          provider: 'ens',
+          textKey: 'org.openagentinternet.uri',
+        },
+      },
+    },
+  });
+
+  await waitFor(() => context.state.current, 'initial resource');
+  nodes['[data-browser-status-txid]'].click();
+  assert.match(nodes['[data-browser-inspector]'].innerHTML, /txid-fixture/);
+
+  await context.navigateTo(aliasUri);
+  await waitFor(() => context.state.lastResolveError, 'alias failure');
+  const html = nodes['[data-browser-inspector]'].innerHTML;
+
+  assert.match(html, /<h3>Name Alias Error<\/h3>/);
+  assert.match(html, /name_alias_not_found/);
+  assert.match(html, /missing\.eth/);
+  assert.doesNotMatch(html, /txid-fixture/);
+});
+
+test('Inspector renders generic resolve failure context for non-alias errors', async () => {
+  const failedUri = 'metaid://broken';
+  const { context, nodes } = createContext({
+    failures: {
+      [failedUri]: {
+        ok: false,
+        state: 'failed',
+        code: 'resolver_unavailable',
+        message: 'Resolver is unavailable.',
+        data: {
+          inputUri: failedUri,
+        },
+      },
+    },
+  });
+
+  await waitFor(() => context.state.current, 'initial resource');
+  await context.navigateTo(failedUri);
+  await waitFor(() => context.state.lastResolveError, 'generic failure');
+  nodes['[data-browser-status-proof]'].click();
+  const html = nodes['[data-browser-inspector]'].innerHTML;
+
+  assert.match(html, /<h3>Resolve Error<\/h3>/);
+  assert.doesNotMatch(html, /<h3>Name Alias Error<\/h3>/);
+  assert.match(html, /resolver_unavailable/);
+  assert.match(html, /metaid:\/\/broken/);
+  assert.doesNotMatch(html, /<dt>provider<\/dt>/);
+  assert.doesNotMatch(html, /<dt>name<\/dt>/);
+  assert.doesNotMatch(html, /<dt>text key<\/dt>/);
+});
+
 test('Inspector TXID falls back to the proof pin transaction id', async () => {
   const { context, nodes } = createContext();
   await waitFor(() => context.state.current, 'initial resource');
