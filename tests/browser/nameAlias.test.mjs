@@ -6,6 +6,7 @@ const require = createRequire(import.meta.url);
 const { parseBrowserUri } = require('../../packages/core/dist/browser/uri.js');
 const {
   OPEN_AGENT_INTERNET_ENS_TEXT_KEY,
+  aliasBrowserResolveResult,
   isSupportedNameAliasId,
   resolveBrowserNameAlias,
   validateNameAliasCanonicalTarget,
@@ -120,4 +121,213 @@ test('name alias resolution skips unsupported schemes before provider lookup', a
   assert.equal(result.ok, true);
   assert.equal(result.data, null);
   assert.equal(called, false);
+});
+
+test('name alias resolution reports unavailable provider with alias context', async () => {
+  const parsed = parseBrowserUri('metaid://sunny.eth');
+  const result = await resolveBrowserNameAlias({ parsed, providers: [] });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'name_resolution_unavailable');
+  assert.equal(result.data.inputUri, 'metaid://sunny.eth');
+  assert.equal(result.data.aliasName, 'sunny.eth');
+});
+
+test('name alias resolution returns canonical alias context after provider validation', async () => {
+  const parsed = parseBrowserUri('metaid://sunny.eth');
+  const result = await resolveBrowserNameAlias({
+    parsed,
+    providers: [{
+      id: 'ens',
+      supportsName: (name) => name === 'sunny.eth',
+      async resolveNameAlias() {
+        return {
+          ok: true,
+          state: 'success',
+          data: {
+            provider: 'ens',
+            normalizedName: 'sunny.eth',
+            textKey: OPEN_AGENT_INTERNET_ENS_TEXT_KEY,
+            canonicalUri: ` metaid://${validGlobalMetaId} `,
+            resolvedAt: 123,
+            verificationState: 'verified',
+            raw: { source: 'test' },
+          },
+        };
+      },
+    }],
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.aliasUri, 'metaid://sunny.eth');
+  assert.equal(result.data.canonicalUri, `metaid://${validGlobalMetaId}`);
+  assert.equal(result.data.canonicalParsed.normalizedUri, `metaid://${validGlobalMetaId}`);
+  assert.equal(result.data.provider, 'ens');
+  assert.equal(result.data.normalizedName, 'sunny.eth');
+  assert.deepEqual(result.data.raw, { source: 'test' });
+});
+
+test('name alias resolution preserves context on provider command failure', async () => {
+  const parsed = parseBrowserUri('metaid://sunny.eth');
+  const result = await resolveBrowserNameAlias({
+    parsed,
+    providers: [{
+      id: 'ens',
+      supportsName: () => true,
+      async resolveNameAlias() {
+        return {
+          ok: false,
+          state: 'failed',
+          code: 'ens_timeout',
+          message: 'ENS lookup timed out.',
+          data: { attempt: 1 },
+        };
+      },
+    }],
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'ens_timeout');
+  assert.equal(result.data.attempt, 1);
+  assert.equal(result.data.inputUri, 'metaid://sunny.eth');
+  assert.equal(result.data.aliasName, 'sunny.eth');
+  assert.equal(result.data.provider, 'ens');
+});
+
+test('name alias resolution converts supportsName exceptions into command failures', async () => {
+  const parsed = parseBrowserUri('metaid://sunny.eth');
+  const result = await resolveBrowserNameAlias({
+    parsed,
+    providers: [{
+      id: 'ens',
+      supportsName() {
+        throw new Error('ENS provider unavailable');
+      },
+      async resolveNameAlias() {
+        throw new Error('should not resolve after supportsName failure');
+      },
+    }],
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'name_resolution_failed');
+  assert.equal(result.data.inputUri, 'metaid://sunny.eth');
+  assert.equal(result.data.aliasName, 'sunny.eth');
+  assert.equal(result.data.provider, 'ens');
+  assert.match(result.message, /ENS provider unavailable/u);
+});
+
+test('name alias resolution converts resolveNameAlias exceptions into command failures', async () => {
+  const parsed = parseBrowserUri('metaid://sunny.eth');
+  const result = await resolveBrowserNameAlias({
+    parsed,
+    providers: [{
+      id: 'ens',
+      supportsName: () => true,
+      async resolveNameAlias() {
+        throw new Error('ENS text lookup failed');
+      },
+    }],
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'name_resolution_failed');
+  assert.equal(result.data.inputUri, 'metaid://sunny.eth');
+  assert.equal(result.data.aliasName, 'sunny.eth');
+  assert.equal(result.data.provider, 'ens');
+  assert.match(result.message, /ENS text lookup failed/u);
+});
+
+test('name alias resolution preserves alias context on invalid provider canonical target', async () => {
+  const parsed = parseBrowserUri('metaapp://app.sunny.eth');
+  const result = await resolveBrowserNameAlias({
+    parsed,
+    providers: [{
+      id: 'ens',
+      supportsName: () => true,
+      async resolveNameAlias() {
+        return {
+          ok: true,
+          state: 'success',
+          data: {
+            provider: 'ens',
+            normalizedName: 'app.sunny.eth',
+            textKey: OPEN_AGENT_INTERNET_ENS_TEXT_KEY,
+            canonicalUri: 'metaapp://not-a-pin',
+            resolvedAt: 123,
+            verificationState: 'unverified',
+          },
+        };
+      },
+    }],
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'invalid_name_alias_target');
+  assert.equal(result.data.inputUri, 'metaapp://app.sunny.eth');
+  assert.equal(result.data.aliasName, 'app.sunny.eth');
+  assert.equal(result.data.provider, 'ens');
+  assert.equal(result.data.canonicalUri, 'metaapp://not-a-pin');
+});
+
+test('aliasBrowserResolveResult preserves alias surface and stores alias metadata', () => {
+  const canonicalUri = `metaid://${validGlobalMetaId}`;
+  const result = aliasBrowserResolveResult({
+    result: {
+      uri: canonicalUri,
+      normalizedUri: canonicalUri,
+      resourceType: 'bot',
+      title: 'Sunny',
+      owner: {
+        kind: 'bot',
+        globalMetaId: validGlobalMetaId,
+        name: 'Sunny',
+        verificationState: 'verified',
+      },
+      renderer: {
+        type: 'bot-page',
+        contentType: 'text/html',
+      },
+      status: {
+        state: 'resolved',
+        verificationState: 'verified',
+        message: 'Resolved.',
+      },
+      source: {
+        resolver: 'test',
+        raw: { existing: true },
+      },
+      actions: [
+        { id: 'copy-uri', label: 'Copy URI', kind: 'copy', uri: canonicalUri },
+        { id: 'open-proof', label: 'Open proof', kind: 'proof', uri: 'https://example.com/proof' },
+      ],
+    },
+    alias: {
+      aliasUri: 'metaid://sunny.eth',
+      canonicalParsed: parseBrowserUri(canonicalUri),
+      provider: 'ens',
+      normalizedName: 'sunny.eth',
+      textKey: OPEN_AGENT_INTERNET_ENS_TEXT_KEY,
+      canonicalUri,
+      resolvedAt: 123,
+      verificationState: 'verified',
+      raw: { coinType: 0 },
+    },
+  });
+
+  assert.equal(result.uri, 'metaid://sunny.eth');
+  assert.equal(result.normalizedUri, 'metaid://sunny.eth');
+  assert.equal(result.actions[0].uri, 'metaid://sunny.eth');
+  assert.equal(result.actions[1].uri, 'https://example.com/proof');
+  assert.deepEqual(result.source.raw.existing, true);
+  assert.deepEqual(result.source.raw.nameAlias, {
+    aliasUri: 'metaid://sunny.eth',
+    provider: 'ens',
+    normalizedName: 'sunny.eth',
+    textKey: OPEN_AGENT_INTERNET_ENS_TEXT_KEY,
+    canonicalUri,
+    resolvedAt: 123,
+    verificationState: 'verified',
+    raw: { coinType: 0 },
+  });
 });

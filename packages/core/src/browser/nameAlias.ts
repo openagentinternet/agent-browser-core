@@ -76,6 +76,14 @@ function parseExplicitRecursiveAliasTarget(value: string): { scheme: BrowserUriS
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Name alias provider failed.';
+}
+
 function withAliasErrorContext<T>(
   result: BrowserCommandResult<T>,
   context: Record<string, unknown>,
@@ -84,10 +92,17 @@ function withAliasErrorContext<T>(
   return {
     ...result,
     data: {
-      ...(result.data ?? {}),
+      ...(isRecord(result.data) ? result.data : {}),
       ...context,
     },
   };
+}
+
+function nameResolutionFailed(error: unknown, context: Record<string, unknown>): BrowserCommandResult<never> {
+  return browserCommandFailed('name_resolution_failed', getErrorMessage(error), {
+    ...context,
+    error: getErrorMessage(error),
+  });
 }
 
 export function validateNameAliasCanonicalTarget(
@@ -178,7 +193,21 @@ export async function resolveBrowserNameAlias(
   }
 
   const providers = input.providers ?? [];
-  const provider = providers.find((candidate) => candidate.supportsName(input.parsed.id));
+  let provider: BrowserNameAliasProvider | undefined;
+  for (const candidate of providers) {
+    try {
+      if (candidate.supportsName(input.parsed.id)) {
+        provider = candidate;
+        break;
+      }
+    } catch (error) {
+      return nameResolutionFailed(error, {
+        inputUri: input.parsed.normalizedUri,
+        aliasName: input.parsed.id,
+        provider: candidate.id,
+      });
+    }
+  }
   if (!provider) {
     return browserCommandFailed('name_resolution_unavailable', 'Name alias resolution is not configured.', {
       aliasUri: input.parsed.normalizedUri,
@@ -192,7 +221,16 @@ export async function resolveBrowserNameAlias(
     inputScheme: input.parsed.scheme,
     name: input.parsed.id,
   };
-  const resolved = await provider.resolveNameAlias(request);
+  let resolved: BrowserCommandResult<BrowserNameAliasResult>;
+  try {
+    resolved = await provider.resolveNameAlias(request);
+  } catch (error) {
+    return nameResolutionFailed(error, {
+      inputUri: input.parsed.normalizedUri,
+      aliasName: input.parsed.id,
+      provider: provider.id,
+    });
+  }
   if (!resolved.ok) {
     return withAliasErrorContext(resolved, {
       inputUri: input.parsed.normalizedUri,
