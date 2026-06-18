@@ -420,19 +420,29 @@ function browserSettingsEndpoint() {
   return browserEndpoints.settings;
 }
 
-function browserUriFromPath(pathname) {
-  var match = textValue(pathname).match(/^\\/browser\\/(metaid|metaapp|metafile)\\/([^/?#]+)$/);
-  if (!match) return '';
-  var rawId = match[2];
-  var decodedId = rawId;
+function decodeURIComponentSafe(value) {
   try {
-    decodedId = decodeURIComponent(rawId);
+    return decodeURIComponent(value);
   } catch (error) {
-    decodedId = rawId;
+    return value;
   }
-  var id = textValue(decodedId);
-  if (!id) return '';
-  return match[1] + '://' + id;
+}
+
+function browserUriFromPath(pathname, search) {
+  var path = textValue(pathname);
+  var match = path.match(/^\\/browser\\/(metaid|metaapp|metafile)\\/([^/?#]+)$/);
+  if (match) {
+    var decodedId = decodeURIComponentSafe(match[2]);
+    var resourceId = textValue(decodedId);
+    return resourceId ? match[1] + '://' + resourceId : '';
+  }
+
+  var mapMatch = path.match(/^\\/browser\\/map\\/([^/?#]+)\\/(.+)$/);
+  if (!mapMatch) return '';
+  var authority = textValue(decodeURIComponentSafe(mapMatch[1]));
+  var rest = mapMatch[2].split('/').map(decodeURIComponentSafe).join('/');
+  var mapPath = textValue(rest);
+  return authority && mapPath ? 'map://' + authority + '/' + mapPath + textValue(search) : '';
 }
 
 function findBrowserMenuItem(itemId) {
@@ -1978,7 +1988,7 @@ async function initialize() {
   if (elements.statusTxid) elements.statusTxid.addEventListener('click', openInspector);
 
   var queryUri = new URLSearchParams(window.location.search || '').get('uri') || '';
-  var pathUri = queryUri ? '' : browserUriFromPath(window.location && window.location.pathname);
+  var pathUri = queryUri ? '' : browserUriFromPath(window.location && window.location.pathname, window.location && window.location.search);
   var runtime = await loadRuntime();
   var initialUri = queryUri || pathUri;
   if (initialUri) {

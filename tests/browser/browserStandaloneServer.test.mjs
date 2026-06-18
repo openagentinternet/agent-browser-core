@@ -55,6 +55,33 @@ test('standalone Browser server serves Browser pages and shared CSS', async (t) 
   assert.match(await cssResponse.text(), /MetaBot UI/);
 });
 
+test('standalone Browser serves map protocol pin deep links', async (t) => {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  const adapter = createStandaloneBrowserHostAdapter({
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          id: pinId,
+          path: '/protocols/simplebuzz',
+          contentType: 'application/json',
+          content: JSON.stringify({ content: 'Standalone MAP buzz' }),
+        },
+      }),
+    }),
+  });
+  const server = createStandaloneBrowserServer({ adapter });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const response = await fetch(`${baseUrl}/browser/map/simplebuzz/pin/${pinId}`);
+  const html = await response.text();
+  assert.equal(response.status, 200);
+  assert.match(html, /Agent Internet Browser/);
+  assert.match(html, /data-browser-shell/);
+});
+
 test('standalone Browser server exposes runtime, settings, cache, and action routes', async (t) => {
   const cacheDir = await mkdtemp(join(tmpdir(), 'abc-standalone-runtime-cache-'));
   t.after(() => rm(cacheDir, { recursive: true, force: true }));
