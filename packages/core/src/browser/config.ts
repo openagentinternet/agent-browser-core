@@ -9,6 +9,7 @@ const DEFAULT_METASO_P2P_BASE_URL = 'https://so.metaid.io';
 const DEFAULT_MANAPI_BASE_URL = 'https://manapi.metaid.io';
 const DEFAULT_BLOCK_EXPLORER_BASE_URL = 'https://www.mvcscan.com/tx';
 const DEFAULT_ENS_TEXT_KEY = 'org.openagentinternet.uri';
+const DEFAULT_ENS_RPC_URLS = ['https://ethereum-rpc.publicnode.com'];
 
 function normalizeUrl(value: unknown): string {
   const text = typeof value === 'string' ? value.trim() : '';
@@ -48,9 +49,9 @@ export function createDefaultBrowserConfig(): BrowserBaseConfig {
     nameResolution: {
       enabled: true,
       ens: {
-        enabled: false,
+        enabled: true,
         chainId: 1,
-        rpcUrls: [],
+        rpcUrls: [...DEFAULT_ENS_RPC_URLS],
         textKey: DEFAULT_ENS_TEXT_KEY,
       },
     },
@@ -67,7 +68,12 @@ export function resolveBrowserConfig(
   const browserNameResolution = (browser.nameResolution ?? {}) as Partial<BrowserBaseConfig['nameResolution']>;
   const browserEns = (browserNameResolution.ens ?? {}) as Partial<BrowserBaseConfig['nameResolution']['ens']>;
   const envRpcUrls = normalizeUrlList(env.METABOT_BROWSER_ENS_RPC_URLS);
-  const configuredRpcUrls = envRpcUrls.length > 0 ? envRpcUrls : normalizeUrlList(browserEns.rpcUrls);
+  const browserRpcUrls = normalizeUrlList(browserEns.rpcUrls);
+  const configuredRpcUrls = envRpcUrls.length > 0
+    ? envRpcUrls
+    : browserRpcUrls.length > 0
+      ? browserRpcUrls
+      : [...defaults.nameResolution.ens.rpcUrls];
   const nameResolutionEnabled = normalizeBoolean(env.METABOT_BROWSER_NAME_RESOLUTION_ENABLED)
     ?? (typeof browserNameResolution.enabled === 'boolean' ? browserNameResolution.enabled : defaults.nameResolution.enabled);
   const ensEnabledInput = normalizeBoolean(env.METABOT_BROWSER_ENS_ENABLED)

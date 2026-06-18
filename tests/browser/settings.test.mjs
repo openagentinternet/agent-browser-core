@@ -59,17 +59,20 @@ test('Browser settings reject non-boolean custom rendering values', () => {
   );
 });
 
-test('Browser settings default name resolution on with ENS disabled until RPC URLs exist', () => {
+test('Browser settings default ENS name resolution to the public validation RPC', () => {
   const defaults = createDefaultBrowserConfig();
   const resolved = resolveBrowserConfig({});
   const snapshot = createBrowserSettingsSnapshot({ config: {} });
 
   assert.equal(defaults.nameResolution.enabled, true);
-  assert.equal(defaults.nameResolution.ens.enabled, false);
-  assert.deepEqual(defaults.nameResolution.ens.rpcUrls, []);
+  assert.equal(defaults.nameResolution.ens.enabled, true);
+  assert.deepEqual(defaults.nameResolution.ens.rpcUrls, ['https://ethereum-rpc.publicnode.com']);
   assert.equal(defaults.nameResolution.ens.textKey, 'org.openagentinternet.uri');
   assert.equal(resolved.nameResolution.enabled, true);
-  assert.equal(resolved.nameResolution.ens.enabled, false);
+  assert.equal(resolved.nameResolution.ens.enabled, true);
+  assert.deepEqual(resolved.nameResolution.ens.rpcUrls, ['https://ethereum-rpc.publicnode.com']);
+  assert.equal(snapshot.effectiveBrowser.nameResolution.ens.enabled, true);
+  assert.deepEqual(snapshot.effectiveBrowser.nameResolution.ens.rpcUrls, ['https://ethereum-rpc.publicnode.com']);
   assert.equal(snapshot.effectiveBrowser.nameResolution.ens.textKey, 'org.openagentinternet.uri');
 });
 
