@@ -1517,7 +1517,22 @@ function renderGenericRows(items, emptyText, iconName) {
 }
 
 function renderActivityRows(payload) {
-  return renderGenericRows(payload.activity.slice(0, 5), 'No recent activity.', 'activity');
+  var items = payload.activity.slice(0, 5);
+  return items.length
+    ? items.map(function (item) {
+      var title = escapeHtml(item.title);
+      var detail = item.detail ? escapeHtml(item.detail) : '';
+      var duplicateBuzzText = item.detail && item.title === item.detail;
+      var titleHtml = !duplicateBuzzText && item.mapHref
+        ? '<a href="' + escapeHtml(item.mapHref) + '" data-browser-map-link>' + title + '</a>'
+        : title;
+      var contentHtml = duplicateBuzzText
+        ? '<p>' + detail + '</p>'
+        : '<strong>' + titleHtml + '</strong>' + (detail ? '<p>' + detail + '</p>' : '');
+      return '<article class="browser-activity-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('activity') + '</span>' +
+        '<div>' + contentHtml + '</div></article>';
+    }).join('')
+    : '<p class="browser-muted-row">No recent activity.</p>';
 }
 
 function renderBotHomepageDocumentTemplate(payload, current) {
