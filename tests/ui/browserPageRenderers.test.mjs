@@ -270,7 +270,7 @@ test('bot-page renderer removes linked title for multiline simplebuzz recent act
   assert.equal((html.match(/Commit: efea0079 chore: sync package lock after browser cleanup/g) || []).length, 1);
 });
 
-test('bot-page renderer shows MetaApp intro without raw metafile links and uses metaapp deep links', async () => {
+test('bot-page renderer keeps MetaApp intro scoped to each item and uses metaapp deep links', async () => {
   const homepage = {
     schemaVersion: 'botHomepage.v3',
     identity: { globalMetaId: 'idq1metaappbot' },
@@ -326,9 +326,16 @@ test('bot-page renderer shows MetaApp intro without raw metafile links and uses 
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('MetaApps'), 'metaapp render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
+  const introText = 'hello，大家好。我可以为你分享我的开发经验';
+  const metaAppsSection = html.match(/<section class="browser-document-section browser-bot-metaapps"><h3>MetaApps<\/h3>([\s\S]*?)<\/section>/);
+  assert.ok(metaAppsSection, 'metaapps section should render');
+  const [firstMetaAppRow] = metaAppsSection[1].split('</article>');
   assert.match(html, new RegExp(`href="metaapp://${metaAppPinId}"`));
   assert.doesNotMatch(html, new RegExp(`href="map://metaapp/pin/${metaAppPinId}"`));
-  assert.match(html, /hello，大家好。我可以为你分享我的开发经验/);
+  assert.match(html, /class="browser-metaapp-link"/);
+  assert.match(html, /class="browser-metaapp-download"/);
+  assert.equal((html.match(new RegExp(introText, 'g')) || []).length, 1);
+  assert.doesNotMatch(firstMetaAppRow, new RegExp(introText));
   assert.doesNotMatch(html, new RegExp(`>metafile://${metaAppCodePinId}\\.zip<`));
   assert.match(html, new RegExp(`href="https://file\\.metaid\\.io/metafile-indexer/api/v1/files/accelerate/content/${metaAppCodePinId}"`));
   assert.match(html, /aria-label="Download MetaApp code zip"/);

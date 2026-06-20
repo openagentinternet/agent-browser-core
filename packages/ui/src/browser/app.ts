@@ -1467,29 +1467,11 @@ function metaAppSummaryText(item) {
   return readableText(item && (item.intro || item.description || item.summary || item.detail || item.text || item.bio));
 }
 
-function metaAppGroupingKey(item) {
-  return textValue(item && (item.appName || item.name || item.title || item.id || item.pinId)).toLowerCase();
-}
-
 function normalizeBotHomepageMetaApps(items) {
-  var rawItems = firstArray(items);
-  return rawItems.map(function (metaapp, index) {
+  return firstArray(items).map(function (metaapp, index) {
     var normalized = normalizeBotHomepageListItem(metaapp, index, 'MetaApp');
-    var summary = metaAppSummaryText(metaapp);
-    if (!summary) {
-      var groupKey = metaAppGroupingKey(metaapp);
-      if (groupKey) {
-        for (var candidateIndex = 0; candidateIndex < rawItems.length; candidateIndex += 1) {
-          var candidate = rawItems[candidateIndex];
-          if (candidateIndex === index) continue;
-          if (metaAppGroupingKey(candidate) !== groupKey) continue;
-          summary = metaAppSummaryText(candidate);
-          if (summary) break;
-        }
-      }
-    }
     normalized.title = textValue(metaapp && (metaapp.title || metaapp.name || metaapp.appName || metaapp.displayName || metaapp.label || metaapp.pinId)) || normalized.title;
-    normalized.detail = summary;
+    normalized.detail = metaAppSummaryText(metaapp);
     normalized.href = metaAppHref(normalized.pinId);
     normalized.downloadHref = buildMetafileDownloadHref(textValue(metaapp && (metaapp.code || metaapp.content || metaapp.metafile || metaapp.file)));
     return normalized;
@@ -1592,12 +1574,14 @@ function renderMetaAppRows(items, emptyText) {
   return items.length
     ? items.slice(0, 6).map(function (item) {
       var title = escapeHtml(item.title);
-      var titleHtml = item.href ? '<a href="' + escapeHtml(item.href) + '" data-browser-map-link>' + title + '</a>' : title;
+      var titleHtml = item.href
+        ? '<a class="browser-metaapp-link" href="' + escapeHtml(item.href) + '" data-browser-map-link>' + title + '</a>'
+        : '<span class="browser-metaapp-link">' + title + '</span>';
       var downloadHtml = item.downloadHref
-        ? ' <a class="browser-help-icon" href="' + escapeHtml(item.downloadHref) + '" target="_blank" rel="noopener" download aria-label="Download MetaApp code zip" title="Download MetaApp code zip">' + iconHtml('download') + '</a>'
+        ? '<a class="browser-metaapp-download" href="' + escapeHtml(item.downloadHref) + '" target="_blank" rel="noopener" download aria-label="Download MetaApp code zip" title="Download MetaApp code zip">' + iconHtml('download') + '</a>'
         : '';
       return '<article class="browser-activity-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('layout') + '</span>' +
-        '<div><strong>' + titleHtml + downloadHtml + '</strong>' +
+        '<div><strong class="browser-metaapp-heading">' + titleHtml + downloadHtml + '</strong>' +
         (item.detail ? '<p>' + escapeHtml(item.detail) + '</p>' : '') + '</div></article>';
     }).join('')
     : '<p class="browser-muted-row">' + escapeHtml(emptyText) + '</p>';
