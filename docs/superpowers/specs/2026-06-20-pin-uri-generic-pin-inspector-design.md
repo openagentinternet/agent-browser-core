@@ -178,7 +178,6 @@ interface PinInspectorResourceData {
   pin: PinInspectorPinSummary;
   payload: unknown;
   rawPayload: unknown;
-  contentSummary?: Record<string, unknown>;
   rawPinRecord: Record<string, unknown>;
 }
 
@@ -196,7 +195,11 @@ Contract notes:
 
 - `title` should stay neutral, such as `Pin {shortId}`. Human-friendly field extraction belongs to
   the renderer, not the resolver.
+- The resolver should not invent a canonical `content`, `title`, `tag`, or summary projection for
+  unknown protocols. The renderer works from payload truth plus declared outer `contentType`.
 - `owner` comes from MAN owner metadata when available.
+- When `owner.globalMetaId` is present, the UI may use it to show a creator chip and link to the
+  creator Bot Page through `metaid://{globalMetaId}`.
 - `proof.pinId` should be the resolved pin id.
 - `proof.details` should include at least:
   `requestedPinId`, `rootPinId`, `versionSelector`, `historyIndex`, `operation`, `encryption`,
@@ -204,42 +207,62 @@ Contract notes:
 - `source.raw` may keep the MAN record, but `renderer.data.rawPinRecord` is the canonical renderer
   input for inspection.
 
-## Generic Pin Inspector Page Model
+## Generic Pin Page Model
 
-The Generic Pin Inspector has exactly seven top-level sections.
+The internal renderer id remains `generic.pin-inspector`, but the version 1 presentation should be
+a content-first pin page rather than a heavy inspector layout.
 
-### 1. Identity
+### Browser Chrome
 
-Purpose: establish what object the user is looking at.
+The Browser top bar should keep a compact creator chip in the address-row trailing slot.
 
-Show:
+The chip should:
 
-- `pin://` URI;
-- `pin.path` when present;
-- requested pin id;
-- resolved pin id;
-- root pin id when present;
-- txid when present;
-- publisher Global MetaID or address when present.
+- show the creator avatar when available;
+- show creator name and `GlobalMetaID` from `resource.owner`;
+- link to the creator Bot Page through `metaid://{globalMetaId}` when `owner.globalMetaId` exists.
 
-### 2. Overview
+The page body should not repeat the same creator block as a full-width section unless the host has
+no browser chrome.
 
-Purpose: present the most human-readable primary content.
+### Primary Sections
 
-Use the first non-empty string from this priority order:
+The page body should have four primary sections.
 
-```text
-content > text > body > description > summary > intro
-```
+### 1. Payload
 
-The renderer may also use `title`, `name`, or `displayName` as the visible page heading, but those
-fields do not replace the overview body.
+Purpose: render the payload itself as the main content.
 
-### 3. Media
+Rules:
 
-Purpose: surface images and attachments without requiring raw JSON reading.
+- Treat outer MetaID `contentType` as the routing truth.
+- Do not guess a canonical title, hero body, tag list, or semantic summary for unknown protocols.
+- Preserve original JSON keys and visible order when rendering JSON payloads.
+- Keep this section visually dominant.
 
-Recognize these common keys:
+Version 1 routing:
+
+- `application/json`: render a structured JSON document view.
+- `text/markdown`: render Markdown directly.
+- `text/plain`: render plain text directly.
+- binary or unsupported content: show a compact non-preview notice instead of dumping bytes.
+
+### 2. Raw Payload
+
+Purpose: keep the generic renderer trustworthy.
+
+Rules:
+
+- Show the raw payload clearly and close to the primary payload view.
+- When the payload is JSON, show the original raw JSON text rather than a second semantic summary.
+- When the payload is Markdown or text, this section may collapse by default if the rendered view is
+  already literal enough.
+
+### 3. Related Media And Files
+
+Purpose: surface payload-linked assets without making them the center of the page.
+
+Recognize common asset-bearing keys such as:
 
 ```text
 images, image, imageUrls, attachments, files, media
@@ -247,26 +270,33 @@ images, image, imageUrls, attachments, files, media
 
 Rules:
 
+- Inline image preview is allowed for safe resolvable image references.
+- Documents and archives, including ZIP attachments, should appear as file rows with download
+  affordance.
 - `metafile://...` references should render as internal Browser links.
-- When the host UI can derive a safe preview URL from the configured `metafileContentBaseUrl`, image
-  references may display inline previews.
 - External `http://` and `https://` references may be shown as links, but they should not be
   auto-embedded in version 1.
 
-### 4. Key Fields
+### 4. Pin Facts
 
-Purpose: show the important top-level payload fields in a compact form.
+Purpose: preserve auditability without overwhelming the content view.
 
-Rules:
+Show:
 
-- Include top-level scalar fields and short arrays.
-- Exclude fields already consumed by `Overview` or `Media`.
-- Exclude noisy infrastructure fields already shown in `Identity` or `Proof`.
-- Preserve original keys; do not rename protocol fields in version 1.
+- txid, with a copy affordance;
+- `pin.path` when present;
+- requested pin id and resolved pin id when they differ;
+- root pin id when present;
+- version selector and history index when present;
+- operation, chain name, content type, encryption state, and pin version field when present;
+- raw MAN pin record, preferably collapsed by default.
 
-### 5. Related Links
+This section is for chain and resolver facts, not payload interpretation.
 
-Purpose: turn chain-native references into navigable links.
+### Related Links
+
+Browser-native links found in payload may appear inside `Related Media And Files` or `Pin Facts` as
+a compact support list rather than a separate dominant section.
 
 Recursively scan payload strings for complete Browser URIs and collect unique values for:
 
@@ -278,33 +308,6 @@ Recursively scan payload strings for complete Browser URIs and collect unique va
 
 If a string is an external `http(s)` URL, it may be listed separately as an external reference, but
 it is not treated as a first-class Agent Internet link.
-
-### 6. Proof
-
-Purpose: preserve auditability and version clarity.
-
-Show:
-
-- version selector and history index when present;
-- operation;
-- chain name;
-- content type;
-- encryption state;
-- pin version field when present.
-
-This section is for chain and resolver facts, not payload content.
-
-### 7. Raw And Structured Data
-
-Purpose: keep the inspector trustworthy for power users and unknown protocols.
-
-This section should provide collapsible views for:
-
-- parsed payload JSON when structured;
-- raw payload fallback;
-- raw MAN pin record.
-
-The top-level section count remains seven even if this block contains multiple collapsible panels.
 
 ## Renderer Runtime Boundary
 
@@ -344,6 +347,10 @@ renderer or action is needed.
 - The resolver returns `resourceType: "pin"` with `renderer.type: "pin-inspector"`.
 - Requested and resolved pin identity are both preserved in the result.
 - Built-in Bot Page detail links can use `pin://` without encoding OAC or IDBots routes.
-- The Generic Pin Inspector can present readable content for common JSON payloads while keeping raw
-  payload and raw pin record visible.
+- The Generic Pin page routes by declared outer content type and treats payload as the primary
+  content source.
+- The Browser chrome can show the creator as a compact bot chip using `resource.owner`.
+- The Generic Pin page can present readable JSON, Markdown, and plain text payloads while keeping
+  raw payload and raw pin record visible.
+- ZIP and other document-like attachments can appear as downloadable related files.
 - `map://simplemsg/conversation?peer=...` remains the protocol action URI for conversation opening.
