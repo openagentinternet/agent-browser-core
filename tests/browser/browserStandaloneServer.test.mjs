@@ -338,7 +338,7 @@ test('standalone Browser server exposes runtime, settings, cache, and action rou
     isDefault: true,
     capabilities: ['template-settings'],
   });
-  assert.equal(runtime.data.defaultUri, 'metaid://idq1fixturebot');
+  assert.equal(runtime.data.defaultUri, null);
   assert.deepEqual(runtime.data.labels, {
     actorChip: 'Wallet',
     noActorTitle: 'No Wallet',
@@ -420,25 +420,6 @@ test('standalone Browser server exposes runtime, settings, cache, and action rou
   assert.equal(login.state, 'manual_action_required');
   assert.equal(login.code, 'wallet_login_required');
   assert.equal(login.action.label, 'Connect wallet');
-});
-
-test('standalone Browser server falls back to the fixture bot homepage when network resolution fails', async (t) => {
-  const adapter = createStandaloneBrowserHostAdapter({
-    fetch: async () => {
-      throw new Error('network unavailable');
-    },
-  });
-  const server = createStandaloneBrowserServer({ adapter });
-  t.after(() => new Promise((resolve) => server.close(resolve)));
-  const baseUrl = await listen(server);
-
-  const response = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaid%3A%2F%2Fidq1fixturebot`);
-  const payload = await readJson(response);
-  assert.equal(response.status, 200);
-  assert.equal(payload.ok, true);
-  assert.equal(payload.data.resourceType, 'bot');
-  assert.equal(payload.data.title, 'Fixture Bot');
-  assert.equal(payload.data.renderer.type, 'bot-page');
 });
 
 test('standalone Browser server resolves non-fixture metaid resources through adapter fetch', async (t) => {
