@@ -234,6 +234,11 @@ function mapPinHref(protocolPath, pinId) {
   return protocol && isBrowserPinId(id) ? 'map://' + protocol + '/pin/' + encodeURIComponent(id.toLowerCase()) : '';
 }
 
+function pinHref(pinId) {
+  var id = textValue(pinId);
+  return isBrowserPinId(id) ? 'pin://' + encodeURIComponent(id.toLowerCase()) : '';
+}
+
 var DEFAULT_METAFILE_CONTENT_BASE_URL = 'https://file.metaid.io/metafile-indexer';
 
 function metaAppHref(pinId) {
@@ -496,12 +501,13 @@ function metaIdBotPageOverrideQuery(search) {
 
 function browserUriFromPath(pathname, search) {
   var path = textValue(pathname);
-  var match = path.match(/^\\/browser\\/(metaid|metaapp|metafile)\\/([^/?#]+)$/);
+  var match = path.match(/^\\/browser\\/(metaid|metaapp|metafile|pin)\\/([^/?#]+)$/);
   if (match) {
     var decodedId = decodeURIComponentSafe(match[2]);
     var resourceId = textValue(decodedId);
     if (!resourceId) return '';
-    return match[1] + '://' + resourceId + (match[1] === 'metaid' ? metaIdBotPageOverrideQuery(search) : '');
+    return match[1] + '://' + resourceId +
+      (match[1] === 'metaid' ? metaIdBotPageOverrideQuery(search) : (match[1] === 'pin' ? textValue(search) : ''));
   }
 
   var mapMatch = path.match(/^\\/browser\\/map\\/(.+)$/);
@@ -1585,7 +1591,7 @@ function normalizeBotHomepageListItem(item, index, fallbackLabel) {
       id: rawPinId || textValue(item.id || item.uri || title),
       pinId: pinId,
       protocolPath: protocolPath,
-      mapHref: mapPinHref(protocolPath, pinId),
+      mapHref: pinHref(pinId),
       timestamp: timestamp,
       title: title,
       detail: detail,
@@ -1613,7 +1619,7 @@ function normalizeBotHomepageServices(items) {
     var normalized = normalizeBotHomepageListItem(service, index, 'Service');
     normalized.serviceId = textValue(service && (service.serviceId || service.id)) || normalized.id;
     normalized.protocolPath = normalized.protocolPath || textValue(service && service.protocolPath) || '/protocols/skill-service';
-    normalized.mapHref = mapPinHref(normalized.protocolPath, normalized.pinId);
+    normalized.mapHref = pinHref(normalized.pinId);
     return normalized;
   });
 }
@@ -1772,7 +1778,7 @@ function renderServiceRows(services) {
   return services.length
     ? services.map(function (service) {
       var title = escapeHtml(service.name || service.title || service.id || 'Service');
-      var href = service.mapHref || mapPinHref(service.protocolPath || '/protocols/skill-service', service.pinId);
+      var href = service.mapHref || pinHref(service.pinId);
       var titleHtml = href ? '<a href="' + escapeHtml(href) + '" data-browser-map-link>' + title + '</a>' : title;
       return '<article class="browser-service-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('service') + '</span>' +
         '<div><strong>' + titleHtml + '</strong>' +
@@ -1847,7 +1853,7 @@ function renderActivityRows(payload) {
       }
       var title = escapeHtml(item.title);
       var detail = item.detail ? escapeHtml(item.detail) : '';
-      var simpleBuzzRow = item.protocolPath === '/protocols/simplebuzz' || /^map:\\/\\/simplebuzz\\//.test(textValue(item.mapHref));
+      var simpleBuzzRow = item.protocolPath === '/protocols/simplebuzz' || /^(?:map:\\/\\/simplebuzz\\/|pin:\\/\\/[0-9a-f]{64}i[0-9]+(?:\\?|$))/i.test(textValue(item.mapHref));
       var duplicateBuzzText = simpleBuzzRow || (item.detail && item.title === item.detail);
       var titleHtml = !duplicateBuzzText && item.mapHref
         ? '<a href="' + escapeHtml(item.mapHref) + '" data-browser-map-link>' + title + '</a>'

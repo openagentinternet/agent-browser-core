@@ -4,7 +4,7 @@ import type {
   BrowserResourceEnvelope,
   BrowserResourceSection,
 } from '@openagentinternet/agent-browser-host-contract';
-import { renderProtocolPinHtml } from '@openagentinternet/agent-browser-renderers';
+import { renderPinInspectorHtml, renderProtocolPinHtml } from '@openagentinternet/agent-browser-renderers';
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -126,6 +126,7 @@ export function renderResourceHtml(resource: BrowserResourceEnvelope): string {
   if (renderer.type === 'image') return renderUrlRenderer(renderer, 'browser-image', 'img');
   if (renderer.type === 'video') return renderUrlRenderer(renderer, 'browser-video', 'video');
   if (renderer.type === 'protocol-pin') return renderProtocolPinHtml(resource);
+  if (renderer.type === 'pin-inspector') return renderPinInspectorHtml(resource);
   if (renderer.type === 'host-action') return renderHostAction(resource);
   const downloadUrl = safeResourceUrl(renderer.url);
   return `<section class="browser-empty-state"><h2>Unsupported renderer</h2><p>${escapeHtml(renderer.error || renderer.contentType || 'This resource type is not supported yet.')}</p>${downloadUrl ? `<a href="${escapeHtml(downloadUrl)}" target="_blank" rel="noopener">Download file</a>` : ''}</section>`;

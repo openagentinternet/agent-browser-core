@@ -95,6 +95,52 @@ test('UI renders protocol-pin resources through first-party renderer pack', () =
   assert.match(html, /Full buzz text/);
 });
 
+test('UI renders pin-inspector resources through first-party renderer pack', () => {
+  const html = ui.renderResourceHtml({
+    uri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    normalizedUri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    resourceType: 'pin',
+    title: 'Pin 6ea8a0bd...',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+    renderer: {
+      type: 'pin-inspector',
+      contentType: 'application/json',
+      data: {
+        rendererId: 'generic.pin-inspector',
+        version: {
+          requestedPinId: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+          resolvedPinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+          versionSelector: 'latest',
+        },
+        pin: {
+          pinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+          path: '/protocols/simplebuzz',
+          contentType: 'application/json',
+        },
+        payload: {
+          title: 'Readable Pin',
+          content: 'Rendered via generic pin inspector',
+          images: ['metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0'],
+          related: 'metaid://idq1fixturebot',
+        },
+        rawPayload: '{"title":"Readable Pin"}',
+        rawPinRecord: {
+          path: '/protocols/simplebuzz',
+          txid: 'a'.repeat(64),
+        },
+      },
+    },
+    actions: [],
+    sections: [],
+  });
+
+  assert.match(html, /browser-pin-inspector/);
+  assert.match(html, /Readable Pin/);
+  assert.match(html, /Rendered via generic pin inspector/);
+  assert.match(html, /Related Links/);
+  assert.match(html, /metaid:\/\/idq1fixturebot/);
+});
+
 test('UI renders host-action resources as trusted action panels', () => {
   const html = ui.renderResourceHtml({
     uri: 'map://simplemsg/conversation?peer=idq1peer',

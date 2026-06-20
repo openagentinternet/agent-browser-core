@@ -1,0 +1,71 @@
+import type { ParsedPinUri } from './types.js';
+export type { ParsedPinUri } from './types.js';
+
+const PIN_ID_PATTERN = /^[0-9a-f]{64}i[0-9]+$/iu;
+
+function cleanText(value: unknown): string {
+  return String(value ?? '').trim();
+}
+
+function requireOnlyQueryParam(searchParams: URLSearchParams, name: string): void {
+  const keys = Array.from(searchParams.keys());
+  if (keys.length > 1 || (keys.length === 1 && keys[0] !== name)) {
+    throw new Error('Unsupported pin URI query parameter.');
+  }
+}
+
+function readVersion(searchParams: URLSearchParams): { versionSelector: 'latest' | 'history-index'; historyIndex?: number } {
+  if (!searchParams.has('version')) {
+    if (Array.from(searchParams.keys()).length > 0) {
+      throw new Error('Unsupported pin URI query parameter.');
+    }
+    return { versionSelector: 'latest' };
+  }
+
+  requireOnlyQueryParam(searchParams, 'version');
+  const versions = searchParams.getAll('version');
+  if (versions.length !== 1) {
+    throw new Error('pin URI version must be a non-negative history index.');
+  }
+
+  const version = versions[0];
+  if (!/^[0-9]+$/u.test(version)) {
+    throw new Error('pin URI version must be a non-negative history index.');
+  }
+  return { versionSelector: 'history-index', historyIndex: Number(version) };
+}
+
+export function parsePinUri(input: string): ParsedPinUri {
+  const originalUri = cleanText(input);
+  let url: URL;
+  try {
+    url = new URL(originalUri);
+  } catch {
+    throw new Error('Enter a complete pin URI such as pin://{pinId}.');
+  }
+  if (url.protocol !== 'pin:') {
+    throw new Error('Pin parser requires a pin:// URI.');
+  }
+  if (url.username || url.password || url.port) {
+    throw new Error('pin URI does not support username, password, or port.');
+  }
+  if (url.hash) {
+    throw new Error('Unsupported pin URI fragment.');
+  }
+  if (url.pathname && url.pathname !== '/') {
+    throw new Error('pin URI does not support a path component.');
+  }
+
+  const pinId = cleanText(decodeURIComponent(url.hostname)).toLowerCase();
+  if (!PIN_ID_PATTERN.test(pinId)) {
+    throw new Error('pin URI requires a 64-hex pinId ending in iN.');
+  }
+
+  const version = readVersion(url.searchParams);
+  return {
+    originalUri,
+    normalizedUri: `pin://${pinId}${version.versionSelector === 'history-index' ? `?version=${version.historyIndex}` : ''}`,
+    pinId,
+    ...version,
+  };
+}

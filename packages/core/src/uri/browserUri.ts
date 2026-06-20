@@ -1,6 +1,7 @@
 import { parseMapUri } from '../browser/mapUri.js';
+import { parsePinUri } from '../browser/pinUri.js';
 
-export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile' | 'map';
+export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile' | 'map' | 'pin';
 
 export interface ParsedBrowserUri {
   originalUri: string;
@@ -9,7 +10,7 @@ export interface ParsedBrowserUri {
   id: string;
 }
 
-const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'metafile', 'map']);
+const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'metafile', 'map', 'pin']);
 const GLOBAL_META_ID_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 const GLOBAL_META_ID_CHECKSUM_LENGTH = 6;
 const GLOBAL_META_ID_VERSION_CHARS = new Set(['q', 'p', 'z', 'r', 'y', 't']);
@@ -142,7 +143,7 @@ export function parseBrowserUri(input: string): ParsedBrowserUri {
     if (looksLikeBareGlobalMetaId(originalUri)) {
       throw new Error('Enter a complete Agent Internet URI or a valid Global MetaID.');
     }
-    throw new Error('Enter a complete Agent Internet URI such as metaid://idq1example or metaapp://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai0.');
+    throw new Error('Enter a complete Agent Internet URI such as metaid://idq1example, metaapp://{pinId}, or pin://{pinId}.');
   }
 
   const scheme = schemeMatch[1].toLowerCase() as BrowserUriScheme;
@@ -162,6 +163,16 @@ export function parseBrowserUri(input: string): ParsedBrowserUri {
       normalizedUri: parsed.normalizedUri,
       scheme,
       id: parsed.normalizedUri.slice('map://'.length),
+    };
+  }
+
+  if (scheme === 'pin') {
+    const parsed = parsePinUri(originalUri);
+    return {
+      originalUri,
+      normalizedUri: parsed.normalizedUri,
+      scheme,
+      id: parsed.normalizedUri.slice('pin://'.length),
     };
   }
 

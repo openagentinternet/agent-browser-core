@@ -359,6 +359,20 @@ test('Browser MetaApp deep link path is decoded into the address bar and resolve
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metaapp%3A%2F%2F${pinId}&actorId=worker`);
 });
 
+test('Browser pin deep link path is decoded into the address bar and preserves version query', async () => {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  const uri = `pin://${pinId}?version=0`;
+  const { elements, fetchCalls } = createBrowserContext({
+    pathname: `/browser/pin/${pinId}`,
+    search: '?version=0',
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and pin deep link resolve');
+
+  assert.equal(elements['[data-browser-uri-input]'].value, uri);
+  assert.equal(fetchCalls[1], `/api/browser/resolve?uri=${encodeURIComponent(uri)}&actorId=worker`);
+});
+
 test('Browser MAP deep link path is decoded into the address bar and preserves query', async () => {
   const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
   const uri = `map://simplebuzz/pin/${pinId}?version=0`;

@@ -18,6 +18,7 @@ export {
   type ParsedBrowserUri,
 } from './uri/browserUri.js';
 export { parseMapUri, type ParsedMapUri } from './browser/mapUri.js';
+export { parsePinUri, type ParsedPinUri } from './browser/pinUri.js';
 export {
   buildBotHomepageEnvelope,
   type BuildBotHomepageEnvelopeInput,
@@ -32,6 +33,8 @@ export * from './browser/botPageResolver.js';
 export * from './browser/browserResolver.js';
 export * from './browser/mapUri.js';
 export * from './browser/mapProtocolResolver.js';
+export * from './browser/pinUri.js';
+export * from './browser/pinResolver.js';
 export * from './browser/metafileResolver.js';
 export * from './browser/metaAppResolver.js';
 export * from './browser/metaAppPinResolver.js';

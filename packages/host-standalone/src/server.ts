@@ -26,7 +26,7 @@ function isBrowserPage(pathname: string): boolean {
   return pathname === '/' ||
     pathname === '/browser' ||
     pathname === '/ui/browser' ||
-    /^\/browser\/(?:metaid|metaapp|metafile)\/[^/?#]+$/.test(pathname) ||
+    /^\/browser\/(?:metaid|metaapp|metafile|pin)\/[^/?#]+$/.test(pathname) ||
     /^\/browser\/map\/.+$/.test(pathname);
 }
 

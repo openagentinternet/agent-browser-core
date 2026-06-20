@@ -32,6 +32,13 @@ test('parseBrowserUri normalizes supported Browser URI schemes', () => {
     scheme: 'map',
     id: 'simplebuzz/pin/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0?version=0',
   });
+  const pinId = '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  assert.deepEqual(parseBrowserUri(` PIN://${pinId}?version=2 `), {
+    originalUri: `PIN://${pinId}?version=2`,
+    normalizedUri: `pin://${pinId}?version=2`,
+    scheme: 'pin',
+    id: `${pinId}?version=2`,
+  });
 });
 
 test('parseBrowserUri normalizes map scheme resources', () => {

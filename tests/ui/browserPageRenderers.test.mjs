@@ -156,12 +156,12 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.equal((html.match(/Published a v3 homepage fixture\./g) || []).length, 1);
   assert.match(html, /data-browser-action="private-chat"/);
   assert.match(html, /data-browser-action="service-list"/);
-  assert.match(html, new RegExp(`href="map://skill-service/pin/${servicePinId}"`));
+  assert.match(html, new RegExp(`href="pin://${servicePinId}"`));
   assert.doesNotMatch(html, new RegExp(`href="map://simplebuzz/pin/${buzzPinId}"`));
   assert.match(html, /https:\/\/file\.metaid\.io\/metafile-indexer\/content\/avatar-pin/);
 });
 
-test('bot-page renderer does not create MAP links from non-pin service ids', async () => {
+test('bot-page renderer does not create pin detail links from non-pin service ids', async () => {
   const homepage = {
     globalMetaId: 'idq1servicebot',
     profile: { name: 'Service Bot' },
@@ -189,7 +189,7 @@ test('bot-page renderer does not create MAP links from non-pin service ids', asy
   assert.match(html, /Callable Service/);
   assert.match(html, /data-browser-action="service-call"/);
   assert.match(html, /data-service-id="callable-service-id"/);
-  assert.doesNotMatch(html, /map:\/\/skill-service\/pin\/callable-service-id/);
+  assert.doesNotMatch(html, /pin:\/\/callable-service-id/);
   assert.doesNotMatch(html, /data-browser-map-link/);
 });
 

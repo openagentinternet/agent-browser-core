@@ -24,6 +24,13 @@ test('parseBrowserUri normalizes supported Browser URI schemes', () => {
     scheme: 'metafile',
     id: 'abcdef123i0.pdf',
   });
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  assert.deepEqual(core.parseBrowserUri(` PIN://${pinId}?version=2 `), {
+    originalUri: `PIN://${pinId}?version=2`,
+    normalizedUri: `pin://${pinId}?version=2`,
+    scheme: 'pin',
+    id: `${pinId}?version=2`,
+  });
 });
 
 test('parseBrowserUri normalizes map scheme resources', () => {
@@ -89,6 +96,33 @@ test('parseMapUri accepts canonical MAP pin and conversation targets', () => {
     targetKind: 'conversation',
     peerGlobalMetaId: 'idq1peer',
   });
+});
+
+test('parsePinUri accepts canonical pin latest and history targets', () => {
+  const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+
+  assert.deepEqual(core.parsePinUri(`pin://${pinId}`), {
+    originalUri: `pin://${pinId}`,
+    normalizedUri: `pin://${pinId}`,
+    pinId,
+    versionSelector: 'latest',
+  });
+
+  assert.deepEqual(core.parsePinUri(`pin://${pinId}?version=1`), {
+    originalUri: `pin://${pinId}?version=1`,
+    normalizedUri: `pin://${pinId}?version=1`,
+    pinId,
+    versionSelector: 'history-index',
+    historyIndex: 1,
+  });
+});
+
+test('parsePinUri rejects invalid selectors and unsupported components', () => {
+  assert.throws(() => core.parsePinUri('pin://abc'), /pinId/i);
+  assert.throws(() => core.parsePinUri('pin://abc[0]'), /pinId|path/i);
+  assert.throws(() => core.parsePinUri('pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0?version=latest'), /version/i);
+  assert.throws(() => core.parsePinUri('pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0?version=1&foo=bar'), /query/i);
+  assert.throws(() => core.parsePinUri('pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0#fragment'), /fragment/i);
 });
 
 test('parseMapUri rejects aliases and invalid selectors', () => {

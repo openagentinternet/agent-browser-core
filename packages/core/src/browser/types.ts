@@ -1,8 +1,8 @@
 import type { BotHomepageTemplateId } from './botHomepageTemplates.js';
 
-export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile' | 'map';
-export type BrowserResourceType = 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'protocol' | 'conversation' | 'unsupported' | 'unknown';
-export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'protocol-pin' | 'host-action' | 'unsupported';
+export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile' | 'map' | 'pin';
+export type BrowserResourceType = 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'protocol' | 'conversation' | 'pin' | 'unsupported' | 'unknown';
+export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'protocol-pin' | 'pin-inspector' | 'host-action' | 'unsupported';
 export type BrowserResolutionState = 'resolved' | 'loading' | 'not_found' | 'error';
 export type BrowserVerificationState = 'verified' | 'partial' | 'unverified';
 
@@ -120,12 +120,21 @@ export interface BrowserTrustedAction {
 
 export type MapUriTargetKind = 'pin' | 'conversation';
 export type MapPinVersionSelector = 'latest' | 'history-index' | 'exact';
+export type PinVersionSelector = 'latest' | 'history-index';
 
 export interface MapResolvedPinVersion {
   requestedPinId: string;
   rootPinId?: string;
   resolvedPinId: string;
   versionSelector: MapPinVersionSelector;
+  historyIndex?: number;
+}
+
+export interface PinResolvedVersion {
+  requestedPinId: string;
+  rootPinId?: string;
+  resolvedPinId: string;
+  versionSelector: PinVersionSelector;
   historyIndex?: number;
 }
 
@@ -150,6 +159,14 @@ export interface ParsedMapConversationUri {
 }
 
 export type ParsedMapUri = ParsedMapPinUri | ParsedMapConversationUri;
+
+export interface ParsedPinUri {
+  originalUri: string;
+  normalizedUri: string;
+  pinId: string;
+  versionSelector: PinVersionSelector;
+  historyIndex?: number;
+}
 
 export interface BrowserResolveResult {
   uri: string;

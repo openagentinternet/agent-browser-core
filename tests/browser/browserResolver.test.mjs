@@ -612,6 +612,36 @@ test('resolveBrowserResource dispatches map URI to protocol resolver', async () 
   assert.equal(result.data.renderer.data.rendererId, 'generic.protocol-pin');
 });
 
+test('resolveBrowserResource dispatches pin URI to generic pin resolver', async () => {
+  const pinId = '8ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  const result = await resolveBrowserResource({
+    uri: `pin://${pinId}`,
+    config: browserConfig(),
+    fetch: async (url) => {
+      assert.equal(String(url), `https://man.example.test/pin/${pinId}`);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            id: pinId,
+            path: '/protocols/skill-service',
+            operation: 'create',
+            contentType: 'application/json',
+            content: JSON.stringify({ name: 'Evidence Skill', description: 'Readable through pin inspector.' }),
+          },
+        }),
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.resourceType, 'pin');
+  assert.equal(result.data.renderer.type, 'pin-inspector');
+  assert.equal(result.data.renderer.data.rendererId, 'generic.pin-inspector');
+  assert.equal(result.data.renderer.data.pin.path, '/protocols/skill-service');
+});
+
 const validEnsGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
 const validEnsMetaAppPinId = 'c06b7a2db6efa241560a2356e9966cf9758dae3ec9c795f614a652b113e30329i0';
 

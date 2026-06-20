@@ -2,6 +2,7 @@ import { createBotHomepageClient } from './botHomepageClient.js';
 import { buildBotPageResolveResult } from './botPageResolver.js';
 import { buildMetafileContentUrl } from './metafileContentUrl.js';
 import { resolveMapUriToResource } from './mapProtocolResolver.js';
+import { resolvePinUriToResource } from './pinResolver.js';
 import { resolveMetafilePinToResource } from './metafileResolver.js';
 import { buildMetaAppResolveResult } from './metaAppResolver.js';
 import {
@@ -477,6 +478,14 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
       fetch: input.fetch,
       manApiBaseUrl: input.config.manApiBaseUrl,
       metafileContentBaseUrl: input.config.metafileContentBaseUrl,
+    });
+  }
+
+  if (parsed.scheme === 'pin') {
+    return resolvePinUriToResource({
+      uri: parsed.normalizedUri,
+      fetch: input.fetch,
+      manApiBaseUrl: input.config.manApiBaseUrl,
     });
   }
 
