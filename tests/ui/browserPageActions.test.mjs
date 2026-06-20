@@ -226,6 +226,23 @@ test('copy-uri writes normalized URI to clipboard and falls back to status text'
   assert.match(withoutClipboard.nodes['[data-browser-status-state]'].textContent, /copied/i);
 });
 
+test('resolveDownloadHref maps metafile and external URLs but rejects Browser-native URIs', () => {
+  const { context } = createContext();
+
+  assert.match(context.resolveDownloadHref('metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0'), /f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0/i);
+  assert.equal(context.resolveDownloadHref('https://files.example/guide.pdf'), 'https://files.example/guide.pdf');
+  assert.equal(context.resolveDownloadHref('pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0'), '');
+  assert.equal(context.resolveDownloadHref('metaid://idq1fixturebot'), '');
+});
+
+test('copyValue forwards generic page-body copy affordances through Browser copy helper', async () => {
+  const { context, clipboardWrites } = createContext();
+
+  await context.copyValue('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+
+  assert.deepEqual(clipboardWrites, ['aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa']);
+});
+
 test('private-chat sends only after modal confirmation with Browser action contract', async () => {
   const { context, nodes, requests } = createContext();
 

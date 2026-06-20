@@ -584,6 +584,67 @@ test('custom Bot Page alias renders target renderer while preserving source deta
   assert.match(inspector, /metaapp:\/\/custom-pin/);
 });
 
+test('pin-inspector renderer uses payload-first mature shell sections', async () => {
+  const { nodes } = runWithResolve(result({
+    type: 'pin-inspector',
+    contentType: 'application/vnd.metaid+json; charset=utf-8',
+    data: {
+      rendererId: 'generic.pin-inspector',
+      version: {
+        requestedPinId: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        resolvedPinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        versionSelector: 'latest',
+      },
+      pin: {
+        pinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        path: '/protocols/simplebuzz',
+        contentType: 'application/vnd.metaid+json; charset=utf-8',
+        operation: 'create',
+        chainName: 'btc',
+        encryption: 'public',
+        version: '1',
+      },
+      payload: {
+        title: 'Readable Pin',
+        content: 'Rendered via generic pin inspector',
+        attachments: [
+          { uri: 'metafile://archive-fixture', name: 'fixture.zip' },
+          { uri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0', name: 'origin pin' },
+        ],
+        files: [{ url: 'https://files.example/guide.pdf', title: 'guide.pdf' }],
+        image: 'metaid://idq1fixturebot',
+      },
+      rawPayload: '{"title":"Readable Pin"}',
+      rawPinRecord: {
+        path: '/protocols/simplebuzz',
+        txid: 'a'.repeat(64),
+      },
+    },
+  }, {
+    uri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    normalizedUri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    resourceType: 'pin',
+    title: 'Pin 6ea8a0bd...',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-pin-inspector'), 'pin page render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /browser-pin-inspector/);
+  assert.match(html, /Readable Pin/);
+  assert.match(html, /<h3>Payload<\/h3>/);
+  assert.match(html, /<h3>Raw Payload<\/h3>/);
+  assert.match(html, /<h3>Related Media And Files<\/h3>/);
+  assert.match(html, /<h3>Pin Facts<\/h3>/);
+  assert.match(html, /guide\.pdf/);
+  assert.match(html, /fixture\.zip/);
+  assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
+  assert.match(html, /href="pin:\/\/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0" data-browser-map-link/);
+  assert.match(html, /data-browser-download-ref="metafile:\/\/archive-fixture"/);
+  assert.match(html, /data-browser-download-ref="https:\/\/files\.example\/guide\.pdf"/);
+  assert.match(html, /data-browser-copy-value="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/);
+});
+
 test('pdf, image, and video render with content-specific elements', async () => {
   const pdf = runWithResolve(result({ type: 'pdf', contentType: 'application/pdf', url: 'https://files.example/a.pdf' }));
   await waitFor(() => pdf.nodes['[data-browser-viewport]'].innerHTML.includes('browser-pdf'), 'pdf render');

@@ -275,6 +275,18 @@ function buildMetafileDownloadHref(reference) {
     : baseUrl + '/' + encodedPinId;
 }
 
+function isBrowserInternalHref(value) {
+  return /^(metaid|metaapp|metafile|map|pin):\\/\\//i.test(textValue(value));
+}
+
+function resolveDownloadHref(reference) {
+  var value = textValue(reference);
+  if (!value) return '';
+  if (/^https?:\\/\\//i.test(value)) return safeUrl(value);
+  if (/^metafile:\\/\\//i.test(value)) return buildMetafileDownloadHref(value);
+  return '';
+}
+
 function shortId(value) {
   var text = textValue(value);
   if (!text) return '';
@@ -1326,7 +1338,7 @@ function syncPanelState() {
     elements.drawerToggle.setAttribute('aria-expanded', state.drawerOpen ? 'true' : 'false');
   }
   if (elements.resourceChip && typeof elements.resourceChip.setAttribute === 'function') {
-    elements.resourceChip.setAttribute('aria-expanded', state.inspectorOpen ? 'true' : 'false');
+    elements.resourceChip.setAttribute('aria-expanded', 'false');
   }
   if (elements.statusProof && typeof elements.statusProof.setAttribute === 'function') {
     elements.statusProof.setAttribute('aria-expanded', state.inspectorOpen ? 'true' : 'false');
@@ -2054,6 +2066,56 @@ async function copyUri(action) {
   setStatus('copied', '');
 }
 
+function downloadReference(reference) {
+  var href = resolveDownloadHref(reference);
+  if (!href) {
+    setStatus('error', 'Download unavailable.');
+    return '';
+  }
+  if (typeof document !== 'undefined' && document.createElement) {
+    var link = document.createElement('a');
+    link.href = href;
+    link.download = '';
+    link.rel = 'noopener';
+    link.target = '_blank';
+    if (document.body && typeof document.body.appendChild === 'function') {
+      document.body.appendChild(link);
+      if (typeof link.click === 'function') link.click();
+      if (typeof document.body.removeChild === 'function') document.body.removeChild(link);
+    } else if (typeof window !== 'undefined' && typeof window.open === 'function') {
+      window.open(href, '_blank', 'noopener');
+    } else if (typeof window !== 'undefined' && window.location) {
+      window.location.href = href;
+    }
+  } else if (typeof window !== 'undefined' && window.location) {
+    window.location.href = href;
+  }
+  setStatus('download', '');
+  return href;
+}
+
+function currentCreatorUri() {
+  if (!state.current) return '';
+  var owner = objectValue(state.current.owner);
+  var proof = objectValue(state.current.proof);
+  var globalMetaId = textValue(owner.globalMetaId || proof.publisherGlobalMetaId);
+  return globalMetaId ? 'metaid://' + globalMetaId : '';
+}
+
+function openCreatorFromChip() {
+  if (state.current && textValue(state.current.resourceType) === 'bot') {
+    openInspector();
+    return null;
+  }
+  var creatorUri = currentCreatorUri();
+  if (!creatorUri) {
+    openInspector();
+    return null;
+  }
+  closeInspector();
+  return navigateTo(creatorUri);
+}
+
 function openPrivateChatModal() {
   if (!state.current || !state.current.owner || !state.current.owner.globalMetaId) {
     setStatus('error', 'Target Bot is missing.');
@@ -2222,12 +2284,256 @@ function renderBlockedRenderer(message) {
   return '<section class="browser-empty-state" data-browser-renderer-blocked><h2>Renderer URL blocked</h2><p>' + escapeHtml(message || 'Renderer URL blocked.') + '</p></section>';
 }
 
+function pinInspectorData(current) {
+  return objectValue(current && current.renderer && current.renderer.data);
+}
+
+function pinInspectorPayload(current) {
+  var data = pinInspectorData(current);
+  return Object.prototype.hasOwnProperty.call(data, 'payload') ? data.payload : data.rawPayload;
+}
+
+function pinInspectorPin(current) {
+  return objectValue(pinInspectorData(current).pin);
+}
+
+function pinInspectorRawPinRecord(current) {
+  var data = pinInspectorData(current);
+  return objectValue(data.rawPinRecord || data.pin);
+}
+
+function pinInspectorVersion(current) {
+  return objectValue(pinInspectorData(current).version);
+}
+
+function pinInspectorJsonBlock(value, className) {
+  return '<pre class="' + escapeHtml(className) + '">' + escapeHtml(JSON.stringify(value, null, 2)) + '</pre>';
+}
+
+function pinInspectorReferenceHtml(value, label, title, extraAttributes) {
+  var href = textValue(value);
+  if (!href) return '';
+  var content = label || escapeHtml(href);
+  var titleAttribute = title ? ' title="' + escapeHtml(title) + '"' : '';
+  if (isBrowserInternalHref(href)) {
+    return '<a href="' + escapeHtml(href) + '" data-browser-map-link' + titleAttribute + (extraAttributes || '') + '>' + content + '</a>';
+  }
+  if (/^https?:\\/\\//i.test(href)) {
+    return '<a href="' + escapeHtml(href) + '" target="_blank" rel="noopener"' + titleAttribute + (extraAttributes || '') + '>' + content + '</a>';
+  }
+  return content;
+}
+
+function pinInspectorFieldValueHtml(value) {
+  if (typeof value === 'string') {
+    if (isBrowserInternalHref(value) || /^https?:\\/\\//i.test(value)) {
+      return pinInspectorReferenceHtml(value, escapeHtml(value));
+    }
+    return escapeHtml(value);
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return escapeHtml(String(value));
+  }
+  return escapeHtml(JSON.stringify(value));
+}
+
+function pinInspectorSection(title, bodyHtml) {
+  return '<section class="browser-pin-section"><h3>' + escapeHtml(title) + '</h3>' + bodyHtml + '</section>';
+}
+
+function pinInspectorInfoList(items) {
+  return '<dl class="browser-protocol-proof">' + items.map(function(item) {
+    var copyButton = item.copyValue
+      ? ' <button type="button" data-browser-copy-value="' + escapeHtml(item.copyValue) + '">Copy</button>'
+      : '';
+    return '<dt>' + escapeHtml(item.key) + '</dt><dd>' + pinInspectorFieldValueHtml(item.value) + copyButton + '</dd>';
+  }).join('') + '</dl>';
+}
+
+function pinInspectorParseJsonPayload(payload, rawPayload) {
+  if (payload && typeof payload === 'object') return payload;
+  var candidate = typeof rawPayload === 'string' && rawPayload.trim()
+    ? rawPayload
+    : (typeof payload === 'string' ? payload : '');
+  if (!candidate) return payload;
+  try {
+    return JSON.parse(candidate);
+  } catch (error) {
+    return payload;
+  }
+}
+
+function pinInspectorInlineMarkdown(value) {
+  var escaped = escapeHtml(value);
+  escaped = escaped.replace(/!\\[([^\\]]*)\\]\\(([^)\\s]+)(?:\\s+"([^"]*)")?\\)/g, function (_match, alt, href, title) {
+    return pinInspectorReferenceHtml(href, escapeHtml(alt || href), title);
+  });
+  escaped = escaped.replace(/\\[([^\\]]+)\\]\\(([^)\\s]+)(?:\\s+"([^"]*)")?\\)/g, function (_match, label, href, title) {
+    return pinInspectorReferenceHtml(href, escapeHtml(label || href), title);
+  });
+  escaped = escaped.replace(/\`([^\`]+)\`/g, '<code>$1</code>');
+  escaped = escaped.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+  escaped = escaped.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+  return escaped;
+}
+
+function pinInspectorRenderMarkdown(value) {
+  return String(value || '').replace(/\\r\\n?/g, '\\n').split(/\\n{2,}/).filter(Boolean).map(function (block) {
+    var lines = block.split('\\n');
+    var firstLine = textValue(lines[0]);
+    if (/^###\\s+/.test(firstLine)) {
+      return '<h3>' + pinInspectorInlineMarkdown(firstLine.replace(/^###\\s+/, '')) + '</h3>';
+    }
+    if (/^##\\s+/.test(firstLine)) {
+      return '<h2>' + pinInspectorInlineMarkdown(firstLine.replace(/^##\\s+/, '')) + '</h2>';
+    }
+    if (/^#\\s+/.test(firstLine)) {
+      return '<h1>' + pinInspectorInlineMarkdown(firstLine.replace(/^#\\s+/, '')) + '</h1>';
+    }
+    return '<p>' + lines.map(function(line) {
+      return pinInspectorInlineMarkdown(line);
+    }).join('<br>') + '</p>';
+  }).join('');
+}
+
+function pinInspectorContentType(current) {
+  var renderer = objectValue(current && current.renderer);
+  var pin = pinInspectorPin(current);
+  var record = pinInspectorRawPinRecord(current);
+  return textValue(renderer.contentType || pin.contentType || record.contentType).toLowerCase();
+}
+
+function pinInspectorRenderPayload(current) {
+  var contentType = pinInspectorContentType(current);
+  var payload = pinInspectorPayload(current);
+  var rawPayload = pinInspectorData(current).rawPayload;
+  if (contentType.indexOf('json') !== -1) {
+    return pinInspectorJsonBlock(pinInspectorParseJsonPayload(payload, rawPayload), 'browser-protocol-json');
+  }
+  if (contentType.indexOf('text/markdown') === 0) {
+    return '<div class="browser-pin-markdown">' + pinInspectorRenderMarkdown(typeof payload === 'string' ? payload : textValue(rawPayload)) + '</div>';
+  }
+  if (contentType.indexOf('text/plain') === 0) {
+    var plain = typeof payload === 'string' ? payload : textValue(rawPayload);
+    return '<pre class="browser-pin-text">' + escapeHtml(plain) + '</pre>';
+  }
+  return '<p class="browser-pin-binary-notice">Binary payload preview is not available for this pin.</p>';
+}
+
+function pinInspectorRenderRawPayload(current) {
+  var data = pinInspectorData(current);
+  var rawPayload = data.rawPayload;
+  var payload = pinInspectorPayload(current);
+  var source = typeof rawPayload === 'string'
+    ? rawPayload
+    : (typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2));
+  return '<pre class="browser-protocol-raw">' + escapeHtml(source || '') + '</pre>';
+}
+
+function pinInspectorMediaReference(value) {
+  if (typeof value === 'string') {
+    var uri = textValue(value);
+    return uri ? { uri: uri, label: uri } : null;
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    var entry = value;
+    var reference = textValue(entry.uri || entry.url || entry.href || entry.src || entry.pinId);
+    if (!reference) return null;
+    return {
+      uri: reference,
+      label: textValue(entry.label || entry.name || entry.title || entry.filename) || reference
+    };
+  }
+  return null;
+}
+
+function pinInspectorCollectMediaItems(payload) {
+  var body = objectValue(payload);
+  var keys = ['images', 'image', 'imageUrls', 'attachments', 'files', 'media'];
+  var items = [];
+  keys.forEach(function(key) {
+    var candidate = body[key];
+    if (Array.isArray(candidate)) {
+      candidate.forEach(function(item) {
+        var normalized = pinInspectorMediaReference(item);
+        if (normalized) items.push(normalized);
+      });
+      return;
+    }
+    var normalized = pinInspectorMediaReference(candidate);
+    if (normalized) items.push(normalized);
+  });
+  var seen = {};
+  return items.filter(function(item) {
+    var dedupeKey = item.uri + '\\n' + item.label;
+    if (seen[dedupeKey]) return false;
+    seen[dedupeKey] = true;
+    return true;
+  });
+}
+
+function pinInspectorRenderMediaItems(current) {
+  var contentType = pinInspectorContentType(current);
+  var payload = pinInspectorPayload(current);
+  var rawPayload = pinInspectorData(current).rawPayload;
+  var mediaSource = contentType.indexOf('json') !== -1
+    ? pinInspectorParseJsonPayload(payload, rawPayload)
+    : payload;
+  var items = pinInspectorCollectMediaItems(mediaSource);
+  if (!items.length) {
+    return '<p>No related media or file references found.</p>';
+  }
+  return items.map(function(item) {
+    var link = pinInspectorReferenceHtml(item.uri, escapeHtml(item.label));
+    var download = (/^metafile:\\/\\//i.test(item.uri) || resolveDownloadHref(item.uri))
+      ? '<button type="button" data-browser-download-ref="' + escapeHtml(item.uri) + '">Download</button>'
+      : '';
+    return '<div class="browser-pin-file-row"><span>' + link + '</span>' + download + '</div>';
+  }).join('');
+}
+
+function renderPinInspectorPage(current) {
+  var pin = pinInspectorPin(current);
+  var version = pinInspectorVersion(current);
+  var record = pinInspectorRawPinRecord(current);
+  var heading = textValue(current && current.title) || 'Pin';
+  var txid = textValue(pin.txid || record.txid);
+  var facts = [
+    { key: 'txid', value: txid, copyValue: txid || undefined },
+    { key: 'path', value: textValue(pin.path || record.path) },
+    { key: 'requestedPinId', value: textValue(version.requestedPinId) },
+    { key: 'resolvedPinId', value: textValue(version.resolvedPinId || pin.pinId || record.pinId || record.id) },
+    { key: 'rootPinId', value: textValue(version.rootPinId) },
+    { key: 'versionSelector', value: textValue(version.versionSelector) },
+    { key: 'historyIndex', value: textValue(version.historyIndex) },
+    { key: 'operation', value: textValue(pin.operation || record.operation) },
+    { key: 'chainName', value: textValue(pin.chainName || record.chainName || record.chain) },
+    { key: 'contentType', value: textValue(pin.contentType || record.contentType || objectValue(current.renderer).contentType) },
+    { key: 'encryption', value: textValue(pin.encryption || record.encryption) },
+    { key: 'version', value: textValue(pin.version || record.version) }
+  ].filter(function(item) {
+    return textValue(item.value) !== '';
+  });
+  return '<article class="browser-protocol-detail browser-pin-inspector">' +
+    '<header class="browser-pin-header"><p>' + escapeHtml(textValue(pin.path || record.path) || textValue(objectValue(current.renderer).contentType) || 'Pin') + '</p>' +
+    '<h2>' + escapeHtml(heading) + '</h2></header>' +
+    pinInspectorSection('Payload', pinInspectorRenderPayload(current)) +
+    pinInspectorSection('Raw Payload', pinInspectorRenderRawPayload(current)) +
+    pinInspectorSection('Related Media And Files', pinInspectorRenderMediaItems(current)) +
+    pinInspectorSection('Pin Facts', (facts.length ? pinInspectorInfoList(facts) : '<p>No pin facts available.</p>') +
+      '<details><summary>Raw MAN pin record</summary>' + pinInspectorJsonBlock(record, 'browser-protocol-json') + '</details>') +
+    '</article>';
+}
+
 function renderRenderer(current) {
   var renderer = current.renderer || {};
   var type = textValue(renderer.type) || 'unsupported';
   var url = safeUrl(renderer.url);
   if (type === 'bot-page') {
     return renderBotPage(current);
+  }
+  if (type === 'pin-inspector') {
+    return renderPinInspectorPage(current);
   }
   if (['html-iframe', 'pdf', 'image', 'video'].includes(type) && !url) {
     return renderBlockedRenderer('Renderer URL blocked.');
@@ -2332,6 +2638,10 @@ async function loadContext() {
 
 async function initialize() {
   bindElements();
+  if (elements.drawer) elements.drawer.hidden = true;
+  if (elements.inspector) elements.inspector.hidden = true;
+  if (elements.modalRoot) elements.modalRoot.hidden = true;
+  if (elements.toast) elements.toast.hidden = true;
   loadBookmarks();
   renderBookmarkStar();
   if (elements.viewport) {
@@ -2341,6 +2651,20 @@ async function initialize() {
       if (mapHref) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
         navigateTo(mapHref);
+        return;
+      }
+      var copyTarget = closestWithAttribute(event && event.target, 'data-browser-copy-value');
+      if (copyTarget) {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        copyUri({ uri: copyTarget.getAttribute('data-browser-copy-value') || '' }).catch(function (error) {
+          setStatus('error', error && error.message ? error.message : 'Copy failed.');
+        });
+        return;
+      }
+      var downloadTarget = closestWithAttribute(event && event.target, 'data-browser-download-ref');
+      if (downloadTarget) {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        downloadReference(downloadTarget.getAttribute('data-browser-download-ref') || '');
         return;
       }
       var target = closestWithAttribute(event && event.target, 'data-browser-action');
@@ -2512,7 +2836,7 @@ async function initialize() {
   if (elements.drawerToggle) elements.drawerToggle.addEventListener('click', toggleDrawer);
   if (elements.bookmarkStar) elements.bookmarkStar.addEventListener('click', toggleBookmark);
   if (elements.usingChip) elements.usingChip.addEventListener('click', openUsingIdentitySelector);
-  if (elements.resourceChip) elements.resourceChip.addEventListener('click', openInspector);
+  if (elements.resourceChip) elements.resourceChip.addEventListener('click', openCreatorFromChip);
   if (elements.statusProof) elements.statusProof.addEventListener('click', openInspector);
   if (elements.statusTxid) elements.statusTxid.addEventListener('click', openInspector);
 
@@ -2543,9 +2867,13 @@ globalThis.state = state;
 globalThis.api = api;
 globalThis.bindElements = bindElements;
 globalThis.safeUrl = safeUrl;
+globalThis.resolveDownloadHref = resolveDownloadHref;
+globalThis.copyValue = function (value) { return copyUri({ uri: value }); };
+globalThis.downloadReference = downloadReference;
 globalThis.renderRenderer = renderRenderer;
 globalThis.renderDrawer = renderDrawer;
 globalThis.closeDrawer = closeDrawer;
+globalThis.openCreatorFromChip = openCreatorFromChip;
 globalThis.openInspector = openInspector;
 globalThis.closeInspector = closeInspector;
 globalThis.renderInspector = renderInspector;

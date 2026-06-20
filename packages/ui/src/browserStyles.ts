@@ -40,6 +40,28 @@ export const BROWSER_PAGE_STYLES = `
     .browser-resource-section { background: #fff; border: 1px solid #d1d5db; padding: 12px; }
     .browser-resource-list { display: grid; gap: 8px; }
     .browser-resource-list-item { border-top: 1px solid #e5e7eb; padding-top: 8px; }
+    .browser-protocol-detail { max-width: 920px; margin: 0 auto; display: grid; gap: 14px; }
+    .browser-pin-header { display: grid; gap: 4px; padding: 2px 0; }
+    .browser-pin-header p { margin: 0; color: #6b7280; font-size: 12px; }
+    .browser-pin-header h2 { margin: 0; font-size: 28px; line-height: 1.2; }
+    .browser-pin-section { background: #fff; border: 1px solid #d1d5db; padding: 16px; }
+    .browser-pin-section h3 { margin: 0 0 12px; font-size: 16px; }
+    .browser-protocol-json, .browser-protocol-raw, .browser-pin-text { margin: 0; overflow: auto; padding: 14px; border-radius: 6px; background: #f8fafc; color: #111827; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .browser-pin-markdown { display: grid; gap: 10px; line-height: 1.65; }
+    .browser-pin-markdown h1, .browser-pin-markdown h2, .browser-pin-markdown h3, .browser-pin-markdown p { margin: 0; }
+    .browser-pin-markdown a { color: #2563eb; text-decoration: none; }
+    .browser-pin-markdown a:hover { text-decoration: underline; }
+    .browser-pin-binary-notice { margin: 0; color: #4b5563; }
+    .browser-protocol-proof { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 10px 14px; margin: 0; }
+    .browser-protocol-proof dt { color: #4b5563; }
+    .browser-protocol-proof dd { margin: 0; overflow-wrap: anywhere; }
+    .browser-protocol-proof dd button { margin-left: 8px; border: 1px solid #d1d5db; background: #fff; padding: 4px 8px; }
+    .browser-pin-file-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #e5e7eb; }
+    .browser-pin-file-row:first-of-type { border-top: 0; padding-top: 0; }
+    .browser-pin-file-row span { min-width: 0; }
+    .browser-pin-file-row a { color: #2563eb; text-decoration: none; overflow-wrap: anywhere; }
+    .browser-pin-file-row a:hover { text-decoration: underline; }
+    .browser-pin-file-row button { border: 1px solid #d1d5db; background: #fff; padding: 6px 10px; white-space: nowrap; }
     .browser-html-frame, .browser-pdf { width: 100%; height: 100%; min-height: 520px; border: 0; background: #fff; }
     .browser-image, .browser-video { display: block; max-width: 100%; margin: 0 auto; }
     .browser-modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 18px; }

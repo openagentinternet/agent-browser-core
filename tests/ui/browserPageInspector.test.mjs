@@ -183,18 +183,19 @@ test('Drawer opens from drawer button and shows bookmarks, recents, and visit hi
   assert.match(html, /metaid:\/\/idq1fixturebot/);
 });
 
-test('Inspector opens from resource, proof, and TXID controls with scoped section labels', async () => {
+test('resource chip opens creator Bot Page while proof and TXID controls still open Inspector', async () => {
   const { context, nodes } = createContext();
   await waitFor(() => context.state.current, 'initial resource');
+  await context.navigateTo('metaapp://pin');
 
   nodes['[data-browser-resource-chip]'].click();
-  assert.equal(nodes['[data-browser-inspector]'].hidden, false);
-  assert.match(nodes['[data-browser-inspector]'].innerHTML, /<h3>Identity<\/h3>/);
-  assert.match(nodes['[data-browser-inspector]'].innerHTML, /<h3>Proof<\/h3>/);
-  assert.match(nodes['[data-browser-inspector]'].innerHTML, /<h3>Source<\/h3>/);
+  await waitFor(() => context.state.current && context.state.current.normalizedUri === 'metaid://idq1publisher', 'creator Bot Page navigation');
+  assert.equal(nodes['[data-browser-inspector]'].hidden, true);
+  assert.equal(nodes['[data-browser-inspector]'].innerHTML, '');
 
   nodes['[data-browser-inspector]'].innerHTML = '';
   nodes['[data-browser-status-proof]'].click();
+  assert.equal(nodes['[data-browser-inspector]'].hidden, false);
   assert.match(nodes['[data-browser-inspector]'].innerHTML, /<h3>Proof<\/h3>/);
 
   nodes['[data-browser-inspector]'].innerHTML = '';
@@ -202,7 +203,6 @@ test('Inspector opens from resource, proof, and TXID controls with scoped sectio
   assert.match(nodes['[data-browser-inspector]'].innerHTML, /txid-fixture/);
 
   const defaultHtml = buildBrowserPageDefinition().contentHtml;
-  assert.doesNotMatch(defaultHtml, />Identity</);
   assert.doesNotMatch(defaultHtml, />Proof</);
   assert.doesNotMatch(defaultHtml, />Source</);
 });

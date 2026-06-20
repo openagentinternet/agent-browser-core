@@ -70,6 +70,9 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   function textValue(value) {
     return String(value ?? '').trim();
   }
+  function objectValue(value) {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  }
   function safeUrl(value) {
     const text = String(value ?? '').trim();
     if (!text) return '';
@@ -80,6 +83,21 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     } catch {
       return '';
     }
+  }
+  function isBrowserInternalHref(value) {
+    return /^(metaid|metaapp|metafile|map|pin):\\/\\//i.test(textValue(value));
+  }
+  function resolveDownloadHref(reference) {
+    const value = textValue(reference);
+    if (!value) return '';
+    if (/^https?:\\/\\//i.test(value)) return safeUrl(value);
+    if (!/^metafile:\\/\\//i.test(value)) return '';
+    const pinId = value.slice('metafile://'.length).split(/[?#]/, 1)[0].replace(/\\.[A-Za-z0-9]+$/u, '');
+    if (!/^[0-9a-f]{64}i[0-9]+$/i.test(pinId)) return '';
+    const baseUrl = String(settingValue('metafileContentBaseUrl') || 'https://file.metaid.io/metafile-indexer').replace(/\\/+$/, '');
+    return baseUrl.endsWith('/metafile-indexer')
+      ? baseUrl + '/api/v1/files/accelerate/content/' + encodeURIComponent(pinId.toLowerCase())
+      : baseUrl + '/' + encodeURIComponent(pinId.toLowerCase());
   }
   function endpointWithActor(endpoint, params) {
     const query = new URLSearchParams(params || {});
@@ -337,7 +355,27 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     const open = typeof forceOpen === 'boolean' ? forceOpen : inspector.hidden;
     if (open) renderInspector();
     inspector.hidden = !open;
-    if (resourceChip) resourceChip.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (resourceChip) resourceChip.setAttribute('aria-expanded', 'false');
+  }
+  function creatorUri(resource) {
+    const owner = resource && resource.owner || {};
+    const proof = resource && resource.proof || {};
+    const globalMetaId = textValue(owner.globalMetaId || proof.publisherGlobalMetaId);
+    return globalMetaId ? 'metaid://' + globalMetaId : '';
+  }
+  function openCreatorFromChip() {
+    const resource = state.resource || {};
+    if (resource.resourceType === 'bot') {
+      toggleInspector();
+      return;
+    }
+    const uri = creatorUri(resource);
+    if (uri) {
+      if (input) input.value = uri;
+      navigateTo(uri).catch(() => {});
+      return;
+    }
+    toggleInspector();
   }
   function openShareModal() {
     const resource = state.resource || {};
@@ -385,6 +423,29 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     await navigator.clipboard.writeText(value);
     setStatus('copied', '');
   }
+  function downloadReference(reference) {
+    const href = resolveDownloadHref(reference);
+    if (!href) {
+      setStatus('error', 'Download unavailable.');
+      return '';
+    }
+    if (typeof document !== 'undefined' && document.createElement) {
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = '';
+      link.rel = 'noopener';
+      link.target = '_blank';
+      if (document.body && typeof document.body.appendChild === 'function') {
+        document.body.appendChild(link);
+        if (typeof link.click === 'function') link.click();
+        if (typeof document.body.removeChild === 'function') document.body.removeChild(link);
+      } else if (window && typeof window.open === 'function') {
+        window.open(href, '_blank', 'noopener');
+      }
+    }
+    setStatus('download', '');
+    return href;
+  }
   function dispatchResourceAction(kind, id, ownerOnly) {
     const action = findResourceAction(kind, id, ownerOnly);
     if (!action || !action.enabled) return;
@@ -404,6 +465,223 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       setStatus('error', error && error.message ? error.message : 'Action failed.');
     });
   }
+  function pinInspectorData(resource) {
+    return objectValue(resource && resource.renderer && resource.renderer.data);
+  }
+  function pinInspectorPayload(resource) {
+    const data = pinInspectorData(resource);
+    return Object.prototype.hasOwnProperty.call(data, 'payload') ? data.payload : data.rawPayload;
+  }
+  function pinInspectorPin(resource) {
+    return objectValue(pinInspectorData(resource).pin);
+  }
+  function pinInspectorRawPinRecord(resource) {
+    const data = pinInspectorData(resource);
+    return objectValue(data.rawPinRecord || data.pin);
+  }
+  function pinInspectorVersion(resource) {
+    return objectValue(pinInspectorData(resource).version);
+  }
+  function pinInspectorJsonBlock(value, className) {
+    return '<pre class="' + escapeHtml(className) + '">' + escapeHtml(JSON.stringify(value, null, 2)) + '</pre>';
+  }
+  function pinInspectorReferenceHtml(value, label, title, extraAttributes) {
+    const href = textValue(value);
+    if (!href) return '';
+    const content = label || escapeHtml(href);
+    const titleAttribute = title ? ' title="' + escapeHtml(title) + '"' : '';
+    if (isBrowserInternalHref(href)) {
+      return '<a href="' + escapeHtml(href) + '" data-browser-map-link' + titleAttribute + (extraAttributes || '') + '>' + content + '</a>';
+    }
+    if (/^https?:\\/\\//i.test(href)) {
+      return '<a href="' + escapeHtml(href) + '" target="_blank" rel="noopener"' + titleAttribute + (extraAttributes || '') + '>' + content + '</a>';
+    }
+    return content;
+  }
+  function pinInspectorFieldValueHtml(value) {
+    if (typeof value === 'string') {
+      if (isBrowserInternalHref(value) || /^https?:\\/\\//i.test(value)) {
+        return pinInspectorReferenceHtml(value, escapeHtml(value));
+      }
+      return escapeHtml(value);
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return escapeHtml(String(value));
+    }
+    return escapeHtml(JSON.stringify(value));
+  }
+  function pinInspectorSection(title, bodyHtml) {
+    return '<section class="browser-pin-section"><h3>' + escapeHtml(title) + '</h3>' + bodyHtml + '</section>';
+  }
+  function pinInspectorInfoList(items) {
+    return '<dl class="browser-protocol-proof">' + items.map((item) => {
+      const copyButton = item.copyValue
+        ? ' <button type="button" data-browser-copy-value="' + escapeHtml(item.copyValue) + '">Copy</button>'
+        : '';
+      return '<dt>' + escapeHtml(item.key) + '</dt><dd>' + pinInspectorFieldValueHtml(item.value) + copyButton + '</dd>';
+    }).join('') + '</dl>';
+  }
+  function pinInspectorParseJsonPayload(payload, rawPayload) {
+    if (payload && typeof payload === 'object') return payload;
+    const candidate = typeof rawPayload === 'string' && rawPayload.trim()
+      ? rawPayload
+      : (typeof payload === 'string' ? payload : '');
+    if (!candidate) return payload;
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      return payload;
+    }
+  }
+  function pinInspectorInlineMarkdown(value) {
+    let escaped = escapeHtml(value);
+    escaped = escaped.replace(/!\\[([^\\]]*)\\]\\(([^)\\s]+)(?:\\s+"([^"]*)")?\\)/g, (_match, alt, href, title) => {
+      return pinInspectorReferenceHtml(href, escapeHtml(alt || href), title);
+    });
+    escaped = escaped.replace(/\\[([^\\]]+)\\]\\(([^)\\s]+)(?:\\s+"([^"]*)")?\\)/g, (_match, label, href, title) => {
+      return pinInspectorReferenceHtml(href, escapeHtml(label || href), title);
+    });
+    escaped = escaped.replace(new RegExp('\\x60([^\\x60]+)\\x60', 'g'), '<code>$1</code>');
+    escaped = escaped.replace(/\\*\\*([^*]+)\\*\\*/g, '<strong>$1</strong>');
+    escaped = escaped.replace(/\\*([^*]+)\\*/g, '<em>$1</em>');
+    return escaped;
+  }
+  function pinInspectorRenderMarkdown(value) {
+    return String(value || '').replace(/\\r\\n?/g, '\\n').split(/\\n{2,}/).filter(Boolean).map((block) => {
+      const lines = block.split('\\n');
+      const firstLine = textValue(lines[0]);
+      if (/^###\\s+/.test(firstLine)) {
+        return '<h3>' + pinInspectorInlineMarkdown(firstLine.replace(/^###\\s+/, '')) + '</h3>';
+      }
+      if (/^##\\s+/.test(firstLine)) {
+        return '<h2>' + pinInspectorInlineMarkdown(firstLine.replace(/^##\\s+/, '')) + '</h2>';
+      }
+      if (/^#\\s+/.test(firstLine)) {
+        return '<h1>' + pinInspectorInlineMarkdown(firstLine.replace(/^#\\s+/, '')) + '</h1>';
+      }
+      return '<p>' + lines.map((line) => pinInspectorInlineMarkdown(line)).join('<br>') + '</p>';
+    }).join('');
+  }
+  function pinInspectorContentType(resource) {
+    const renderer = objectValue(resource && resource.renderer);
+    const pin = pinInspectorPin(resource);
+    const record = pinInspectorRawPinRecord(resource);
+    return textValue(renderer.contentType || pin.contentType || record.contentType).toLowerCase();
+  }
+  function pinInspectorRenderPayload(resource) {
+    const contentType = pinInspectorContentType(resource);
+    const payload = pinInspectorPayload(resource);
+    const rawPayload = pinInspectorData(resource).rawPayload;
+    if (contentType.includes('json')) {
+      return pinInspectorJsonBlock(pinInspectorParseJsonPayload(payload, rawPayload), 'browser-protocol-json');
+    }
+    if (contentType.indexOf('text/markdown') === 0) {
+      return '<div class="browser-pin-markdown">' + pinInspectorRenderMarkdown(typeof payload === 'string' ? payload : textValue(rawPayload)) + '</div>';
+    }
+    if (contentType.indexOf('text/plain') === 0) {
+      const plain = typeof payload === 'string' ? payload : textValue(rawPayload);
+      return '<pre class="browser-pin-text">' + escapeHtml(plain) + '</pre>';
+    }
+    return '<p class="browser-pin-binary-notice">Binary payload preview is not available for this pin.</p>';
+  }
+  function pinInspectorRenderRawPayload(resource) {
+    const data = pinInspectorData(resource);
+    const rawPayload = data.rawPayload;
+    const payload = pinInspectorPayload(resource);
+    const source = typeof rawPayload === 'string'
+      ? rawPayload
+      : (typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2));
+    return '<pre class="browser-protocol-raw">' + escapeHtml(source || '') + '</pre>';
+  }
+  function pinInspectorMediaReference(value) {
+    if (typeof value === 'string') {
+      const uri = textValue(value);
+      return uri ? { uri, label: uri } : null;
+    }
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const entry = value;
+      const reference = textValue(entry.uri || entry.url || entry.href || entry.src || entry.pinId);
+      if (!reference) return null;
+      return {
+        uri: reference,
+        label: textValue(entry.label || entry.name || entry.title || entry.filename) || reference,
+      };
+    }
+    return null;
+  }
+  function pinInspectorCollectMediaItems(payload) {
+    const body = objectValue(payload);
+    const keys = ['images', 'image', 'imageUrls', 'attachments', 'files', 'media'];
+    const items = [];
+    keys.forEach((key) => {
+      const candidate = body[key];
+      if (Array.isArray(candidate)) {
+        candidate.forEach((item) => {
+          const normalized = pinInspectorMediaReference(item);
+          if (normalized) items.push(normalized);
+        });
+        return;
+      }
+      const normalized = pinInspectorMediaReference(candidate);
+      if (normalized) items.push(normalized);
+    });
+    const seen = {};
+    return items.filter((item) => {
+      const dedupeKey = item.uri + '\\n' + item.label;
+      if (seen[dedupeKey]) return false;
+      seen[dedupeKey] = true;
+      return true;
+    });
+  }
+  function pinInspectorRenderMediaItems(resource) {
+    const contentType = pinInspectorContentType(resource);
+    const payload = pinInspectorPayload(resource);
+    const rawPayload = pinInspectorData(resource).rawPayload;
+    const mediaSource = contentType.includes('json')
+      ? pinInspectorParseJsonPayload(payload, rawPayload)
+      : payload;
+    const items = pinInspectorCollectMediaItems(mediaSource);
+    if (!items.length) {
+      return '<p>No related media or file references found.</p>';
+    }
+    return items.map((item) => {
+      const link = pinInspectorReferenceHtml(item.uri, escapeHtml(item.label));
+      const download = (/^metafile:\\/\\//i.test(item.uri) || resolveDownloadHref(item.uri))
+        ? '<button type="button" data-browser-download-ref="' + escapeHtml(item.uri) + '">Download</button>'
+        : '';
+      return '<div class="browser-pin-file-row"><span>' + link + '</span>' + download + '</div>';
+    }).join('');
+  }
+  function renderPinInspectorPage(resource) {
+    const pin = pinInspectorPin(resource);
+    const version = pinInspectorVersion(resource);
+    const record = pinInspectorRawPinRecord(resource);
+    const heading = textValue(resource && resource.title) || 'Pin';
+    const txid = textValue(pin.txid || record.txid);
+    const facts = [
+      { key: 'txid', value: txid, copyValue: txid || undefined },
+      { key: 'path', value: textValue(pin.path || record.path) },
+      { key: 'requestedPinId', value: textValue(version.requestedPinId) },
+      { key: 'resolvedPinId', value: textValue(version.resolvedPinId || pin.pinId || record.pinId || record.id) },
+      { key: 'rootPinId', value: textValue(version.rootPinId) },
+      { key: 'versionSelector', value: textValue(version.versionSelector) },
+      { key: 'historyIndex', value: textValue(version.historyIndex) },
+      { key: 'operation', value: textValue(pin.operation || record.operation) },
+      { key: 'chainName', value: textValue(pin.chainName || record.chainName || record.chain) },
+      { key: 'contentType', value: textValue(pin.contentType || record.contentType || objectValue(resource.renderer).contentType) },
+      { key: 'encryption', value: textValue(pin.encryption || record.encryption) },
+      { key: 'version', value: textValue(pin.version || record.version) },
+    ].filter((item) => textValue(item.value) !== '');
+    return '<article class="browser-protocol-detail browser-pin-inspector">' +
+      '<header class="browser-pin-header"><p>' + escapeHtml(textValue(pin.path || record.path) || textValue(objectValue(resource.renderer).contentType) || 'Pin') + '</p>' +
+      '<h2>' + escapeHtml(heading) + '</h2></header>' +
+      pinInspectorSection('Payload', pinInspectorRenderPayload(resource)) +
+      pinInspectorSection('Raw Payload', pinInspectorRenderRawPayload(resource)) +
+      pinInspectorSection('Related Media And Files', pinInspectorRenderMediaItems(resource)) +
+      pinInspectorSection('Pin Facts', (facts.length ? pinInspectorInfoList(facts) : '<p>No pin facts available.</p>') +
+        '<details><summary>Raw MAN pin record</summary>' + pinInspectorJsonBlock(record, 'browser-protocol-json') + '</details>') +
+      '</article>';
+  }
   function resourceHtml(resource) {
     const renderer = resource.renderer || {};
     if (renderer.type === 'bot-page') {
@@ -413,8 +691,13 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
         actionsHtml(resource.actions || []) +
         '<div class="browser-resource-sections">' + (resource.sections || []).map(sectionHtml).join('') + '</div></article>';
     }
+    if (renderer.type === 'pin-inspector') {
+      return renderPinInspectorPage(resource);
+    }
     const url = safeUrl(renderer.url);
-    if (!url) return '<section class="browser-empty-state"><h2>Renderer URL blocked</h2></section>';
+    if (['html-iframe', 'pdf', 'image', 'video'].includes(renderer.type) && !url) {
+      return '<section class="browser-empty-state"><h2>Renderer URL blocked</h2></section>';
+    }
     if (renderer.type === 'html-iframe') return '<iframe class="browser-html-frame" sandbox="allow-scripts" src="' + escapeHtml(url) + '"></iframe>';
     if (renderer.type === 'pdf') return '<iframe class="browser-pdf" sandbox="" src="' + escapeHtml(url) + '"></iframe>';
     if (renderer.type === 'image') return '<img class="browser-image" src="' + escapeHtml(url) + '" alt="">';
@@ -744,7 +1027,16 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     const resourceButton = closestWithAttribute(target, 'data-browser-resource-chip');
     if (resourceButton) {
       event.preventDefault();
-      toggleInspector();
+      openCreatorFromChip();
+      return;
+    }
+    const mapLink = closestWithAttribute(target, 'data-browser-map-link');
+    if (mapLink) {
+      event.preventDefault();
+      const uri = mapLink.getAttribute('href') || '';
+      if (!uri) return;
+      if (input) input.value = uri;
+      navigateTo(uri).catch(() => {});
       return;
     }
     const usingButton = closestWithAttribute(target, 'data-browser-using-selector');
@@ -804,6 +1096,20 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       copyShareValue(shareCopy.getAttribute('data-browser-share-copy') || '').catch((error) => {
         setStatus('error', error && error.message ? error.message : 'Copy failed.');
       });
+      return;
+    }
+    const copyValueButton = closestWithAttribute(target, 'data-browser-copy-value');
+    if (copyValueButton) {
+      event.preventDefault();
+      copyShareValue(copyValueButton.getAttribute('data-browser-copy-value') || '').catch((error) => {
+        setStatus('error', error && error.message ? error.message : 'Copy failed.');
+      });
+      return;
+    }
+    const downloadButton = closestWithAttribute(target, 'data-browser-download-ref');
+    if (downloadButton) {
+      event.preventDefault();
+      downloadReference(downloadButton.getAttribute('data-browser-download-ref') || '');
       return;
     }
     const modalAction = closestWithAttribute(target, 'data-browser-modal-action');

@@ -86,8 +86,30 @@ test('browser chrome navigation and status buttons are wired or disabled', () =>
   assert.match(definition.script, /elements\.back\.addEventListener\('click', goBack\)/);
   assert.match(definition.script, /elements\.forward\.addEventListener\('click', goForward\)/);
   assert.match(definition.script, /elements\.reload\.addEventListener\('click', reloadCurrent\)/);
+  assert.match(definition.script, /function openCreatorFromChip\(/);
+  assert.match(definition.script, /elements\.resourceChip\.addEventListener\('click', openCreatorFromChip\)/);
   assert.match(definition.script, /elements\.statusProof\.addEventListener\('click', openInspector\)/);
   assert.match(definition.script, /elements\.statusTxid\.addEventListener\('click', openInspector\)/);
+});
+
+test('mature shell exposes generic copy and download helpers for pin pages', () => {
+  const definition = ui.buildBrowserPageDefinition();
+
+  assert.match(definition.script, /function resolveDownloadHref\(/);
+  assert.match(definition.script, /data-browser-copy-value/);
+  assert.match(definition.script, /data-browser-download-ref/);
+  assert.match(definition.script, /globalThis\.copyValue = function \(value\) \{ return copyUri\(\{ uri: value \}\); \}/);
+  assert.match(definition.script, /globalThis\.resolveDownloadHref = resolveDownloadHref/);
+});
+
+test('client script includes generic pin page renderer and creator-chip parity', () => {
+  const script = ui.buildBrowserClientScript({ apiBasePath: '/api/browser', initialUri: 'pin://fixture' });
+
+  assert.match(script, /function renderPinInspectorPage\(resource\)/);
+  assert.match(script, /if \(renderer\.type === 'pin-inspector'\) \{/);
+  assert.match(script, /data-browser-map-link/);
+  assert.match(script, /const mapLink = closestWithAttribute\(target, 'data-browser-map-link'\);/);
+  assert.match(script, /function openCreatorFromChip\(\) \{[\s\S]*if \(resource\.resourceType === 'bot'\) \{[\s\S]*toggleInspector\(\);[\s\S]*return;[\s\S]*\}[\s\S]*const uri = creatorUri\(resource\);/);
 });
 
 test('resolve failures clear stale resource chrome and keep URI history coherent', () => {
@@ -125,4 +147,9 @@ test('mobile topbar reserves space for nav address and menu trigger', () => {
     ui.BROWSER_PAGE_STYLES,
     /@media \(max-width: 900px\) \{[\s\S]*\.browser-topbar \{ grid-template-columns: auto minmax\(120px, 1fr\) auto; \}/,
   );
+});
+
+test('pin file rows keep download actions reachable on narrow widths', () => {
+  assert.match(ui.BROWSER_PAGE_STYLES, /\.browser-pin-file-row span \{ min-width: 0; \}/);
+  assert.match(ui.BROWSER_PAGE_STYLES, /\.browser-pin-file-row a \{ color: #2563eb; text-decoration: none; overflow-wrap: anywhere; \}/);
 });
