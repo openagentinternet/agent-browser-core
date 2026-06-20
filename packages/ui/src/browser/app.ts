@@ -1404,8 +1404,9 @@ function botHomepageSectionItems(data, sectionId) {
     var items = Array.isArray(section.items) ? section.items : [];
     return items.map(function (item) {
       var rawItem = objectValue(item);
+      var rawData = objectValue(rawItem.data);
       var payload = objectValue(objectValue(rawItem.data).payload);
-      var source = Object.keys(payload).length ? payload : rawItem;
+      var source = Object.keys(payload).length ? payload : (Object.keys(rawData).length ? rawData : rawItem);
       var normalized = {};
       Object.keys(source).forEach(function (key) {
         normalized[key] = source[key];
@@ -1424,6 +1425,9 @@ function normalizeBotHomepageListItem(item, index, fallbackLabel) {
     var rawPinId = textValue(item.currentPinId || item.servicePinId || item.pinId);
     var pinId = isBrowserPinId(rawPinId) ? rawPinId : '';
     var protocolPath = textValue(item.protocolPath);
+    var timestamp = typeof item.timestamp === 'number' && Number.isFinite(item.timestamp)
+      ? item.timestamp
+      : (Number.isFinite(Number(item.timestamp)) ? Number(item.timestamp) : 0);
     var title = textValue(item.title || item.name || item.displayName || item.serviceName || item.appName || item.label || item.content || item.id || item.pinId) ||
       fallbackLabel + ' ' + (index + 1);
     var detail = readableText(item.description || item.summary || item.detail || item.content || item.text || item.bio);
@@ -1432,6 +1436,7 @@ function normalizeBotHomepageListItem(item, index, fallbackLabel) {
       pinId: pinId,
       protocolPath: protocolPath,
       mapHref: mapPinHref(protocolPath, pinId),
+      timestamp: timestamp,
       title: title,
       detail: detail,
       raw: item
@@ -1480,6 +1485,64 @@ function normalizeBotHomepageMetaApps(items) {
   });
 }
 
+function activityTimestamp(item) {
+  var value = item && item.timestamp;
+  var numeric = typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return 0;
+  return numeric > 1000000000000 ? numeric : numeric * 1000;
+}
+
+function formatActivityDate(value) {
+  var timestamp = activityTimestamp({ timestamp: value });
+  if (!timestamp) return '';
+  var date = new Date(timestamp);
+  var year = date.getUTCFullYear();
+  var month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  var day = String(date.getUTCDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
+}
+
+function sortRecentActivity(items) {
+  return firstArray(items).slice().sort(function (left, right) {
+    return activityTimestamp(right) - activityTimestamp(left);
+  });
+}
+
+function normalizeBotHomepageChats(items, identity) {
+  var actorName = textValue(identity && identity.name) || 'Bot';
+  var actorAvatar = safeUrl(identity && identity.avatar);
+  return firstArray(items).map(function (chat, index) {
+    var profile = objectValue(chat && chat.interactWithProfile);
+    var partnerGlobalMetaId = textValue(profile.globalMetaId || (chat && chat.interactWith));
+    var partnerName = textValue(profile.name) || shortId(partnerGlobalMetaId) || ('Chat ' + (index + 1));
+    return {
+      id: textValue(chat && chat.pinId) || ('chat-' + index),
+      activityType: 'chat',
+      protocolPath: textValue(chat && chat.protocolPath) || '/protocols/simplemsg',
+      timestamp: typeof chat.timestamp === 'number' && Number.isFinite(chat.timestamp)
+        ? chat.timestamp
+        : (Number.isFinite(Number(chat && chat.timestamp)) ? Number(chat.timestamp) : 0),
+      title: partnerName,
+      detail: '',
+      actorName: actorName,
+      actorAvatar: actorAvatar,
+      partnerName: partnerName,
+      partnerAvatar: safeUrl(profile.avatar),
+      partnerGlobalMetaId: partnerGlobalMetaId,
+      partnerHref: partnerGlobalMetaId ? ('metaid://' + partnerGlobalMetaId) : '',
+      raw: chat
+    };
+  }).filter(function (item) {
+    return !!item.partnerName;
+  });
+}
+
+function mergeRecentActivity(buzzItems, chatItems) {
+  return sortRecentActivity(firstArray(buzzItems).concat(firstArray(chatItems)));
+}
+
 function normalizeBotHomepagePayload(current) {
   var renderer = current.renderer || {};
   var data = renderer.data && typeof renderer.data === 'object' ? renderer.data : {};
@@ -1489,7 +1552,12 @@ function normalizeBotHomepagePayload(current) {
   var owner = objectValue(current.owner);
   var v3Services = botHomepageSectionItems(data, 'services');
   var v3Buzz = botHomepageSectionItems(data, 'buzzes');
+  var v3Chats = botHomepageSectionItems(data, 'chats');
   var v3Metaapps = botHomepageSectionItems(data, 'apps');
+  var name = textValue(profile.name) || textValue(homepage.title) || textValue(current.title);
+  var summary = readableText(homepage.summary) || readableText(profile.bio);
+  var profileAvatar = typeof profile.avatar === 'string' ? profile.avatar : textValue(objectValue(profile.avatar).url);
+  var identityAvatar = safeUrl(owner.avatar || profileAvatar);
   var services = normalizeBotHomepageServices(v3Services.length ? v3Services : data.services);
   var buzz = normalizeBotHomepageList(v3Buzz.length ? v3Buzz : firstArray(data.buzz, data.posts, data.publications), 'Buzz');
   buzz.forEach(function (item) {
@@ -1497,12 +1565,21 @@ function normalizeBotHomepagePayload(current) {
     item.detail = truncateBuzzDetail(item.detail);
   });
   var metaapps = normalizeBotHomepageMetaApps(v3Metaapps.length ? v3Metaapps : firstArray(data.metaapps, data.apps));
+  var chats = normalizeBotHomepageChats(v3Chats, {
+    name: name || 'Bot',
+    avatar: identityAvatar
+  });
   var activity = normalizeBotHomepageList(v3Buzz.length ? v3Buzz : data.activity, 'Activity');
   if (v3Buzz.length) {
     activity.forEach(function (item) {
       item.title = truncateBuzzDetail(item.title);
       item.detail = truncateBuzzDetail(item.detail);
     });
+  }
+  if (v3Buzz.length || v3Chats.length) {
+    activity = mergeRecentActivity(activity, chats);
+  } else {
+    activity = sortRecentActivity(activity);
   }
   if (!activity.length) {
     activity = services.slice(0, 2).map(function (service) {
@@ -1520,15 +1597,12 @@ function normalizeBotHomepagePayload(current) {
       raw: current.status || {}
     });
   }
-  var name = textValue(profile.name) || textValue(homepage.title) || textValue(current.title);
-  var summary = readableText(homepage.summary) || readableText(profile.bio);
-  var profileAvatar = typeof profile.avatar === 'string' ? profile.avatar : textValue(objectValue(profile.avatar).url);
   return {
     raw: data,
     identity: {
       name: name || 'Bot',
       globalMetaId: textValue(identity.globalMetaId) || textValue(data.globalMetaId) || textValue(owner.globalMetaId),
-      avatar: safeUrl(owner.avatar || profileAvatar),
+      avatar: identityAvatar,
       proofState: textValue(current.status && current.status.verificationState) || 'unverified'
     },
     summary: {
@@ -1587,10 +1661,40 @@ function renderMetaAppRows(items, emptyText) {
     : '<p class="browser-muted-row">' + escapeHtml(emptyText) + '</p>';
 }
 
+function renderActivityPerson(label, avatarUrl, href) {
+  var name = textValue(label) || 'Bot';
+  var wrapperStyle = 'display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;white-space:nowrap;vertical-align:middle;' +
+    (href ? 'text-decoration:none;color:#3558c8;' : 'color:inherit;');
+  var avatarStyle = 'width:18px;height:18px;border-radius:999px;overflow:hidden;background:#e9eef6;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;color:#344054;font-size:10px;font-weight:700;';
+  var nameStyle = 'max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:650;';
+  var avatar = safeUrl(avatarUrl)
+    ? '<span style="' + avatarStyle + '" aria-hidden="true"><img class="browser-avatar-image" src="' + escapeHtml(avatarUrl) + '" alt="" /></span>'
+    : '<span style="' + avatarStyle + '" aria-hidden="true">' + escapeHtml(initials(name)) + '</span>';
+  var innerHtml = avatar + '<span style="' + nameStyle + '">' + escapeHtml(name) + '</span>';
+  return href
+    ? '<a href="' + escapeHtml(href) + '" data-browser-map-link style="' + wrapperStyle + '">' + innerHtml + '</a>'
+    : '<span style="' + wrapperStyle + '">' + innerHtml + '</span>';
+}
+
+function renderChatActivityRow(item) {
+  var dateText = formatActivityDate(item.timestamp) || '-';
+  var contentHtml = '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-width:0;line-height:1.5;color:#344054;">' +
+    renderActivityPerson(item.actorName, item.actorAvatar, '') +
+    '<span style="color:#667085;">' + escapeHtml('在 ' + dateText + ' 和') + '</span>' +
+    renderActivityPerson(item.partnerName, item.partnerAvatar, item.partnerHref) +
+    '<span style="color:#667085;">发生了互动</span>' +
+    '</div>';
+  return '<article class="browser-activity-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('message') + '</span>' +
+    '<div>' + contentHtml + '</div></article>';
+}
+
 function renderActivityRows(payload) {
-  var items = payload.activity.slice(0, 5);
+  var items = payload.activity;
   return items.length
     ? items.map(function (item) {
+      if (item.activityType === 'chat') {
+        return renderChatActivityRow(item);
+      }
       var title = escapeHtml(item.title);
       var detail = item.detail ? escapeHtml(item.detail) : '';
       var simpleBuzzRow = item.protocolPath === '/protocols/simplebuzz' || /^map:\\/\\/simplebuzz\\//.test(textValue(item.mapHref));

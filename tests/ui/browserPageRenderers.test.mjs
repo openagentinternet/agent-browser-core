@@ -14,6 +14,12 @@ const multilineBuzzPinId = '9ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc4307
 const metaAppPinId = 'a'.repeat(64) + 'i0';
 const olderMetaAppPinId = 'b'.repeat(64) + 'i0';
 const metaAppCodePinId = 'c'.repeat(64) + 'i0';
+const chatPeerSunny = 'idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz';
+const chatPeerDon = 'idq1kwa7ku4w7rrx07cra9t5qr33stszvml3s96qjy';
+const chatPeerAtlas = 'idq1g6d3c36xl5uphy8z2w4q8g2jp3xcz9n9s7t4nq';
+const chatPeerSunnyAvatarUrl = `https://file.metaid.io/metafile-indexer/content/${'d'.repeat(64)}i0`;
+const chatPeerDonAvatarUrl = `https://file.metaid.io/metafile-indexer/content/${'e'.repeat(64)}i0`;
+const chatPeerAtlasAvatarUrl = `https://file.metaid.io/metafile-indexer/content/${'f'.repeat(64)}i0`;
 
 class FakeElement {
   constructor() {
@@ -41,6 +47,10 @@ function waitFor(condition, label) {
     };
     check();
   });
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function elements() {
@@ -222,6 +232,136 @@ test('bot-page renderer truncates buzz detail longer than 200 characters with el
   assert.ok(html.includes('A'.repeat(200) + '......'), 'buzz detail should be truncated to 200 characters followed by ellipsis');
   assert.equal((html.match(new RegExp('A'.repeat(200) + '\\.\\.\\.\\.', 'g')) || []).length, 1);
   assert.ok(!html.includes('A'.repeat(280)), 'full untruncated buzz content must not be rendered');
+});
+
+test('bot-page renderer mixes buzzes and chats in Recent Activity by descending timestamp and keeps peer metaid links inline', async () => {
+  const ownerAvatarUrl = 'https://file.metaid.io/metafile-indexer/content/owner-avatar-pin';
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1recentactivitybot' },
+    profile: { name: 'Eric', bio: 'Shares recent Browser activity.' },
+    sections: [
+      {
+        id: 'services',
+        protocolPath: '/protocols/skill-service',
+        items: [],
+      },
+      {
+        id: 'metaapps',
+        protocolPath: '/protocols/metaapp',
+        items: [],
+      },
+      {
+        id: 'chats',
+        protocolPath: '/protocols/simplemsg',
+        items: [
+          {
+            pinId: '1'.repeat(64) + 'i0',
+            protocolPath: '/protocols/simplemsg',
+            timestamp: Math.floor(Date.UTC(2026, 5, 19) / 1000),
+            data: {
+              interactWith: chatPeerSunny,
+              interactWithProfile: {
+                globalMetaId: chatPeerSunny,
+                name: 'AI_Sunny',
+                avatar: chatPeerSunnyAvatarUrl,
+              },
+            },
+          },
+          {
+            pinId: '2'.repeat(64) + 'i0',
+            protocolPath: '/protocols/simplemsg',
+            timestamp: Math.floor(Date.UTC(2026, 5, 18) / 1000),
+            data: {
+              interactWith: chatPeerDon,
+              interactWithProfile: {
+                globalMetaId: chatPeerDon,
+                name: 'don-bot',
+                avatar: chatPeerDonAvatarUrl,
+              },
+            },
+          },
+          {
+            pinId: '3'.repeat(64) + 'i0',
+            protocolPath: '/protocols/simplemsg',
+            timestamp: Math.floor(Date.UTC(2026, 5, 16) / 1000),
+            data: {
+              interactWith: chatPeerAtlas,
+              interactWithProfile: {
+                globalMetaId: chatPeerAtlas,
+                name: 'Atlas',
+                avatar: chatPeerAtlasAvatarUrl,
+              },
+            },
+          },
+        ],
+      },
+      {
+        id: 'buzzes',
+        protocolPath: '/protocols/simplebuzz',
+        items: [
+          {
+            pinId: '4'.repeat(64) + 'i0',
+            protocolPath: '/protocols/simplebuzz',
+            timestamp: Math.floor(Date.UTC(2026, 5, 20) / 1000),
+            data: {
+              payload: {
+                content: 'Published new build.',
+              },
+            },
+          },
+          {
+            pinId: '5'.repeat(64) + 'i0',
+            protocolPath: '/protocols/simplebuzz',
+            timestamp: Math.floor(Date.UTC(2026, 5, 17) / 1000),
+            data: {
+              payload: {
+                content: 'Published earlier build.',
+              },
+            },
+          },
+          {
+            pinId: '6'.repeat(64) + 'i0',
+            protocolPath: '/protocols/simplebuzz',
+            timestamp: Math.floor(Date.UTC(2026, 5, 15) / 1000),
+            data: {
+              payload: {
+                content: 'Oldest activity entry.',
+              },
+            },
+          },
+        ],
+      },
+    ],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    uri: 'metaid://idq1recentactivitybot',
+    normalizedUri: 'metaid://idq1recentactivitybot',
+    resourceType: 'bot',
+    title: 'Eric',
+    owner: { kind: 'bot', globalMetaId: 'idq1recentactivitybot', name: 'Eric', avatar: ownerAvatarUrl, verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Recent Activity'), 'mixed recent activity render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.equal((html.match(/class="browser-activity-row"/g) || []).length, 6);
+  assert.match(html, /在 2026-06-19 和/);
+  assert.match(html, />Eric<\/span><\/span><span style="color:#667085;">在 2026-06-19 和<\/span>/);
+  assert.match(html, new RegExp(`href="metaid://${chatPeerSunny}"[^>]*data-browser-map-link`));
+  assert.match(html, /AI_Sunny<\/span><\/a>/);
+  assert.match(html, new RegExp(escapeRegExp(chatPeerSunnyAvatarUrl)));
+  assert.match(html, new RegExp(escapeRegExp(chatPeerDonAvatarUrl)));
+  assert.match(html, /发生了互动/);
+  assert.ok(html.indexOf('Published new build.') < html.indexOf('AI_Sunny'), 'latest buzz should render before newer chat peers');
+  assert.ok(html.indexOf('AI_Sunny') < html.indexOf('don-bot'), 'newer chat should render before older chat');
+  assert.ok(html.indexOf('don-bot') < html.indexOf('Published earlier build.'), 'older buzz should remain below newer chat');
+  assert.ok(html.indexOf('Published earlier build.') < html.indexOf('Atlas'), 'older chat should remain below older buzz');
+  assert.ok(html.indexOf('Atlas') < html.indexOf('Oldest activity entry.'), 'oldest buzz should render last');
 });
 
 test('bot-page renderer removes linked title for multiline simplebuzz recent activity rows', async () => {

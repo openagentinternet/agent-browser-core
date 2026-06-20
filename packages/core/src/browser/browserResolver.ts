@@ -1,5 +1,6 @@
 import { createBotHomepageClient } from './botHomepageClient.js';
 import { buildBotPageResolveResult } from './botPageResolver.js';
+import { buildMetafileContentUrl } from './metafileContentUrl.js';
 import { resolveMapUriToResource } from './mapProtocolResolver.js';
 import { resolveMetafilePinToResource } from './metafileResolver.js';
 import { buildMetaAppResolveResult } from './metaAppResolver.js';
@@ -75,6 +76,18 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function recordField(source: Record<string, unknown>, key: string): Record<string, unknown> {
+  const value = source[key];
+  return isRecord(value) ? value : {};
+}
+
+function recordListField(source: Record<string, unknown>, key: string): Array<Record<string, unknown>> {
+  const value = source[key];
+  return Array.isArray(value)
+    ? value.filter((item): item is Record<string, unknown> => isRecord(item))
+    : [];
+}
+
 function readCustomHomepageUri(homepage: Record<string, unknown>): string {
   const profile = isRecord(homepage.profile) ? homepage.profile : {};
   const profileHomepage = isRecord(profile.homepage) ? profile.homepage : {};
@@ -119,6 +132,150 @@ function aliasCustomHomepageResult(input: {
         botHomepageRaw: input.botHomepageRaw,
       },
     },
+  };
+}
+
+function trimTrailingSlashes(value: string): string {
+  return value.trim().replace(/\/+$/, '');
+}
+
+function avatarIdFromPath(value: string): string {
+  const normalized = text(value);
+  const match = normalized.match(/\/content\/([0-9a-f]{64}i[0-9]+)$/iu);
+  return match?.[1] ?? '';
+}
+
+async function fetchBotProfileInfo(input: {
+  baseUrl: string;
+  globalMetaId: string;
+  fetch?: typeof fetch;
+  metafileContentBaseUrl?: unknown;
+}): Promise<Record<string, unknown> | null> {
+  const targetId = text(input.globalMetaId);
+  if (!targetId) {
+    return null;
+  }
+
+  const baseUrl = trimTrailingSlashes(input.baseUrl);
+  const fetchImpl = input.fetch ?? globalThis.fetch;
+  const url = `${baseUrl}/api/info/globalmetaid/${encodeURIComponent(targetId)}`;
+  try {
+    const response = await fetchImpl(url);
+    let envelope: unknown = null;
+    try {
+      envelope = await response.json();
+    } catch {
+      envelope = null;
+    }
+    if (!isRecord(envelope) || !isRecord(envelope.data)) {
+      return null;
+    }
+
+    const data = envelope.data;
+    const avatarId = text(data.avatarId) || avatarIdFromPath(text(data.avatar));
+    const avatar = avatarId
+      ? buildMetafileContentUrl(input.metafileContentBaseUrl, avatarId)
+      : (() => {
+          const rawAvatar = text(data.avatar);
+          if (/^https?:\/\//iu.test(rawAvatar)) {
+            return rawAvatar;
+          }
+          return rawAvatar.startsWith('/') ? `${baseUrl}${rawAvatar}` : '';
+        })();
+    return {
+      globalMetaId: text(data.globalMetaId) || targetId,
+      name: text(data.name) || targetId,
+      avatar,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function enrichHomepageChats(input: {
+  homepage: Record<string, unknown>;
+  baseUrl: string;
+  fetch?: typeof fetch;
+  metafileContentBaseUrl?: unknown;
+}): Promise<Record<string, unknown>> {
+  const sections = recordListField(input.homepage, 'sections');
+  if (!sections.length) {
+    return input.homepage;
+  }
+
+  const peerIds: string[] = [];
+  const seen = new Set<string>();
+  for (const section of sections) {
+    if (text(section.id) !== 'chats') {
+      continue;
+    }
+    for (const item of recordListField(section, 'items')) {
+      const peerId = text(recordField(item, 'data').interactWith) || text(item.interactWith);
+      if (!peerId || seen.has(peerId)) {
+        continue;
+      }
+      seen.add(peerId);
+      peerIds.push(peerId);
+    }
+  }
+  if (!peerIds.length) {
+    return input.homepage;
+  }
+
+  const profiles = new Map<string, Record<string, unknown>>();
+  await Promise.all(peerIds.map(async (peerId) => {
+    const profile = await fetchBotProfileInfo({
+      baseUrl: input.baseUrl,
+      globalMetaId: peerId,
+      fetch: input.fetch,
+      metafileContentBaseUrl: input.metafileContentBaseUrl,
+    });
+    if (profile) {
+      profiles.set(peerId, profile);
+    }
+  }));
+  if (!profiles.size) {
+    return input.homepage;
+  }
+
+  let changed = false;
+  const nextSections = sections.map((section) => {
+    if (text(section.id) !== 'chats') {
+      return section;
+    }
+    let sectionChanged = false;
+    const nextItems = recordListField(section, 'items').map((item) => {
+      const data = recordField(item, 'data');
+      const peerId = text(data.interactWith) || text(item.interactWith);
+      const profile = peerId ? profiles.get(peerId) : null;
+      if (!profile) {
+        return item;
+      }
+      sectionChanged = true;
+      return {
+        ...item,
+        data: {
+          ...data,
+          interactWithProfile: profile,
+        },
+      };
+    });
+    if (!sectionChanged) {
+      return section;
+    }
+    changed = true;
+    return {
+      ...section,
+      items: nextItems,
+    };
+  });
+
+  if (!changed) {
+    return input.homepage;
+  }
+  return {
+    ...input.homepage,
+    sections: nextSections,
   };
 }
 
@@ -204,8 +361,14 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
       return browserCommandFailed('browser_resolve_failed', homepage.message);
     }
 
+    const enrichedHomepage = await enrichHomepageChats({
+      homepage: homepage.data,
+      baseUrl: input.config.metasoP2PBaseUrl,
+      fetch: input.fetch,
+      metafileContentBaseUrl: input.config.metafileContentBaseUrl,
+    });
     const aliasUri = parsed.normalizedUri;
-    const customHomepageUri = readCustomHomepageUri(homepage.data);
+    const customHomepageUri = readCustomHomepageUri(enrichedHomepage);
     if (input.config.renderCustomBotPages !== false && customHomepageUri) {
       let customParsed;
       try {
@@ -237,14 +400,14 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
         aliasUri,
         customHomepageUri,
         botHomepageSourceUrl: homepage.url,
-        botHomepageRaw: homepage.data,
+        botHomepageRaw: enrichedHomepage,
       }));
     }
 
     return browserCommandSuccess(buildBotPageResolveResult({
       uri: parsed.originalUri,
       normalizedUri: parsed.normalizedUri,
-      homepage: homepage.data,
+      homepage: enrichedHomepage,
       resolverUrl: homepage.url,
       templateId: input.config.botHomepageTemplateId,
       metafileContentBaseUrl: input.config.metafileContentBaseUrl,

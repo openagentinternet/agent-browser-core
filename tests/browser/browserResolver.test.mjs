@@ -45,6 +45,155 @@ test('resolveBrowserResource resolves metaid URI through homepage client', async
   assert.equal(result.data.renderer.templateId, 'compact-list');
 });
 
+test('resolveBrowserResource enriches homepage chats with peer profiles and dedupes repeated lookups', async () => {
+  const firstPeer = 'idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz';
+  const secondPeer = 'idq1kwa7ku4w7rrx07cra9t5qr33stszvml3s96qjy';
+  const firstPeerAvatarId = 'd'.repeat(64) + 'i0';
+  const secondPeerAvatarId = 'e'.repeat(64) + 'i0';
+  const firstChatPinId = '1'.repeat(64) + 'i0';
+  const secondChatPinId = '2'.repeat(64) + 'i0';
+  const thirdChatPinId = '3'.repeat(64) + 'i0';
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: {
+      globalMetaId: 'idq1chatfixturebot',
+      legacyMetaId: 'metaid-chatfixture',
+      display: 'idq1chatf...bot',
+    },
+    profile: {
+      name: 'Chat Fixture Bot',
+      avatar: {
+        pinId: 'avatar-pin',
+        contentType: 'image/png',
+      },
+      bio: 'Exercises mixed homepage activity rendering.',
+      pins: {
+        name: 'name-pin',
+      },
+    },
+    presence: {
+      state: 'online',
+      updatedAt: 1780760000,
+      source: 'fixture-presence',
+    },
+    sections: [
+      {
+        id: 'services',
+        protocolPath: '/protocols/skill-service',
+        page: { limit: 5, count: 0, hasMore: false },
+        items: [],
+      },
+      {
+        id: 'chats',
+        protocolPath: '/protocols/simplemsg',
+        page: { limit: 5, count: 3, hasMore: false },
+        items: [
+          {
+            pinId: firstChatPinId,
+            protocolPath: '/protocols/simplemsg',
+            timestamp: 1781913600,
+            data: { interactWith: firstPeer },
+          },
+          {
+            pinId: secondChatPinId,
+            protocolPath: '/protocols/simplemsg',
+            timestamp: 1781827200,
+            data: { interactWith: secondPeer },
+          },
+          {
+            pinId: thirdChatPinId,
+            protocolPath: '/protocols/simplemsg',
+            timestamp: 1781740800,
+            data: { interactWith: firstPeer },
+          },
+        ],
+      },
+      {
+        id: 'buzzes',
+        protocolPath: '/protocols/simplebuzz',
+        page: { limit: 5, count: 0, hasMore: false },
+        items: [],
+      },
+    ],
+    warnings: [],
+  };
+  const fetchCalls = [];
+  const result = await resolveBrowserResource({
+    uri: 'metaid://idq1chatfixturebot',
+    config: browserConfig(),
+    fetch: async (url) => {
+      const target = String(url);
+      fetchCalls.push(target);
+      if (target === 'https://so.example.test/api/bot-homepage/globalmetaid/idq1chatfixturebot?version=v3') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ code: 0, message: '', data: homepage }),
+        };
+      }
+      if (target === `https://so.example.test/api/info/globalmetaid/${firstPeer}`) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            code: 1,
+            data: {
+              globalMetaId: firstPeer,
+              name: 'AI_Sunny',
+              avatarId: firstPeerAvatarId,
+            },
+          }),
+        };
+      }
+      if (target === `https://so.example.test/api/info/globalmetaid/${secondPeer}`) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            code: 1,
+            data: {
+              globalMetaId: secondPeer,
+              name: 'don-bot',
+              avatarId: secondPeerAvatarId,
+            },
+          }),
+        };
+      }
+      throw new Error(`Unexpected fetch URL: ${target}`);
+    },
+    metaAppLookup: async () => null,
+  });
+
+  assert.equal(result.ok, true);
+  const chatsSection = result.data.renderer.data.sections.find((section) => section.id === 'chats');
+  assert.equal(Array.isArray(chatsSection.items), true);
+  assert.deepEqual(
+    chatsSection.items.map((item) => item.data.interactWithProfile),
+    [
+      {
+        globalMetaId: firstPeer,
+        name: 'AI_Sunny',
+        avatar: `https://file.metaid.io/metafile-indexer/content/${firstPeerAvatarId}`,
+      },
+      {
+        globalMetaId: secondPeer,
+        name: 'don-bot',
+        avatar: `https://file.metaid.io/metafile-indexer/content/${secondPeerAvatarId}`,
+      },
+      {
+        globalMetaId: firstPeer,
+        name: 'AI_Sunny',
+        avatar: `https://file.metaid.io/metafile-indexer/content/${firstPeerAvatarId}`,
+      },
+    ],
+  );
+  assert.deepEqual(fetchCalls, [
+    'https://so.example.test/api/bot-homepage/globalmetaid/idq1chatfixturebot?version=v3',
+    `https://so.example.test/api/info/globalmetaid/${firstPeer}`,
+    `https://so.example.test/api/info/globalmetaid/${secondPeer}`,
+  ]);
+});
+
 test('resolveBrowserResource dispatches metafile URI to ManAPI file metadata', async () => {
   const pinId = 'f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0';
   const result = await resolveBrowserResource({
