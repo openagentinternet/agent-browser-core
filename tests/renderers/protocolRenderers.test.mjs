@@ -122,7 +122,7 @@ test('Pin inspector renders JSON payload first with related files and pin facts 
     image: 'metaid://idq1fixturebot',
     attachments: [
       { uri: 'https://files.example/archive.zip', name: 'archive.zip' },
-      { uri: 'metafile://archive-fixture', name: 'fixture.zip' },
+      { uri: 'metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0.zip', name: 'fixture.zip' },
       { uri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0', name: 'origin pin' },
     ],
     files: [{ url: 'https://files.example/guide.pdf', title: 'guide.pdf' }],
@@ -140,7 +140,7 @@ test('Pin inspector renders JSON payload first with related files and pin facts 
   assert.match(html, /fixture\.zip/);
   assert.match(html, /guide\.pdf/);
   assert.match(html, /data-browser-download-ref="https:\/\/files\.example\/archive\.zip"/);
-  assert.match(html, /data-browser-download-ref="metafile:\/\/archive-fixture"/);
+  assert.match(html, /data-browser-download-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0\.zip"/);
   assert.match(html, /data-browser-download-ref="https:\/\/files\.example\/guide\.pdf"/);
   assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
   assert.match(html, /href="pin:\/\/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0" data-browser-map-link/);
@@ -162,7 +162,7 @@ test('Pin inspector renders JSON payload first with related files and pin facts 
 test('Pin inspector discovers related files from JSON-string payload sources', () => {
   const rawPayload = JSON.stringify({
     content: 'String payload source',
-    attachments: [{ uri: 'metafile://string-archive', name: 'string.zip' }],
+    attachments: [{ uri: 'metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0.zip', name: 'string.zip' }],
     files: [{ url: 'https://files.example/string-guide.pdf', title: 'string-guide.pdf' }],
   });
   const html = renderers.renderPinInspectorHtml(pinInspectorResource(
@@ -173,8 +173,32 @@ test('Pin inspector discovers related files from JSON-string payload sources', (
 
   assert.match(html, /string\.zip/);
   assert.match(html, /string-guide\.pdf/);
-  assert.match(html, /data-browser-download-ref="metafile:\/\/string-archive"/);
+  assert.match(html, /data-browser-download-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0\.zip"/);
   assert.match(html, /data-browser-download-ref="https:\/\/files\.example\/string-guide\.pdf"/);
+});
+
+test('Pin inspector discovers browser URIs recursively from nested payload values', () => {
+  const payload = {
+    title: 'Nested links',
+    meta: {
+      body: {
+        link: 'metaid://idq1fixturebot',
+        nested: [{ ref: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0' }],
+        media: {
+          archive: 'metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0.zip',
+        },
+      },
+    },
+  };
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource(
+    'application/json',
+    payload,
+    { rawPayload: JSON.stringify(payload) },
+  ));
+
+  assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
+  assert.match(html, /href="pin:\/\/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0" data-browser-map-link/);
+  assert.match(html, /data-browser-download-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0\.zip"/);
 });
 
 test('Pin inspector renders markdown payload as parsed markdown and preserves raw source nearby', () => {

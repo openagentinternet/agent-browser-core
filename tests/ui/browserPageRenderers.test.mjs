@@ -608,7 +608,7 @@ test('pin-inspector renderer uses payload-first mature shell sections', async ()
         title: 'Readable Pin',
         content: 'Rendered via generic pin inspector',
         attachments: [
-          { uri: 'metafile://archive-fixture', name: 'fixture.zip' },
+          { uri: 'metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0.zip', name: 'fixture.zip' },
           { uri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0', name: 'origin pin' },
         ],
         files: [{ url: 'https://files.example/guide.pdf', title: 'guide.pdf' }],
@@ -640,7 +640,7 @@ test('pin-inspector renderer uses payload-first mature shell sections', async ()
   assert.match(html, /fixture\.zip/);
   assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
   assert.match(html, /href="pin:\/\/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0" data-browser-map-link/);
-  assert.match(html, /data-browser-download-ref="metafile:\/\/archive-fixture"/);
+  assert.match(html, /data-browser-download-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0\.zip"/);
   assert.match(html, /data-browser-download-ref="https:\/\/files\.example\/guide\.pdf"/);
   assert.match(html, /data-browser-copy-value="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/);
 });

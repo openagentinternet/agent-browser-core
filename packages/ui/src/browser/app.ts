@@ -2463,6 +2463,55 @@ function pinInspectorMediaReference(value) {
   return null;
 }
 
+function pinInspectorIsBrowserUriTerminator(char) {
+  var code = char ? char.charCodeAt(0) : 0;
+  return code === 32 || code === 9 || code === 10 || code === 13 || char === '"' || char === "'" || char === '<' || char === '>' || char === '(' || char === ')' || char === '[' || char === ']' || char === '{' || char === '}';
+}
+
+function pinInspectorCollectBrowserUris(value, output, seen) {
+  seen = seen || new WeakSet();
+  if (typeof value === 'string') {
+    var prefixes = ['metaid://', 'metaapp://', 'metafile://', 'map://', 'pin://'];
+    prefixes.forEach(function(prefix) {
+      var start = 0;
+      while ((start = value.indexOf(prefix, start)) !== -1) {
+        var end = start + prefix.length;
+        while (end < value.length && !pinInspectorIsBrowserUriTerminator(value.charAt(end))) {
+          end++;
+        }
+        var uri = value.slice(start, end);
+        while (uri && '),.;!?'.indexOf(uri.charAt(uri.length - 1)) !== -1) {
+          uri = uri.slice(0, -1);
+        }
+        if (uri) output.add(uri);
+        start = end;
+      }
+    });
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach(function(item) {
+      pinInspectorCollectBrowserUris(item, output, seen);
+    });
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  if (seen.has(value)) return;
+  seen.add(value);
+  Object.keys(value).forEach(function(key) {
+    pinInspectorCollectBrowserUris(value[key], output, seen);
+  });
+}
+
+function pinInspectorIsDownloadableMediaReference(reference) {
+  var uri = textValue(reference);
+  if (!uri) return false;
+  if (new RegExp('^https?:\\/\\/', 'i').test(uri)) return true;
+  if (uri.indexOf('metafile://') !== 0) return false;
+  var pinId = uri.slice('metafile://'.length).split(/[?#]/, 1)[0].replace(new RegExp('\\.[A-Za-z0-9]+$', 'u'), '');
+  return /^[0-9a-f]{64}i[0-9]+$/i.test(pinId);
+}
+
 function pinInspectorCollectMediaItems(payload) {
   var body = objectValue(payload);
   var keys = ['images', 'image', 'imageUrls', 'attachments', 'files', 'media'];
@@ -2478,10 +2527,17 @@ function pinInspectorCollectMediaItems(payload) {
     }
     var normalized = pinInspectorMediaReference(candidate);
     if (normalized) items.push(normalized);
-  });
+    });
+    var discoveredUris = new Set();
+    pinInspectorCollectBrowserUris(payload, discoveredUris);
+    discoveredUris.forEach(function(uri) {
+      if (!new RegExp('^https?:\\/\\/', 'i').test(uri)) {
+        items.push({ uri: uri, label: uri });
+      }
+    });
   var seen = {};
   return items.filter(function(item) {
-    var dedupeKey = item.uri + '\\n' + item.label;
+    var dedupeKey = item.uri;
     if (seen[dedupeKey]) return false;
     seen[dedupeKey] = true;
     return true;
@@ -2501,7 +2557,7 @@ function pinInspectorRenderMediaItems(current) {
   }
   return items.map(function(item) {
     var link = pinInspectorReferenceHtml(item.uri, escapeHtml(item.label));
-    var download = (/^metafile:\\/\\//i.test(item.uri) || resolveDownloadHref(item.uri))
+    var download = pinInspectorIsDownloadableMediaReference(item.uri)
       ? '<button type="button" data-browser-download-ref="' + escapeHtml(item.uri) + '">Download</button>'
       : '';
     return '<div class="browser-pin-file-row"><span>' + link + '</span>' + download + '</div>';

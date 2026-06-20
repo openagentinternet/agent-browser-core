@@ -178,6 +178,41 @@ function mediaReference(value: unknown): { uri: string; label: string } | null {
   return null;
 }
 
+function collectBrowserUris(value: unknown, output: Set<string>, seen = new WeakSet<object>()): void {
+  if (typeof value === 'string') {
+    const matches = value.match(/(?:metaid|metaapp|metafile|map|pin):\/\/[^\s"'<>()[\]{}]+/giu) || [];
+    for (const uri of matches) {
+      output.add(uri.replace(/[),.;!?]+$/u, ''));
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectBrowserUris(item, output, seen);
+    }
+    return;
+  }
+  if (!value || typeof value !== 'object') {
+    return;
+  }
+  if (seen.has(value as object)) {
+    return;
+  }
+  seen.add(value as object);
+  for (const item of Object.values(value as Record<string, unknown>)) {
+    collectBrowserUris(item, output, seen);
+  }
+}
+
+function isDownloadableMediaReference(reference: unknown): boolean {
+  const uri = text(reference);
+  if (!uri) return false;
+  if (EXTERNAL_URL_PATTERN.test(uri)) return true;
+  if (!uri.startsWith('metafile://')) return false;
+  const pinId = uri.slice('metafile://'.length).split(/[?#]/, 1)[0].replace(/\.[A-Za-z0-9]+$/u, '');
+  return /^[0-9a-f]{64}i[0-9]+$/i.test(pinId);
+}
+
 function collectMediaItems(payload: unknown): Array<{ uri: string; label: string }> {
   const body = record(payload);
   const items: Array<{ uri: string; label: string }> = [];
@@ -193,9 +228,16 @@ function collectMediaItems(payload: unknown): Array<{ uri: string; label: string
     const normalized = mediaReference(candidate);
     if (normalized) items.push(normalized);
   }
+  const discoveredUris = new Set<string>();
+  collectBrowserUris(payload, discoveredUris);
+  for (const uri of discoveredUris) {
+    if (!/^https?:\/\//i.test(uri)) {
+      items.push({ uri, label: uri });
+    }
+  }
   const seen = new Set<string>();
   return items.filter((item) => {
-    const dedupeKey = `${item.uri}\n${item.label}`;
+    const dedupeKey = item.uri;
     if (seen.has(dedupeKey)) return false;
     seen.add(dedupeKey);
     return true;
@@ -215,7 +257,7 @@ function renderMediaItems(resource: BrowserResourceEnvelope): string {
   }
   return items.map((item) => {
     const link = linkHtml(item.uri, item.label);
-    const download = (EXTERNAL_URL_PATTERN.test(item.uri) || item.uri.startsWith('metafile://'))
+    const download = isDownloadableMediaReference(item.uri)
       ? `<button type="button" data-browser-download-ref="${escapeHtml(item.uri)}">Download</button>`
       : '';
     return `<div class="browser-pin-file-row"><span>${link}</span>${download}</div>`;

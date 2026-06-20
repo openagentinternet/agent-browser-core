@@ -85,14 +85,14 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     }
   }
   function isBrowserInternalHref(value) {
-    return /^(metaid|metaapp|metafile|map|pin):\\/\\//i.test(textValue(value));
+    return new RegExp('^(metaid|metaapp|metafile|map|pin):\\/\\/', 'i').test(textValue(value));
   }
   function resolveDownloadHref(reference) {
     const value = textValue(reference);
     if (!value) return '';
-    if (/^https?:\\/\\//i.test(value)) return safeUrl(value);
-    if (!/^metafile:\\/\\//i.test(value)) return '';
-    const pinId = value.slice('metafile://'.length).split(/[?#]/, 1)[0].replace(/\\.[A-Za-z0-9]+$/u, '');
+    if (new RegExp('^https?:\\/\\/', 'i').test(value)) return safeUrl(value);
+    if (!new RegExp('^metafile:\\/\\/', 'i').test(value)) return '';
+    const pinId = value.slice('metafile://'.length).split(/[?#]/, 1)[0].replace(new RegExp('\\.[A-Za-z0-9]+$', 'u'), '');
     if (!/^[0-9a-f]{64}i[0-9]+$/i.test(pinId)) return '';
     const baseUrl = String(settingValue('metafileContentBaseUrl') || 'https://file.metaid.io/metafile-indexer').replace(/\\/+$/, '');
     return baseUrl.endsWith('/metafile-indexer')
@@ -621,6 +621,52 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     }
     return null;
   }
+  function pinInspectorIsBrowserUriTerminator(char) {
+    const code = char ? char.charCodeAt(0) : 0;
+    return code === 32 || code === 9 || code === 10 || code === 13 || char === '"' || char === "'" || char === '<' || char === '>' || char === '(' || char === ')' || char === '[' || char === ']' || char === '{' || char === '}';
+  }
+  function pinInspectorCollectBrowserUris(value, output, seen) {
+    seen = seen || new WeakSet();
+    if (typeof value === 'string') {
+      const prefixes = ['metaid://', 'metaapp://', 'metafile://', 'map://', 'pin://'];
+      prefixes.forEach((prefix) => {
+        let start = 0;
+        while ((start = value.indexOf(prefix, start)) !== -1) {
+          let end = start + prefix.length;
+          while (end < value.length && !pinInspectorIsBrowserUriTerminator(value.charAt(end))) {
+            end++;
+          }
+          let uri = value.slice(start, end);
+          while (uri && '),.;!?'.indexOf(uri.charAt(uri.length - 1)) !== -1) {
+            uri = uri.slice(0, -1);
+          }
+          if (uri) output.add(uri);
+          start = end;
+        }
+      });
+      return;
+    }
+    if (Array.isArray(value)) {
+      value.forEach((item) => {
+        pinInspectorCollectBrowserUris(item, output, seen);
+      });
+      return;
+    }
+    if (!value || typeof value !== 'object') return;
+    if (seen.has(value)) return;
+    seen.add(value);
+    Object.keys(value).forEach((key) => {
+      pinInspectorCollectBrowserUris(value[key], output, seen);
+    });
+  }
+  function pinInspectorIsDownloadableMediaReference(reference) {
+    const uri = textValue(reference);
+    if (!uri) return false;
+    if (new RegExp('^https?:\\/\\/', 'i').test(uri)) return true;
+    if (uri.indexOf('metafile://') !== 0) return false;
+    const pinId = uri.slice('metafile://'.length).split(/[?#]/, 1)[0].replace(new RegExp('\\.[A-Za-z0-9]+$', 'u'), '');
+    return /^[0-9a-f]{64}i[0-9]+$/i.test(pinId);
+  }
   function pinInspectorCollectMediaItems(payload) {
     const body = objectValue(payload);
     const keys = ['images', 'image', 'imageUrls', 'attachments', 'files', 'media'];
@@ -637,9 +683,16 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       const normalized = pinInspectorMediaReference(candidate);
       if (normalized) items.push(normalized);
     });
+    const discoveredUris = new Set();
+    pinInspectorCollectBrowserUris(payload, discoveredUris);
+    discoveredUris.forEach((uri) => {
+      if (!new RegExp('^https?:\\/\\/', 'i').test(uri)) {
+        items.push({ uri, label: uri });
+      }
+    });
     const seen = {};
     return items.filter((item) => {
-      const dedupeKey = item.uri + '\\n' + item.label;
+      const dedupeKey = item.uri;
       if (seen[dedupeKey]) return false;
       seen[dedupeKey] = true;
       return true;
@@ -658,7 +711,7 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     }
     return items.map((item) => {
       const link = pinInspectorReferenceHtml(item.uri, escapeHtml(item.label));
-      const download = (/^metafile:\\/\\//i.test(item.uri) || resolveDownloadHref(item.uri))
+      const download = pinInspectorIsDownloadableMediaReference(item.uri)
         ? '<button type="button" data-browser-download-ref="' + escapeHtml(item.uri) + '">Download</button>'
         : '';
       return '<div class="browser-pin-file-row"><span>' + link + '</span>' + download + '</div>';
