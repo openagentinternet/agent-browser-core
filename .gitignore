@@ -7,3 +7,6 @@ coverage/
 *.tsbuildinfo
 .worktrees
 .worktree/
+
+# Brainstorming visual companion
+.superpowers/
