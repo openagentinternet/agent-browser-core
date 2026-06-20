@@ -1522,12 +1522,13 @@ function renderActivityRows(payload) {
     ? items.map(function (item) {
       var title = escapeHtml(item.title);
       var detail = item.detail ? escapeHtml(item.detail) : '';
-      var duplicateBuzzText = item.detail && item.title === item.detail;
+      var simpleBuzzRow = item.protocolPath === '/protocols/simplebuzz' || /^map:\\/\\/simplebuzz\\//.test(textValue(item.mapHref));
+      var duplicateBuzzText = simpleBuzzRow || (item.detail && item.title === item.detail);
       var titleHtml = !duplicateBuzzText && item.mapHref
         ? '<a href="' + escapeHtml(item.mapHref) + '" data-browser-map-link>' + title + '</a>'
         : title;
       var contentHtml = duplicateBuzzText
-        ? '<p>' + detail + '</p>'
+        ? '<p>' + (detail || title) + '</p>'
         : '<strong>' + titleHtml + '</strong>' + (detail ? '<p>' + detail + '</p>' : '');
       return '<article class="browser-activity-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('activity') + '</span>' +
         '<div>' + contentHtml + '</div></article>';

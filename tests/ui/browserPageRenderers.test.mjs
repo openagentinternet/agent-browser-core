@@ -10,6 +10,7 @@ const { buildBrowserPageDefinition } = require('../../packages/ui/dist/browser/a
 const servicePinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
 const buzzPinId = '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
 const longBuzzPinId = '8ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+const multilineBuzzPinId = '9ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
 
 class FakeElement {
   constructor() {
@@ -218,6 +219,52 @@ test('bot-page renderer truncates buzz detail longer than 200 characters with el
   assert.ok(html.includes('A'.repeat(200) + '......'), 'buzz detail should be truncated to 200 characters followed by ellipsis');
   assert.equal((html.match(new RegExp('A'.repeat(200) + '\\.\\.\\.\\.', 'g')) || []).length, 1);
   assert.ok(!html.includes('A'.repeat(280)), 'full untruncated buzz content must not be rendered');
+});
+
+test('bot-page renderer removes linked title for multiline simplebuzz recent activity rows', async () => {
+  const multilineContent = [
+    '[Dev Diary] OAC browser boundary cleanup lockfile sync',
+    '',
+    'Commit: efea0079 chore: sync package lock after browser cleanup',
+    '',
+    'This small follow-up syncs package-lock.json with the earlier package.json cleanup so downstream installs stay deterministic across Browser integration work.',
+  ].join('\n');
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1multilinebuzzbot' },
+    profile: { name: 'Multiline Buzz Bot', bio: 'Posts multiline buzz content.' },
+    sections: [
+      {
+        id: 'buzzes',
+        protocolPath: '/protocols/simplebuzz',
+        items: [
+          {
+            pinId: multilineBuzzPinId,
+            protocolPath: '/protocols/simplebuzz',
+            timestamp: 1780760003,
+            data: { payload: { content: multilineContent } },
+          },
+        ],
+      },
+    ],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    resourceType: 'bot',
+    title: 'Multiline Buzz Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1multilinebuzzbot', name: 'Multiline Buzz Bot', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Multiline Buzz Bot'), 'multiline buzz render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /Recent Activity/);
+  assert.match(html, /Commit: efea0079 chore: sync package lock after browser cleanup/);
+  assert.doesNotMatch(html, new RegExp(`href=\"map://simplebuzz/pin/${multilineBuzzPinId}\"`));
+  assert.equal((html.match(/Commit: efea0079 chore: sync package lock after browser cleanup/g) || []).length, 1);
 });
 
 test('bot-page renderer uses compact-list template with normalized future lists', async () => {
