@@ -57,15 +57,22 @@ becomes:
 renderWelcome();
 ```
 
-The welcome page is the single fallback when all three of these are absent:
+The welcome page is the fallback when all three of these are absent:
 
 1. No `?uri=` query parameter.
 2. No path-derived URI (e.g. `/browser/metaid/<id>`).
-3. No `runtime.defaultUri` (removed from both adapters — see "Fixture Removal" below).
+3. No `runtime.defaultUri`.
+
+The `defaultUri` host capability is preserved in the UI — OAC/IDBots hosts may still set it
+to their own bot's URI, and that initial navigation must keep working. The standalone adapters
+(see "Fixture Removal" below) now return `defaultUri: null`, which is what routes the standalone
+Browser to the welcome page. The welcome page is only reached when no host supplies a defaultUri.
 
 `renderNoLocalBot()` (`app.ts:1065`) is unchanged. It handles a different condition ("no
-wallet/actor connected") and remains responsible for that case. The welcome page and the
-no-local-bot state are separate paths with separate responsibilities.
+wallet/actor connected") and takes precedence over the welcome page: in `initialize()`, if
+there is no URI and no defaultUri but also no actor, `renderNoLocalBot()` runs instead of
+`renderWelcome()`. The welcome page and the no-local-bot state are separate paths with separate
+responsibilities.
 
 ### Returning to the welcome page
 
@@ -166,7 +173,9 @@ constant edit.
 
 ### Changed: `initialize()` fallback in `packages/ui/src/browser/app.ts`
 
-The `runtime.defaultUri` fallback branch is replaced by a direct `renderWelcome()` call.
+The `runtime.defaultUri` fallback branch is preserved (hosts may supply a defaultUri). When no
+defaultUri is present, `initialize()` checks for actors: no actor → `renderNoLocalBot()`;
+otherwise → `renderWelcome()`.
 
 ### Fixture Removal (single commit)
 
