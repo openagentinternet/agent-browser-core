@@ -138,6 +138,28 @@ export interface PinResolvedVersion {
   historyIndex?: number;
 }
 
+export interface PinInspectorPinSummary {
+  pinId: string;
+  txid?: string;
+  path?: string;
+  operation?: string;
+  version?: string;
+  encryption?: string;
+  contentType: string;
+  chainName?: string;
+  ownerGlobalMetaId?: string;
+  ownerAddress?: string;
+}
+
+export interface PinInspectorResourceData {
+  rendererId: 'generic.pin-inspector';
+  version: PinResolvedVersion;
+  pin: PinInspectorPinSummary;
+  payload: unknown;
+  rawPayload: unknown;
+  rawPinRecord: Record<string, unknown>;
+}
+
 export interface ParsedMapPinUri {
   originalUri: string;
   normalizedUri: string;

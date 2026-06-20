@@ -3,6 +3,7 @@ import {
   browserCommandSuccess,
   type BrowserCommandResult,
   type BrowserResolveResult,
+  type PinInspectorResourceData,
   type PinResolvedVersion,
 } from './types.js';
 import { parsePinUri } from './pinUri.js';
@@ -42,36 +43,6 @@ function parsePayload(content: unknown, contentType: string): unknown {
     }
   }
   return raw;
-}
-
-function meaningfulPayloadSource(pinRecord: Record<string, unknown>): unknown {
-  if (record(pinRecord.content) || Array.isArray(pinRecord.content) || text(pinRecord.content)) return pinRecord.content;
-  if (pinRecord.payload !== undefined && pinRecord.payload !== null) return pinRecord.payload;
-  return pinRecord.contentSummary ?? pinRecord.content_summary ?? pinRecord.summary ?? '';
-}
-
-function parseJsonObject(value: unknown): Record<string, unknown> | null {
-  const object = record(value);
-  if (object) return object;
-  const raw = text(value);
-  if (!raw) return null;
-  try {
-    return record(JSON.parse(raw));
-  } catch {
-    return null;
-  }
-}
-
-function contentSummary(pinRecord: Record<string, unknown>): Record<string, unknown> | null {
-  return parseJsonObject(pinRecord.contentSummary ?? pinRecord.content_summary ?? pinRecord.summary);
-}
-
-function mergePayload(contentPayload: unknown, summaryPayload: Record<string, unknown> | null): unknown {
-  const payloadRecord = record(contentPayload);
-  if (payloadRecord && summaryPayload) return { ...summaryPayload, ...payloadRecord };
-  if (payloadRecord) return payloadRecord;
-  if (summaryPayload) return summaryPayload;
-  return contentPayload;
 }
 
 function pinIdFromRecord(pinRecord: Record<string, unknown>, fallback: string): string {
@@ -125,13 +96,34 @@ export async function resolvePinUriToResource(input: ResolvePinUriToResourceInpu
     ...(parsed.historyIndex !== undefined ? { historyIndex: parsed.historyIndex } : {}),
   };
   const contentType = text(pinRecord.contentType ?? pinRecord.content_type) || 'application/octet-stream';
-  const summaryPayload = contentSummary(pinRecord);
-  const rawPayload = meaningfulPayloadSource(pinRecord);
-  const contentPayload = parsePayload(rawPayload, contentType);
-  const payload = mergePayload(contentPayload, summaryPayload);
+  const rawPayload = pinRecord.content !== undefined && pinRecord.content !== null
+    ? pinRecord.content
+    : pinRecord.payload !== undefined && pinRecord.payload !== null
+      ? pinRecord.payload
+      : '';
+  const payload = parsePayload(rawPayload, contentType);
   const ownerGlobalMetaId = text(pinRecord.ownerGlobalMetaId ?? pinRecord.globalMetaId ?? pinRecord.global_meta_id ?? pinRecord.metaid ?? pinRecord.metaId);
   const ownerAddress = text(pinRecord.ownerAddress ?? pinRecord.address);
   const protocolPath = text(pinRecord.path) || undefined;
+  const rendererData = {
+    rendererId: 'generic.pin-inspector',
+    version,
+    pin: {
+      pinId: resolvedPinId,
+      txid: text(pinRecord.txid) || undefined,
+      path: protocolPath,
+      operation: text(pinRecord.operation) || undefined,
+      version: text(pinRecord.version) || undefined,
+      encryption: text(pinRecord.encryption) || undefined,
+      contentType,
+      chainName: text(pinRecord.chainName ?? pinRecord.chain) || undefined,
+      ownerGlobalMetaId: ownerGlobalMetaId || undefined,
+      ownerAddress: ownerAddress || undefined,
+    },
+    payload,
+    rawPayload,
+    rawPinRecord: pinRecord,
+  } satisfies PinInspectorResourceData;
 
   return browserCommandSuccess({
     uri: parsed.originalUri,
@@ -148,26 +140,7 @@ export async function resolvePinUriToResource(input: ResolvePinUriToResourceInpu
     renderer: {
       type: 'pin-inspector',
       contentType,
-      data: {
-        rendererId: 'generic.pin-inspector',
-        version,
-        pin: {
-          pinId: resolvedPinId,
-          txid: text(pinRecord.txid) || undefined,
-          path: protocolPath,
-          operation: text(pinRecord.operation) || undefined,
-          version: text(pinRecord.version) || undefined,
-          encryption: text(pinRecord.encryption) || undefined,
-          contentType,
-          chainName: text(pinRecord.chainName ?? pinRecord.chain) || undefined,
-          ownerGlobalMetaId: ownerGlobalMetaId || undefined,
-          ownerAddress: ownerAddress || undefined,
-        },
-        payload,
-        rawPayload,
-        contentSummary: summaryPayload ?? undefined,
-        rawPinRecord: pinRecord,
-      },
+      data: rendererData,
     },
     status: { state: 'resolved', verificationState: 'partial', message: 'Pin resolved.' },
     proof: {
