@@ -236,6 +236,7 @@ test('resolveBrowserResource dispatches metafile URI to ManAPI file metadata', a
 
 const customMetaAppPinId = 'c06b7a2db6efa241560a2356e9966cf9758dae3ec9c795f614a652b113e30329i0';
 const customMetafilePinId = 'f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0';
+const metaAppOwnerAvatarId = '9'.repeat(64) + 'i0';
 
 function browserConfig(overrides = {}) {
   return {
@@ -326,6 +327,20 @@ function metaAppRecord(pinId) {
 
 function homepageFetch(homepage) {
   return async (url) => {
+    if (String(url) === 'https://so.example.test/api/info/globalmetaid/idq1metaappowner') {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 1,
+          data: {
+            globalMetaId: 'idq1metaappowner',
+            name: 'MetaApp Owner',
+            avatarId: metaAppOwnerAvatarId,
+          },
+        }),
+      };
+    }
     assert.equal(
       String(url),
       'https://so.example.test/api/bot-homepage/globalmetaid/idq1custombot?version=v3',
@@ -337,6 +352,41 @@ function homepageFetch(homepage) {
     };
   };
 }
+
+test('resolveBrowserResource enriches direct metaapp owners with bot profile name and avatar', async () => {
+  const result = await resolveBrowserResource({
+    uri: `metaapp://${customMetaAppPinId}`,
+    config: browserConfig(),
+    fetch: async (url) => {
+      assert.equal(String(url), 'https://so.example.test/api/info/globalmetaid/idq1metaappowner');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          code: 1,
+          data: {
+            globalMetaId: 'idq1metaappowner',
+            name: 'MetaApp Owner',
+            avatarId: metaAppOwnerAvatarId,
+          },
+        }),
+      };
+    },
+    metaAppLookup: async (pinId) => {
+      assert.equal(pinId, customMetaAppPinId);
+      return metaAppRecord(pinId);
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.resourceType, 'metaapp');
+  assert.equal(result.data.owner.globalMetaId, 'idq1metaappowner');
+  assert.equal(result.data.owner.name, 'MetaApp Owner');
+  assert.equal(
+    result.data.owner.avatar,
+    `https://file.metaid.io/metafile-indexer/content/${metaAppOwnerAvatarId}`,
+  );
+});
 
 test('resolveBrowserResource aliases custom metaapp homepage without rewriting normalized URI', async () => {
   const customHomepageUri = `metaapp://${customMetaAppPinId}`;

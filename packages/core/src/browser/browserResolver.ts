@@ -332,12 +332,33 @@ async function resolveMetaAppResource(input: {
     return browserCommandFailed('browser_resource_not_found', 'Resource not found.');
   }
 
-  return browserCommandSuccess(buildMetaAppResolveResult({
+  const result = buildMetaAppResolveResult({
     uri: input.parsed.originalUri,
     normalizedUri: input.parsed.normalizedUri,
     record,
     fetchedAt: Date.now(),
-  }));
+  });
+  const ownerProfile = input.request.fetch && input.request.config.metasoP2PBaseUrl.trim()
+    ? await fetchBotProfileInfo({
+      baseUrl: input.request.config.metasoP2PBaseUrl,
+      globalMetaId: result.owner.globalMetaId,
+      fetch: input.request.fetch,
+      metafileContentBaseUrl: input.request.config.metafileContentBaseUrl,
+    })
+    : null;
+  if (!ownerProfile) {
+    return browserCommandSuccess(result);
+  }
+
+  return browserCommandSuccess({
+    ...result,
+    owner: {
+      ...result.owner,
+      globalMetaId: text(ownerProfile.globalMetaId) || result.owner.globalMetaId,
+      name: text(ownerProfile.name) || result.owner.name,
+      avatar: text(ownerProfile.avatar) || result.owner.avatar,
+    },
+  });
 }
 
 export async function resolveBrowserResource(input: ResolveBrowserResourceInput): Promise<BrowserCommandResult<BrowserResolveResult>> {
