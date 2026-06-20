@@ -1,6 +1,5 @@
 import {
   applyBrowserSettingsUpdate,
-  buildBotHomepageEnvelope,
   createBrowserSettingsSnapshot,
   parseBrowserUri,
   type BrowserConfigContainer,
@@ -22,90 +21,9 @@ const STANDALONE_ACTOR_ID = 'standalone-wallet';
 
 export interface MemoryStandaloneHostInput {
   now?: () => number;
-  defaultUri?: string;
 }
 
-function fixtureHomepage(): Record<string, unknown> {
-  return {
-    schemaVersion: 'botHomepage.v3',
-    identity: {
-      globalMetaId: 'idq1fixturebot',
-      legacyMetaId: 'metaid-fixture',
-      display: 'idq1fixture...bot',
-    },
-    profile: {
-      name: 'Fixture Bot',
-      avatar: {
-        pinId: 'avatar-pin',
-        contentType: 'image/png',
-      },
-      bio: 'Builds Agent Browser fixtures.',
-      homepage: null,
-      pins: {
-        name: 'name-pin',
-        bio: 'bio-pin',
-      },
-    },
-    presence: {
-      state: 'online',
-      updatedAt: null,
-      source: 'memory-fixture',
-    },
-    sections: [
-      {
-        id: 'services',
-        title: 'Services',
-        items: [
-          {
-            pinId: 'service-pin-1',
-            protocolPath: '/protocols/skill-service',
-            data: {
-              payload: {
-                displayName: 'Fixture Review',
-                description: 'Reviews Browser templates.',
-              },
-            },
-          },
-        ],
-      },
-      {
-        id: 'buzzes',
-        title: 'Buzz',
-        items: [
-          {
-            pinId: 'buzz-pin-1',
-            protocolPath: '/protocols/simplebuzz',
-            data: {
-              payload: {
-                content: 'A Bot homepage served by the standalone development host.',
-              },
-            },
-          },
-        ],
-      },
-      {
-        id: 'metaapps',
-        title: 'MetaApps',
-        items: [
-          {
-            pinId: 'metaapp-pin-1',
-            protocolPath: '/protocols/metaapp',
-            data: {
-              payload: {
-                title: 'Fixture MetaApp',
-                appName: 'Fixture MetaApp',
-                intro: 'Creates Bot homepage layouts.',
-              },
-            },
-          },
-        ],
-      },
-    ],
-    warnings: [],
-  };
-}
-
-function runtime(defaultUri: string): BrowserRuntimeSnapshot {
+function runtime(): BrowserRuntimeSnapshot {
   const actor: BrowserActor = {
     id: STANDALONE_ACTOR_ID,
     label: 'Standalone Wallet',
@@ -121,7 +39,7 @@ function runtime(defaultUri: string): BrowserRuntimeSnapshot {
     },
     actors: [actor],
     defaultActor: actor,
-    defaultUri,
+    defaultUri: null,
     features: {
       privateChat: false,
       serviceCall: false,
@@ -147,7 +65,6 @@ function toHostSettingsSnapshot(snapshot: CoreBrowserSettingsSnapshot): BrowserS
 
 export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInput = {}): BrowserHostAdapter {
   const now = input.now ?? Date.now;
-  const defaultUri = input.defaultUri ?? 'metaid://idq1fixturebot';
   let config: BrowserConfigContainer = { browser: { botHomepageTemplateId: 'document' } };
   let settings: BrowserSettingsSnapshot = toHostSettingsSnapshot(createBrowserSettingsSnapshot({ config }));
   let cacheClearedAt: number | null = null;
@@ -199,24 +116,17 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
   return {
     async getRuntime(actorInput = {}) {
       const failure = ensureActor(actorInput.actorId);
-      return failure ?? browserSuccess(runtime(defaultUri));
+      return failure ?? browserSuccess(runtime());
     },
     async resolveResource(resolveInput) {
       const failure = ensureActor(resolveInput.actorId);
       if (failure) return failure;
       try {
         const parsed = parseBrowserUri(resolveInput.uri);
-        if (parsed.scheme === 'metaid') {
-          return browserSuccess(buildBotHomepageEnvelope({
-            uri: parsed.originalUri,
-            normalizedUri: parsed.normalizedUri,
-            homepage: fixtureHomepage(),
-            resolverUrl: 'memory://bot-homepage/idq1fixturebot',
-            templateId: String(settings.effectiveBrowser.botHomepageTemplateId ?? 'document'),
-            fetchedAt: now(),
-          }));
+        if (parsed.scheme === 'metaapp') {
+          return browserSuccess(resolveMetaapp(parsed.originalUri, parsed.normalizedUri));
         }
-        return browserSuccess(resolveMetaapp(parsed.originalUri, parsed.normalizedUri));
+        return browserFailure('unsupported_browser_uri', `Memory host cannot resolve ${parsed.scheme} URIs.`);
       } catch (error) {
         return browserFailure('invalid_browser_uri', error instanceof Error ? error.message : String(error));
       }
