@@ -7,7 +7,7 @@
 - Host kind: standalone
 - Actor: Standalone Wallet
 - Default actor kind: wallet
-- Default URI: metaid://idq1fixturebot
+- Default landing: welcome page (no default URI; empty address bar renders the welcome page)
 
 ## Browser HTML
 
