@@ -76,6 +76,39 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function parseMetaIdBotPageOverride(input: string): {
+  resolveUri: string;
+  forceDefaultBotPage: boolean;
+} {
+  const originalUri = text(input);
+  const match = originalUri.match(/^(metaid:\/\/[^?#]+)\?([^#]*)$/iu);
+  if (!match) {
+    return {
+      resolveUri: originalUri,
+      forceDefaultBotPage: false,
+    };
+  }
+
+  const query = new URLSearchParams(match[2]);
+  const requestedMode = text(query.get('botpage')).toLowerCase();
+  query.delete('botpage');
+  if (requestedMode !== 'default' || Array.from(query.keys()).length > 0) {
+    return {
+      resolveUri: originalUri,
+      forceDefaultBotPage: false,
+    };
+  }
+
+  return {
+    resolveUri: match[1],
+    forceDefaultBotPage: true,
+  };
+}
+
+function normalizedMetaIdBotPageUri(normalizedUri: string, forceDefaultBotPage: boolean): string {
+  return forceDefaultBotPage ? `${normalizedUri}?botpage=default` : normalizedUri;
+}
+
 function recordField(source: Record<string, unknown>, key: string): Record<string, unknown> {
   const value = source[key];
   return isRecord(value) ? value : {};
@@ -308,11 +341,12 @@ async function resolveMetaAppResource(input: {
 }
 
 export async function resolveBrowserResource(input: ResolveBrowserResourceInput): Promise<BrowserCommandResult<BrowserResolveResult>> {
+  const botPageOverride = parseMetaIdBotPageOverride(input.uri);
   let parsed;
   try {
-    parsed = parseBrowserUri(input.uri);
+    parsed = parseBrowserUri(botPageOverride.resolveUri);
   } catch (error) {
-    const mapNameAlias = parseMapNameAliasUri(input.uri);
+    const mapNameAlias = parseMapNameAliasUri(botPageOverride.resolveUri);
     if (mapNameAlias) {
       parsed = mapNameAlias;
     } else {
@@ -367,9 +401,10 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
       fetch: input.fetch,
       metafileContentBaseUrl: input.config.metafileContentBaseUrl,
     });
-    const aliasUri = parsed.normalizedUri;
+    const visibleMetaIdUri = normalizedMetaIdBotPageUri(parsed.normalizedUri, botPageOverride.forceDefaultBotPage);
+    const aliasUri = visibleMetaIdUri;
     const customHomepageUri = readCustomHomepageUri(enrichedHomepage);
-    if (input.config.renderCustomBotPages !== false && customHomepageUri) {
+    if (!botPageOverride.forceDefaultBotPage && input.config.renderCustomBotPages !== false && customHomepageUri) {
       let customParsed;
       try {
         customParsed = parseBrowserUri(customHomepageUri);
@@ -405,8 +440,8 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
     }
 
     return browserCommandSuccess(buildBotPageResolveResult({
-      uri: parsed.originalUri,
-      normalizedUri: parsed.normalizedUri,
+      uri: visibleMetaIdUri,
+      normalizedUri: visibleMetaIdUri,
       homepage: enrichedHomepage,
       resolverUrl: homepage.url,
       templateId: input.config.botHomepageTemplateId,

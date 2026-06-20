@@ -470,13 +470,21 @@ function decodeURIComponentSafe(value) {
   }
 }
 
+function metaIdBotPageOverrideQuery(search) {
+  var query = new URLSearchParams(textValue(search).replace(/^\\?/, ''));
+  return textValue(query.get('botpage')).toLowerCase() === 'default'
+    ? '?botpage=default'
+    : '';
+}
+
 function browserUriFromPath(pathname, search) {
   var path = textValue(pathname);
   var match = path.match(/^\\/browser\\/(metaid|metaapp|metafile)\\/([^/?#]+)$/);
   if (match) {
     var decodedId = decodeURIComponentSafe(match[2]);
     var resourceId = textValue(decodedId);
-    return resourceId ? match[1] + '://' + resourceId : '';
+    if (!resourceId) return '';
+    return match[1] + '://' + resourceId + (match[1] === 'metaid' ? metaIdBotPageOverrideQuery(search) : '');
   }
 
   var mapMatch = path.match(/^\\/browser\\/map\\/(.+)$/);

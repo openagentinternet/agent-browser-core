@@ -424,6 +424,26 @@ test('resolveBrowserResource aliases custom metafile homepage without rewriting 
   ]);
 });
 
+test('resolveBrowserResource uses built-in template when metaid uri requests botpage=default', async () => {
+  let metaAppLookupCalled = false;
+  const result = await resolveBrowserResource({
+    uri: 'metaid://idq1custombot?botpage=default',
+    config: browserConfig(),
+    fetch: homepageFetch(homepageWithCustom({ uri: `metaapp://${customMetaAppPinId}` })),
+    metaAppLookup: async () => {
+      metaAppLookupCalled = true;
+      return metaAppRecord(customMetaAppPinId);
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.uri, 'metaid://idq1custombot?botpage=default');
+  assert.equal(result.data.normalizedUri, 'metaid://idq1custombot?botpage=default');
+  assert.equal(result.data.resourceType, 'bot');
+  assert.equal(result.data.renderer.type, 'bot-page');
+  assert.equal(metaAppLookupCalled, false);
+});
+
 test('resolveBrowserResource uses built-in template when custom rendering is disabled', async () => {
   let metaAppLookupCalled = false;
   const result = await resolveBrowserResource({

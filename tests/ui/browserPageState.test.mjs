@@ -334,6 +334,21 @@ test('Browser MetaID deep link path is decoded into the address bar and resolved
   assert.equal(fetchCalls[1], '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1alice&actorId=worker');
 });
 
+test('Browser MetaID deep link path keeps botpage override in the address bar and resolve request', async () => {
+  const { elements, fetchCalls } = createBrowserContext({
+    pathname: '/browser/metaid/idq1alice',
+    search: '?botpage=default',
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and deep link resolve with botpage override');
+
+  assert.equal(elements['[data-browser-uri-input]'].value, 'metaid://idq1alice?botpage=default');
+  assert.equal(
+    fetchCalls[1],
+    '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1alice%3Fbotpage%3Ddefault&actorId=worker',
+  );
+});
+
 test('Browser MetaApp deep link path is decoded into the address bar and resolved', async () => {
   const pinId = '8544d8a15126296abe36a0bad740a4f293580575b5b00d345029bf99b74c78eci0';
   const { elements, fetchCalls } = createBrowserContext({ pathname: `/browser/metaapp/${pinId}` });
