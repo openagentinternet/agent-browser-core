@@ -104,7 +104,7 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
     owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
     renderer: {
       type: 'pin-inspector',
-      contentType: 'application/json',
+      contentType: 'application/vnd.metaid+json; charset=utf-8',
       data: {
         rendererId: 'generic.pin-inspector',
         version: {
@@ -115,13 +115,22 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
         pin: {
           pinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
           path: '/protocols/simplebuzz',
-          contentType: 'application/json',
+          contentType: 'application/vnd.metaid+json; charset=utf-8',
+          operation: 'create',
+          chainName: 'btc',
+          encryption: 'public',
+          version: '1',
         },
         payload: {
           title: 'Readable Pin',
           content: 'Rendered via generic pin inspector',
           images: ['metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0'],
-          related: 'metaid://idq1fixturebot',
+          attachments: [
+            { uri: 'metafile://archive-fixture', name: 'fixture.zip' },
+            { uri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0', name: 'origin pin' },
+          ],
+          files: [{ url: 'https://files.example/guide.pdf', title: 'guide.pdf' }],
+          image: 'metaid://idq1fixturebot',
         },
         rawPayload: '{"title":"Readable Pin"}',
         rawPinRecord: {
@@ -136,9 +145,21 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
 
   assert.match(html, /browser-pin-inspector/);
   assert.match(html, /Readable Pin/);
-  assert.match(html, /Rendered via generic pin inspector/);
-  assert.match(html, /Related Links/);
-  assert.match(html, /metaid:\/\/idq1fixturebot/);
+  assert.match(html, /<h3>Payload<\/h3>/);
+  assert.match(html, /<h3>Raw Payload<\/h3>/);
+  assert.match(html, /<h3>Related Media And Files<\/h3>/);
+  assert.match(html, /<h3>Pin Facts<\/h3>/);
+  assert.match(html, /guide\.pdf/);
+  assert.match(html, /fixture\.zip/);
+  assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
+  assert.match(html, /href="pin:\/\/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0" data-browser-map-link/);
+  assert.match(html, /data-browser-download-ref="metafile:\/\/archive-fixture"/);
+  assert.match(html, /data-browser-download-ref="https:\/\/files\.example\/guide\.pdf"/);
+  assert.match(html, /data-browser-copy-value="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/);
+  assert.doesNotMatch(html, /<h3>Identity<\/h3>/);
+  assert.doesNotMatch(html, /<h3>Overview<\/h3>/);
+  assert.doesNotMatch(html, /<h3>Media<\/h3>/);
+  assert.doesNotMatch(html, /<h3>Related Links<\/h3>/);
 });
 
 test('UI renders host-action resources as trusted action panels', () => {
