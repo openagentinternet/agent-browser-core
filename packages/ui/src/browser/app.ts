@@ -67,6 +67,9 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
             </button>
           </form>
+          <button type="button" class="browser-icon-button browser-bookmark-star" data-browser-bookmark-star aria-label="收藏当前页面" disabled>
+            <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+          </button>
           <button type="button" class="browser-resource-chip" data-browser-resource-chip aria-expanded="false">
             <span class="browser-chip-avatar browser-avatar-fallback" aria-hidden="true">R</span>
             <span class="browser-chip-copy"><span class="browser-chip-title">Resource</span><span class="browser-chip-subtitle">No resource</span></span>
@@ -101,6 +104,7 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
           <button type="button" data-browser-status-txid>TXID: -</button>
         </footer>
         <div class="browser-modal" data-browser-modal-root hidden></div>
+        <div class="browser-toast" data-browser-toast role="status" aria-live="polite" hidden></div>
       </section>
     `,
     script: buildBrowserPageScript(),
@@ -142,7 +146,14 @@ var browserLaunchCopy = {
     'share.metaidUri': '复制 metaid URI',
     'share.localUrl': '复制本地 Browser URL',
     'share.publicUrl': '复制公开 Browser URL',
-    'share.close': '关闭'
+    'share.close': '关闭',
+    'bookmark.starLabel': '收藏当前页面',
+    'bookmark.starLabelActive': '已收藏，点击移除书签',
+    'bookmark.added': '已添加书签',
+    'bookmark.removed': '已移除书签',
+    'bookmark.removeTitle': '移除书签',
+    'bookmark.removeConfirm': '确定要移除该书签吗？',
+    'bookmark.removeLabel': '移除'
   }
 };
 
@@ -160,10 +171,13 @@ var state = {
   cacheData: null,
   pendingPrivateChat: null,
   pendingServiceCall: null,
+  pendingBookmarkRemoval: '',
+  bookmarks: [],
   visits: [],
   status: 'loading',
   error: '',
-  lastResolveError: null
+  lastResolveError: null,
+  toastTimer: null
 };
 
 var elements = {};
@@ -331,6 +345,7 @@ function iconHtml(name) {
     activity: '<path d="M4 12h4l2-6 4 12 2-6h4"></path>',
     bot: '<rect x="5" y="7" width="14" height="10" rx="3"></rect><path d="M9 7V5h6v2M9 12h.1M15 12h.1"></path>',
     bookmark: '<path d="M7 4h10v16l-5-3-5 3V4z"></path>',
+    star: '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>',
     chevronDown: '<path d="M6 9l6 6 6-6"></path>',
     chevronRight: '<path d="M9 6l6 6-6 6"></path>',
     close: '<path d="M6 6l12 12M18 6L6 18"></path>',
@@ -414,7 +429,9 @@ function bindElements() {
     statusTxid: document.querySelector('[data-browser-status-txid]'),
     drawer: document.querySelector('[data-browser-drawer]'),
     inspector: document.querySelector('[data-browser-inspector]'),
-    modalRoot: document.querySelector('[data-browser-modal-root]')
+    modalRoot: document.querySelector('[data-browser-modal-root]'),
+    bookmarkStar: document.querySelector('[data-browser-bookmark-star]'),
+    toast: document.querySelector('[data-browser-toast]')
   };
 }
 
@@ -1054,6 +1071,7 @@ function renderNoLocalBot() {
       (actionHref && actionLabel ? '<a class="browser-primary-action" href="' + escapeHtml(actionHref) + '">' + escapeHtml(actionLabel) + '</a>' : '') +
       '</section>';
   }
+  renderBookmarkStar();
 }
 
 function pushHistory(uri) {
@@ -1086,6 +1104,7 @@ function renderCurrent() {
   if (elements.viewport) {
     elements.viewport.innerHTML = renderRenderer(current);
   }
+  renderBookmarkStar();
   syncPanelState();
 }
 
@@ -1126,37 +1145,160 @@ function renderVisitList(items) {
   }).join('') + '</ul>';
 }
 
-function bookmarkItems() {
-  var items = [];
-  var actor = selectedActor();
-  var defaultUri = textValue(state.runtime && state.runtime.defaultUri) || actorDefaultUri(actor);
-  if (defaultUri) {
-    items.push({
-      uri: defaultUri,
-      title: textValue(actor && actor.label) || 'Current actor',
-      resourceType: 'bot'
-    });
+var BOOKMARKS_STORAGE_KEY = 'agent-browser:bookmarks';
+
+function loadBookmarks() {
+  state.bookmarks = [];
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    var raw = window.localStorage.getItem(BOOKMARKS_STORAGE_KEY);
+    if (!raw) return;
+    var parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      state.bookmarks = parsed.filter(function (item) {
+        return item && typeof item === 'object' && textValue(item.uri);
+      });
+    }
+  } catch (error) {
+    state.bookmarks = [];
   }
-  if (state.current) {
-    items.push({
-      uri: textValue(state.current.normalizedUri || state.current.uri),
-      title: textValue(state.current.title) || textValue(state.current.owner && state.current.owner.name) || 'Current resource',
-      resourceType: textValue(state.current.resourceType)
-    });
+}
+
+function saveBookmarks() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify(state.bookmarks));
+  } catch (error) {
+    /* ignore persistence errors */
   }
-  var seen = {};
-  return items.filter(function (item) {
-    if (!item.uri || seen[item.uri]) return false;
-    seen[item.uri] = true;
-    return true;
+}
+
+function currentBookmarkKey() {
+  if (!state.current) return '';
+  return textValue(state.current.normalizedUri) || textValue(state.current.uri);
+}
+
+function findBookmarkIndex(uri) {
+  var key = textValue(uri);
+  for (var index = 0; index < state.bookmarks.length; index += 1) {
+    if (textValue(state.bookmarks[index] && state.bookmarks[index].uri) === key) return index;
+  }
+  return -1;
+}
+
+function isCurrentBookmarked() {
+  var key = currentBookmarkKey();
+  if (!key) return false;
+  return findBookmarkIndex(key) !== -1;
+}
+
+function renderBookmarkStar() {
+  if (!elements.bookmarkStar) return;
+  var key = currentBookmarkKey();
+  var hasCurrent = !!key;
+  elements.bookmarkStar.disabled = !hasCurrent;
+  if (hasCurrent && isCurrentBookmarked()) {
+    elements.bookmarkStar.classList.add('is-active');
+    elements.bookmarkStar.setAttribute('aria-label', browserText('bookmark.starLabelActive', 'Bookmarked — click to remove'));
+  } else {
+    elements.bookmarkStar.classList.remove('is-active');
+    elements.bookmarkStar.setAttribute('aria-label', browserText('bookmark.starLabel', 'Bookmark this page'));
+  }
+}
+
+function showToast(message) {
+  if (!elements.toast) return;
+  elements.toast.textContent = message;
+  elements.toast.hidden = false;
+  elements.toast.classList.add('is-visible');
+  if (state.toastTimer) {
+    clearTimeout(state.toastTimer);
+  }
+  state.toastTimer = setTimeout(function () {
+    if (!elements.toast) return;
+    elements.toast.classList.remove('is-visible');
+    elements.toast.hidden = true;
+    state.toastTimer = null;
+  }, 2400);
+}
+
+function addBookmark() {
+  if (!state.current) return false;
+  var uri = currentBookmarkKey();
+  if (!uri) return false;
+  if (findBookmarkIndex(uri) !== -1) return false;
+  state.bookmarks.push({
+    uri: uri,
+    title: textValue(state.current.title) || textValue(state.current.owner && state.current.owner.name) || 'Current resource',
+    resourceType: textValue(state.current.resourceType)
   });
+  saveBookmarks();
+  renderBookmarkStar();
+  if (state.drawerOpen) renderDrawer();
+  return true;
+}
+
+function removeBookmark(uri) {
+  var key = textValue(uri);
+  if (!key) return false;
+  var index = findBookmarkIndex(key);
+  if (index === -1) return false;
+  state.bookmarks.splice(index, 1);
+  saveBookmarks();
+  renderBookmarkStar();
+  if (state.drawerOpen) renderDrawer();
+  return true;
+}
+
+function toggleBookmark() {
+  if (!state.current) return;
+  if (isCurrentBookmarked()) {
+    removeBookmark(currentBookmarkKey());
+    showToast(browserText('bookmark.removed', 'Bookmark removed'));
+  } else {
+    addBookmark();
+    showToast(browserText('bookmark.added', 'Bookmark added'));
+  }
+}
+
+function confirmRemoveBookmark(uri) {
+  var key = textValue(uri);
+  if (findBookmarkIndex(key) === -1) return;
+  state.pendingBookmarkRemoval = key;
+  renderModal(
+    browserText('bookmark.removeTitle', 'Remove bookmark'),
+    '<p>' + escapeHtml(browserText('bookmark.removeConfirm', 'Remove this bookmark?')) + '</p>',
+    browserText('bookmark.removeLabel', 'Remove'),
+    'delete-bookmark'
+  );
+}
+
+function bookmarkItems() {
+  return state.bookmarks.slice();
+}
+
+function renderBookmarkList(items) {
+  if (!items.length) return '<p class="browser-panel-empty">None</p>';
+  return '<ul>' + items.map(function (item) {
+    var resourceType = textValue(item.resourceType);
+    var iconName = resourceType === 'metaapp' ? 'service' : resourceType === 'bot' ? 'bot' : 'history';
+    var selected = state.current && textValue(state.current.normalizedUri || state.current.uri) === textValue(item.uri);
+    return '<li class="browser-drawer-li-removable">' +
+      '<button type="button" class="browser-drawer-row"' + (selected ? ' aria-current="page"' : '') +
+      ' data-browser-visit-uri="' + escapeHtml(item.uri) + '">' +
+      '<span class="browser-drawer-icon" aria-hidden="true">' + iconHtml(iconName) + '</span>' +
+      '<span class="browser-drawer-copy"><strong>' + escapeHtml(item.title || item.uri) + '</strong><span>' + escapeHtml(shortId(item.uri)) + '</span></span>' +
+      '</button>' +
+      '<button type="button" class="browser-icon-button browser-bookmark-remove" data-browser-bookmark-remove="' + escapeHtml(item.uri) + '" aria-label="' + escapeHtml(browserText('bookmark.removeLabel', 'Remove')) + '">' + iconHtml('trash') + '</button>' +
+      '</li>';
+  }).join('') + '</ul>';
 }
 
 function renderDrawer() {
   if (!elements.drawer) return;
   elements.drawer.innerHTML = '<section class="browser-drawer-panel"><header class="browser-panel-header"><h2>Library</h2>' +
     '<button type="button" class="browser-icon-button" data-browser-drawer-close aria-label="Close drawer">' + iconHtml('close') + '</button></header>' +
-    '<h3>Bookmarks</h3>' + renderVisitList(bookmarkItems()) +
+    '<h3>Bookmarks</h3>' + renderBookmarkList(bookmarkItems()) +
     '<h2>Recent Bots</h2>' + renderVisitList(uniqueRecent('bot')) +
     '<h2>History</h2>' + renderVisitList(state.visits.slice().reverse()) + '</section>';
 }
@@ -2176,6 +2318,8 @@ async function loadContext() {
 
 async function initialize() {
   bindElements();
+  loadBookmarks();
+  renderBookmarkStar();
   if (elements.viewport) {
     elements.viewport.addEventListener('click', function (event) {
       var mapLink = closestWithAttribute(event && event.target, 'data-browser-map-link');
@@ -2273,12 +2417,28 @@ async function initialize() {
         var task = elements.modalRoot.querySelector('[data-browser-service-task]');
         confirmServiceCall(task ? task.value : '');
       }
+      if (action === 'delete-bookmark') {
+        var removalUri = state.pendingBookmarkRemoval;
+        state.pendingBookmarkRemoval = '';
+        if (removalUri) {
+          removeBookmark(removalUri);
+          showToast(browserText('bookmark.removed', 'Bookmark removed'));
+        }
+        closeModal();
+      }
     });
   }
   if (elements.drawer) {
     elements.drawer.addEventListener('click', function (event) {
       if (closestWithAttribute(event && event.target, 'data-browser-drawer-close')) {
         closeDrawer();
+        return;
+      }
+      var removeTarget = closestWithAttribute(event && event.target, 'data-browser-bookmark-remove');
+      if (removeTarget) {
+        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+        var removalUri = removeTarget.getAttribute('data-browser-bookmark-remove');
+        if (removalUri) confirmRemoveBookmark(removalUri);
         return;
       }
       var target = closestWithAttribute(event && event.target, 'data-browser-visit-uri');
@@ -2336,6 +2496,7 @@ async function initialize() {
   if (elements.forward) elements.forward.addEventListener('click', goForward);
   if (elements.reload) elements.reload.addEventListener('click', reloadCurrent);
   if (elements.drawerToggle) elements.drawerToggle.addEventListener('click', toggleDrawer);
+  if (elements.bookmarkStar) elements.bookmarkStar.addEventListener('click', toggleBookmark);
   if (elements.usingChip) elements.usingChip.addEventListener('click', openUsingIdentitySelector);
   if (elements.resourceChip) elements.resourceChip.addEventListener('click', openInspector);
   if (elements.statusProof) elements.statusProof.addEventListener('click', openInspector);
@@ -2394,6 +2555,20 @@ globalThis.confirmPrivateChat = confirmPrivateChat;
 globalThis.confirmServiceCall = confirmServiceCall;
 globalThis.handleOwnerAction = handleOwnerAction;
 globalThis.closeModal = closeModal;
+globalThis.renderModal = renderModal;
+globalThis.loadBookmarks = loadBookmarks;
+globalThis.saveBookmarks = saveBookmarks;
+globalThis.bookmarkItems = bookmarkItems;
+globalThis.renderBookmarkList = renderBookmarkList;
+globalThis.currentBookmarkKey = currentBookmarkKey;
+globalThis.findBookmarkIndex = findBookmarkIndex;
+globalThis.isCurrentBookmarked = isCurrentBookmarked;
+globalThis.renderBookmarkStar = renderBookmarkStar;
+globalThis.addBookmark = addBookmark;
+globalThis.removeBookmark = removeBookmark;
+globalThis.toggleBookmark = toggleBookmark;
+globalThis.confirmRemoveBookmark = confirmRemoveBookmark;
+globalThis.showToast = showToast;
 globalThis.loadRuntime = loadRuntime;
 globalThis.loadContext = loadContext;
 globalThis.resolveUri = resolveUri;
