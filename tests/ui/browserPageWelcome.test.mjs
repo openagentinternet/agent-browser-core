@@ -42,6 +42,8 @@ class FakeElement {
     return this.children.get(key);
   }
   click() { this.listeners.get('click')?.({ preventDefault() {}, stopPropagation() {} }); }
+  submit() { this.listeners.get('submit')?.({ preventDefault() {} }); }
+  focus() { /* no-op for tests */ }
 }
 
 function waitFor(condition, label) {
@@ -135,6 +137,7 @@ function createBrowserContext(options = {}) {
   const elements = createElements();
   const fetchCalls = [];
   const runtimeResponse = options.runtimeResponse ?? welcomeRuntime();
+  const resolveResponse = options.resolveResponse;
   const storage = options.storage ?? createMemoryStorage();
   if (options.seedBookmarks) {
     storage.setItem('agent-browser:bookmarks', JSON.stringify(options.seedBookmarks));
@@ -156,6 +159,14 @@ function createBrowserContext(options = {}) {
     fetch: async (url) => {
       fetchCalls.push(String(url));
       if (String(url).startsWith('/api/browser/runtime')) return { ok: true, json: async () => runtimeResponse };
+      if (String(url).startsWith('/api/browser/resolve')) {
+        if (resolveResponse) {
+          const uri = new URLSearchParams(String(url).split('?')[1] || '').get('uri') || '';
+          const payload = typeof resolveResponse === 'function' ? resolveResponse(uri) : resolveResponse;
+          return { ok: true, json: async () => payload };
+        }
+        throw new Error(`Unexpected resolve fetch ${url}`);
+      }
       if (String(url).startsWith('/api/browser/settings')) return { ok: true, json: async () => ({ ok: true, data: settingsData() }) };
       if (String(url).startsWith('/api/browser/cache')) return { ok: true, json: async () => ({ ok: true, data: { cacheRoot: '/tmp', artifactCount: 0, pinRecordCount: 0, totalBytes: 0, artifacts: [] } }) };
       throw new Error(`Unexpected fetch ${url}`);
@@ -202,4 +213,42 @@ test('welcome page with seeded bookmarks shows bookmark tiles before official ti
   assert.ok(alicePos > -1, 'bookmark tile rendered');
   assert.ok(officialPos > -1, 'official tile rendered');
   assert.ok(alicePos < officialPos, 'bookmark tile precedes official tile');
+});
+
+test('submitting an empty address bar re-renders the welcome page', async () => {
+  const { elements } = createBrowserContext();
+  await waitFor(() => elements['[data-browser-viewport]'].innerHTML.includes('browser-welcome'), 'initial welcome render');
+  // Simulate user clearing the address bar and submitting.
+  elements['[data-browser-uri-input]'].value = '';
+  elements['[data-browser-address-form]'].submit();
+  // Should still show welcome (not an error/empty state).
+  assert.match(elements['[data-browser-viewport]'].innerHTML, /browser-welcome/);
+});
+
+test('empty submit returns to welcome after viewing a resource', async () => {
+  const resolveResponse = (uri) => ({
+    ok: true,
+    data: {
+      uri,
+      normalizedUri: uri.toLowerCase(),
+      resourceType: 'bot',
+      title: 'Resolved Bot',
+      owner: { kind: 'bot', globalMetaId: 'idq1resolved', name: 'Resolved Bot', verificationState: 'verified' },
+      renderer: { type: 'bot-page', contentType: 'application/json', templateId: 'document', data: { profile: { name: 'Resolved Bot' } } },
+      status: { state: 'resolved', verificationState: 'verified', message: '' },
+      source: { resolver: 'test' },
+      actions: [],
+    },
+  });
+  const { elements } = createBrowserContext({ resolveResponse });
+  await waitFor(() => elements['[data-browser-viewport]'].innerHTML.includes('browser-welcome'), 'initial welcome render');
+  // Navigate to a real resource.
+  elements['[data-browser-uri-input]'].value = 'metaid://idq1resolved';
+  elements['[data-browser-address-form]'].submit();
+  await waitFor(() => elements['[data-browser-viewport]'].innerHTML.includes('Resolved Bot'), 'resource resolve');
+  assert.match(elements['[data-browser-viewport]'].innerHTML, /Resolved Bot/);
+  // Now clear and submit empty -> should return to welcome.
+  elements['[data-browser-uri-input]'].value = '';
+  elements['[data-browser-address-form]'].submit();
+  assert.match(elements['[data-browser-viewport]'].innerHTML, /browser-welcome/);
 });

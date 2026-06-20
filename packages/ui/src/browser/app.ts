@@ -2321,7 +2321,10 @@ function resolveUrl(uri) {
 
 async function resolveUri(uri, options) {
   var normalizedUri = textValue(uri);
-  if (!normalizedUri) return null;
+  if (!normalizedUri) {
+    renderWelcome();
+    return null;
+  }
   var shouldRecord = !options || options.record !== false;
   if (elements.input) elements.input.value = normalizedUri;
   if (shouldRecord) pushHistory(normalizedUri);
@@ -2401,6 +2404,11 @@ async function initialize() {
   renderBookmarkStar();
   if (elements.viewport) {
     elements.viewport.addEventListener('click', function (event) {
+      var promptTarget = closestWithAttribute(event && event.target, 'data-browser-welcome-prompt');
+      if (promptTarget) {
+        if (elements.input && typeof elements.input.focus === 'function') elements.input.focus();
+        return;
+      }
       var mapLink = closestWithAttribute(event && event.target, 'data-browser-map-link');
       var mapHref = mapLink && mapLink.getAttribute ? mapLink.getAttribute('href') : '';
       if (mapHref) {
