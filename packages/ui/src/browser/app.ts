@@ -117,6 +117,10 @@ var browserSettingsTabs = ${JSON.stringify(BROWSER_SETTINGS_TABS)};
 var browserBaseUrlFields = ${JSON.stringify(BROWSER_BASE_URL_FIELDS)};
 var browserBotHomepageTemplates = ${JSON.stringify(BROWSER_BOT_HOMEPAGE_TEMPLATES)};
 var CUSTOM_BOT_PAGE_HELP = 'When enabled, Bot Pages can render the custom MetaApp or Metafile declared on /info/homepage. When disabled, Browser always uses the selected built-in template.';
+var OFFICIAL_RECOMMENDATIONS = [
+  { uri: 'metaapp://agent-browser', title: 'Agent Browser', kind: 'official' },
+  { uri: 'metaid://docsbot', title: 'Docs Bot', kind: 'official' }
+];
 var browserEndpoints = {
   runtime: '/api/browser/runtime',
   resolve: '/api/browser/resolve',
@@ -153,7 +157,11 @@ var browserLaunchCopy = {
     'bookmark.removed': '已移除书签',
     'bookmark.removeTitle': '移除书签',
     'bookmark.removeConfirm': '确定要移除该书签吗？',
-    'bookmark.removeLabel': '移除'
+    'bookmark.removeLabel': '移除',
+    'welcome.title': 'Agent Internet',
+    'welcome.subtitle': '在地址栏输入 metaid:// URI 即可访问',
+    'welcome.promptPlaceholder': 'metaid://',
+    'welcome.gridHeading': '书签 / 最近访问'
   }
 };
 
