@@ -109,7 +109,8 @@ test('client script includes generic pin page renderer and creator-chip parity',
   assert.match(script, /if \(renderer\.type === 'pin-inspector'\) \{/);
   assert.match(script, /data-browser-map-link/);
   assert.match(script, /const mapLink = closestWithAttribute\(target, 'data-browser-map-link'\);/);
-  assert.match(script, /function openCreatorFromChip\(\) \{[\s\S]*if \(resource\.resourceType === 'bot'\) \{[\s\S]*toggleInspector\(\);[\s\S]*return;[\s\S]*\}[\s\S]*const uri = creatorUri\(resource\);/);
+  assert.match(script, /function openCreatorFromChip\(\) \{[\s\S]*if \(resource\.resourceType === 'bot'\) \{[\s\S]*toggleInspector\(true\);[\s\S]*return;[\s\S]*\}[\s\S]*const uri = creatorUri\(resource\);/);
+  assert.match(script, /if \(\[\s*'- ', '\* '\]\.some/);
 });
 
 test('resolve failures clear stale resource chrome and keep URI history coherent', () => {

@@ -366,7 +366,7 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   function openCreatorFromChip() {
     const resource = state.resource || {};
     if (resource.resourceType === 'bot') {
-      toggleInspector();
+      toggleInspector(true);
       return;
     }
     const uri = creatorUri(resource);
@@ -375,7 +375,7 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       navigateTo(uri).catch(() => {});
       return;
     }
-    toggleInspector();
+    toggleInspector(true);
   }
   function openShareModal() {
     const resource = state.resource || {};
@@ -558,6 +558,18 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       }
       if (/^#\\s+/.test(firstLine)) {
         return '<h1>' + pinInspectorInlineMarkdown(firstLine.replace(/^#\\s+/, '')) + '</h1>';
+      }
+      if (['- ', '* '].some((prefix) => {
+        return lines.every((line) => textValue(line).indexOf(prefix) === 0);
+      })) {
+        return '<ul>' + lines.map((line) => {
+          return '<li>' + pinInspectorInlineMarkdown(textValue(line).slice(2)) + '</li>';
+        }).join('') + '</ul>';
+      }
+      if (lines.every((line) => /^\\d+\\.\\s+/.test(textValue(line)))) {
+        return '<ol>' + lines.map((line) => {
+          return '<li>' + pinInspectorInlineMarkdown(textValue(line).replace(/^\\d+\\.\\s+/, '')) + '</li>';
+        }).join('') + '</ol>';
       }
       return '<p>' + lines.map((line) => pinInspectorInlineMarkdown(line)).join('<br>') + '</p>';
     }).join('');

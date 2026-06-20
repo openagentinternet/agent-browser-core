@@ -2390,6 +2390,22 @@ function pinInspectorRenderMarkdown(value) {
     if (/^#\\s+/.test(firstLine)) {
       return '<h1>' + pinInspectorInlineMarkdown(firstLine.replace(/^#\\s+/, '')) + '</h1>';
     }
+    if (['- ', '* '].some(function (prefix) {
+      return lines.every(function (line) {
+        return textValue(line).indexOf(prefix) === 0;
+      });
+    })) {
+      return '<ul>' + lines.map(function (line) {
+        return '<li>' + pinInspectorInlineMarkdown(textValue(line).slice(2)) + '</li>';
+      }).join('') + '</ul>';
+    }
+    if (lines.every(function (line) {
+      return /^\\d+\\.\\s+/.test(textValue(line));
+    })) {
+      return '<ol>' + lines.map(function (line) {
+        return '<li>' + pinInspectorInlineMarkdown(textValue(line).replace(/^\\d+\\.\\s+/, '')) + '</li>';
+      }).join('') + '</ol>';
+    }
     return '<p>' + lines.map(function(line) {
       return pinInspectorInlineMarkdown(line);
     }).join('<br>') + '</p>';

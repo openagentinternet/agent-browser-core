@@ -645,6 +645,49 @@ test('pin-inspector renderer uses payload-first mature shell sections', async ()
   assert.match(html, /data-browser-copy-value="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/);
 });
 
+test('pin-inspector markdown payload renders structured lists in the mature shell', async () => {
+  const markdown = '# Notes\n\n- first item\n- second item\n\nParagraph with [Bot](metaid://idq1fixturebot)';
+  const { nodes } = runWithResolve(result({
+    type: 'pin-inspector',
+    contentType: 'text/markdown',
+    data: {
+      rendererId: 'generic.pin-inspector',
+      version: {
+        requestedPinId: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        resolvedPinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        versionSelector: 'latest',
+      },
+      pin: {
+        pinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        path: '/protocols/simplebuzz',
+        contentType: 'text/markdown',
+        operation: 'create',
+        chainName: 'btc',
+        encryption: 'public',
+        version: '1',
+      },
+      payload: markdown,
+      rawPayload: markdown,
+      rawPinRecord: {
+        path: '/protocols/simplebuzz',
+        txid: 'b'.repeat(64),
+      },
+    },
+  }, {
+    uri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    normalizedUri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    resourceType: 'pin',
+    title: 'Pin Notes',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-pin-markdown'), 'markdown pin render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /<h1>Notes<\/h1>/);
+  assert.match(html, /<ul><li>first item<\/li><li>second item<\/li><\/ul>/);
+  assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
+});
+
 test('pdf, image, and video render with content-specific elements', async () => {
   const pdf = runWithResolve(result({ type: 'pdf', contentType: 'application/pdf', url: 'https://files.example/a.pdf' }));
   await waitFor(() => pdf.nodes['[data-browser-viewport]'].innerHTML.includes('browser-pdf'), 'pdf render');
