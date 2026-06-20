@@ -1070,6 +1070,63 @@ function renderOwnerToolbar() {
     '<button type="button" data-browser-owner-action="share">' + escapeHtml(browserText('owner.share', 'Share Bot Page')) + '</button>';
 }
 
+function buildWelcomeShortcutTiles() {
+  var tiles = [];
+  var seenUris = {};
+  function pushTile(item, kind) {
+    var uri = textValue(item.uri);
+    if (!uri || seenUris[uri]) return;
+    seenUris[uri] = true;
+    var resourceName = textValue(item.title) || shortId(uri);
+    var resourceType = textValue(item.resourceType);
+    var iconName = kind === 'official'
+      ? (uri.indexOf('metaapp://') === 0 ? 'service' : 'bot')
+      : (resourceType === 'metaapp' ? 'service' : resourceType === 'bot' ? 'bot' : 'bookmark');
+    var tileClass = kind === 'official' ? 'browser-welcome-tile is-official' : 'browser-welcome-tile';
+    tiles.push('<a class="' + tileClass + '" data-browser-map-link href="' + escapeHtml(uri) + '">' +
+      '<span class="browser-welcome-tile-icon" aria-hidden="true">' + iconHtml(iconName) + '</span>' +
+      '<span class="browser-welcome-tile-label">' + escapeHtml(resourceName) + '</span>' +
+      '<span class="browser-welcome-tile-uri">' + escapeHtml(shortId(uri)) + '</span>' +
+      '</a>');
+  }
+  for (var i = 0; i < state.bookmarks.length; i += 1) pushTile(state.bookmarks[i], 'bookmark');
+  var recent = uniqueRecent();
+  for (var j = 0; j < recent.length; j += 1) pushTile(recent[j], 'recent');
+  for (var k = 0; k < OFFICIAL_RECOMMENDATIONS.length; k += 1) pushTile(OFFICIAL_RECOMMENDATIONS[k], 'official');
+  return tiles.join('');
+}
+
+function renderWelcome() {
+  setStatus('ready', '');
+  state.current = null;
+  renderOwnerToolbar();
+  if (elements.resourceChip) {
+    elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar') +
+      '<span class="browser-chip-copy"><span class="browser-chip-title">' + escapeHtml(browserText('resource.emptyTitle', 'No resource')) + '</span><span class="browser-chip-subtitle">' + escapeHtml(browserText('welcome.title', 'Agent Internet')) + '</span></span>' +
+      '<span class="browser-chip-proof" aria-hidden="true">' + iconHtml('shield') + '</span>';
+  }
+  if (elements.statusProof) elements.statusProof.innerHTML = proofIconHtml('unverified') + '<span>' + escapeHtml(browserText('status.unverified', 'unverified')) + '</span>';
+  if (elements.statusRenderer) elements.statusRenderer.textContent = browserText('status.rendererNone', 'renderer: none');
+  if (elements.statusTxid) elements.statusTxid.textContent = 'TXID: -';
+  if (elements.viewport) {
+    elements.viewport.innerHTML = '<section class="browser-welcome" data-browser-welcome>' +
+      '<div class="browser-welcome-hero">' +
+        '<h1 class="browser-welcome-title">' + escapeHtml(browserText('welcome.title', 'Agent Internet')) + '</h1>' +
+        '<p class="browser-welcome-subtitle">' + escapeHtml(browserText('welcome.subtitle', 'Enter a metaid:// URI in the address bar to visit a resource.')) + '</p>' +
+        '<button type="button" class="browser-welcome-prompt" data-browser-welcome-prompt>' +
+          iconHtml('link') +
+          '<span>' + escapeHtml(browserText('welcome.promptPlaceholder', 'metaid://')) + '</span>' +
+        '</button>' +
+      '</div>' +
+      '<div class="browser-welcome-grid">' +
+        '<h2 class="browser-welcome-heading">' + escapeHtml(browserText('welcome.gridHeading', 'Bookmarks / Recent')) + '</h2>' +
+        buildWelcomeShortcutTiles() +
+      '</div>' +
+    '</section>';
+  }
+  renderBookmarkStar();
+}
+
 function renderNoLocalBot() {
   var title = runtimeLabel('noActorTitle', 'No Browser actor');
   var body = runtimeLabel('noActorBody', 'Connect an actor before using Browser actions.');
@@ -2538,7 +2595,11 @@ async function initialize() {
     await navigateTo(runtime.defaultUri);
     return;
   }
-  renderNoLocalBot();
+  if (!runtimeActors().length) {
+    renderNoLocalBot();
+    return;
+  }
+  renderWelcome();
 }
 
 globalThis.browserEndpoints = browserEndpoints;
