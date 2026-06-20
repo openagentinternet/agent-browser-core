@@ -220,6 +220,42 @@ function mapPinHref(protocolPath, pinId) {
   return protocol && isBrowserPinId(id) ? 'map://' + protocol + '/pin/' + encodeURIComponent(id.toLowerCase()) : '';
 }
 
+var DEFAULT_METAFILE_CONTENT_BASE_URL = 'https://file.metaid.io/metafile-indexer';
+
+function metaAppHref(pinId) {
+  var id = textValue(pinId);
+  return isBrowserPinId(id) ? 'metaapp://' + id.toLowerCase() : '';
+}
+
+function normalizeMetafileContentBaseUrl(value) {
+  var fallback = DEFAULT_METAFILE_CONTENT_BASE_URL;
+  var normalized = textValue(value).replace(/\\/+$/, '') || fallback;
+  return normalized || fallback;
+}
+
+function isMetafileIndexerRoot(baseUrl) {
+  try {
+    var parsed = new URL(baseUrl);
+    return parsed.pathname.replace(/\\/+$/, '') === '/metafile-indexer';
+  } catch (error) {
+    return false;
+  }
+}
+
+function buildMetafileDownloadHref(reference) {
+  var value = textValue(reference);
+  if (!value) return '';
+  if (/^https?:\\/\\//i.test(value)) return safeUrl(value);
+  if (!/^metafile:\\/\\//i.test(value)) return '';
+  var pinId = value.slice('metafile://'.length).split(/[?#]/, 1)[0].replace(/\\.[A-Za-z0-9]+$/u, '');
+  if (!isBrowserPinId(pinId)) return '';
+  var baseUrl = normalizeMetafileContentBaseUrl(settingValue('metafileContentBaseUrl') || DEFAULT_METAFILE_CONTENT_BASE_URL);
+  var encodedPinId = encodeURIComponent(pinId.toLowerCase());
+  return isMetafileIndexerRoot(baseUrl)
+    ? baseUrl + '/api/v1/files/accelerate/content/' + encodedPinId
+    : baseUrl + '/' + encodedPinId;
+}
+
 function shortId(value) {
   var text = textValue(value);
   if (!text) return '';
@@ -306,6 +342,7 @@ function iconHtml(name) {
     link: '<path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"></path>',
     message: '<path d="M5 6h14v9H8l-3 3V6z"></path>',
     database: '<ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>',
+    download: '<path d="M12 4v10"></path><path d="M8 10l4 4 4-4"></path><path d="M5 19h14"></path>',
     service: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"></path><path d="M4.4 7.8L12 12l7.6-4.2M12 12v8.5"></path>',
     settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1-2.1 2.1-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1.1 1.7V21h-3v-.2a1.8 1.8 0 0 0-1.1-1.7 1.8 1.8 0 0 0-2 .4l-.1.1-2.1-2.1.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.7-1.1H5v-3h.2a1.8 1.8 0 0 0 1.7-1.1 1.8 1.8 0 0 0-.4-2l-.1-.1 2.1-2.1.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1.1-1.7V3h3v.2a1.8 1.8 0 0 0 1.1 1.7 1.8 1.8 0 0 0 2-.4l.1-.1 2.1 2.1-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.7 1.1h.2v3h-.2a1.8 1.8 0 0 0-1.8 1.3z"></path>',
     shield: '<path d="M12 3l7 3v5c0 4.1-2.8 7.9-7 10-4.2-2.1-7-5.9-7-10V6l7-3z"></path><path d="M8.8 12l2.1 2.1 4.5-4.7"></path>',
@@ -1426,6 +1463,41 @@ function normalizeBotHomepageServices(items) {
   });
 }
 
+function metaAppSummaryText(item) {
+  return readableText(item && (item.intro || item.description || item.summary || item.detail || item.text || item.bio));
+}
+
+function metaAppGroupingKey(item) {
+  return textValue(item && (item.appName || item.name || item.title || item.id || item.pinId)).toLowerCase();
+}
+
+function normalizeBotHomepageMetaApps(items) {
+  var rawItems = firstArray(items);
+  return rawItems.map(function (metaapp, index) {
+    var normalized = normalizeBotHomepageListItem(metaapp, index, 'MetaApp');
+    var summary = metaAppSummaryText(metaapp);
+    if (!summary) {
+      var groupKey = metaAppGroupingKey(metaapp);
+      if (groupKey) {
+        for (var candidateIndex = 0; candidateIndex < rawItems.length; candidateIndex += 1) {
+          var candidate = rawItems[candidateIndex];
+          if (candidateIndex === index) continue;
+          if (metaAppGroupingKey(candidate) !== groupKey) continue;
+          summary = metaAppSummaryText(candidate);
+          if (summary) break;
+        }
+      }
+    }
+    normalized.title = textValue(metaapp && (metaapp.title || metaapp.name || metaapp.appName || metaapp.displayName || metaapp.label || metaapp.pinId)) || normalized.title;
+    normalized.detail = summary;
+    normalized.href = metaAppHref(normalized.pinId);
+    normalized.downloadHref = buildMetafileDownloadHref(textValue(metaapp && (metaapp.code || metaapp.content || metaapp.metafile || metaapp.file)));
+    return normalized;
+  }).filter(function (item) {
+    return !!item.title;
+  });
+}
+
 function normalizeBotHomepagePayload(current) {
   var renderer = current.renderer || {};
   var data = renderer.data && typeof renderer.data === 'object' ? renderer.data : {};
@@ -1442,7 +1514,7 @@ function normalizeBotHomepagePayload(current) {
     item.title = truncateBuzzDetail(item.title);
     item.detail = truncateBuzzDetail(item.detail);
   });
-  var metaapps = normalizeBotHomepageList(v3Metaapps.length ? v3Metaapps : firstArray(data.metaapps, data.apps), 'MetaApp');
+  var metaapps = normalizeBotHomepageMetaApps(v3Metaapps.length ? v3Metaapps : firstArray(data.metaapps, data.apps));
   var activity = normalizeBotHomepageList(v3Buzz.length ? v3Buzz : data.activity, 'Activity');
   if (v3Buzz.length) {
     activity.forEach(function (item) {
@@ -1516,6 +1588,21 @@ function renderGenericRows(items, emptyText, iconName) {
     : '<p class="browser-muted-row">' + escapeHtml(emptyText) + '</p>';
 }
 
+function renderMetaAppRows(items, emptyText) {
+  return items.length
+    ? items.slice(0, 6).map(function (item) {
+      var title = escapeHtml(item.title);
+      var titleHtml = item.href ? '<a href="' + escapeHtml(item.href) + '" data-browser-map-link>' + title + '</a>' : title;
+      var downloadHtml = item.downloadHref
+        ? ' <a class="browser-help-icon" href="' + escapeHtml(item.downloadHref) + '" target="_blank" rel="noopener" download aria-label="Download MetaApp code zip" title="Download MetaApp code zip">' + iconHtml('download') + '</a>'
+        : '';
+      return '<article class="browser-activity-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('layout') + '</span>' +
+        '<div><strong>' + titleHtml + downloadHtml + '</strong>' +
+        (item.detail ? '<p>' + escapeHtml(item.detail) + '</p>' : '') + '</div></article>';
+    }).join('')
+    : '<p class="browser-muted-row">' + escapeHtml(emptyText) + '</p>';
+}
+
 function renderActivityRows(payload) {
   var items = payload.activity.slice(0, 5);
   return items.length
@@ -1547,7 +1634,7 @@ function renderBotHomepageDocumentTemplate(payload, current) {
     renderActionButtons(current.actions) + '</header>' +
     '<section class="browser-document-section"><h3>Overview</h3><p>' + escapeHtml(payload.summary.overview) + '</p></section>' +
     '<section class="browser-document-section browser-bot-services"><h3>Services</h3>' + renderServiceRows(payload.services) + '</section>' +
-    '<section class="browser-document-section browser-bot-metaapps"><h3>MetaApps</h3>' + renderGenericRows(payload.metaapps, 'No public MetaApps.', 'layout') + '</section>' +
+    '<section class="browser-document-section browser-bot-metaapps"><h3>MetaApps</h3>' + renderMetaAppRows(payload.metaapps, 'No public MetaApps.') + '</section>' +
     '<section class="browser-document-section browser-bot-activity"><h3>Recent Activity</h3>' + renderActivityRows(payload) + '</section>' +
     '</article>';
 }
@@ -1560,7 +1647,7 @@ function renderBotHomepageCompactListTemplate(payload, current) {
   var identity = payload.identity;
   var extraPanels = [
     renderCompactPanel('Services', renderServiceRows(payload.services)),
-    renderCompactPanel('MetaApps', renderGenericRows(payload.metaapps, 'No public MetaApps.', 'layout')),
+    renderCompactPanel('MetaApps', renderMetaAppRows(payload.metaapps, 'No public MetaApps.')),
     renderCompactPanel('Skills', renderGenericRows(payload.skills, 'No public skills.', 'service')),
     renderCompactPanel('Buzz', renderGenericRows(payload.buzz, 'No public buzz.', 'activity'))
   ];

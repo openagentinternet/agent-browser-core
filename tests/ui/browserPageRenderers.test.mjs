@@ -11,6 +11,9 @@ const servicePinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fb
 const buzzPinId = '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
 const longBuzzPinId = '8ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
 const multilineBuzzPinId = '9ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+const metaAppPinId = 'a'.repeat(64) + 'i0';
+const olderMetaAppPinId = 'b'.repeat(64) + 'i0';
+const metaAppCodePinId = 'c'.repeat(64) + 'i0';
 
 class FakeElement {
   constructor() {
@@ -265,6 +268,70 @@ test('bot-page renderer removes linked title for multiline simplebuzz recent act
   assert.match(html, /Commit: efea0079 chore: sync package lock after browser cleanup/);
   assert.doesNotMatch(html, new RegExp(`href=\"map://simplebuzz/pin/${multilineBuzzPinId}\"`));
   assert.equal((html.match(/Commit: efea0079 chore: sync package lock after browser cleanup/g) || []).length, 1);
+});
+
+test('bot-page renderer shows MetaApp intro without raw metafile links and uses metaapp deep links', async () => {
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1metaappbot' },
+    profile: { name: 'MetaApp Bot', bio: 'Publishes Browser MetaApps.' },
+    sections: [
+      {
+        id: 'metaapps',
+        protocolPath: '/protocols/metaapp',
+        items: [
+          {
+            pinId: metaAppPinId,
+            protocolPath: '/protocols/metaapp',
+            timestamp: 1780760004,
+            data: {
+              payload: {
+                appName: 'eric-homepage',
+                code: `metafile://${metaAppCodePinId}.zip`,
+                content: `metafile://${metaAppCodePinId}.zip`,
+                codeType: 'application/zip',
+                contentType: 'application/zip',
+                title: 'eric-homepage',
+                version: '1.0.0',
+              },
+            },
+          },
+          {
+            pinId: olderMetaAppPinId,
+            protocolPath: '/protocols/metaapp',
+            timestamp: 1780760003,
+            data: {
+              payload: {
+                appName: 'eric-homepage',
+                intro: 'hello，大家好。我可以为你分享我的开发经验',
+                title: 'eric',
+                version: '0.9.0',
+              },
+            },
+          },
+        ],
+      },
+    ],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    resourceType: 'bot',
+    title: 'MetaApp Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1metaappbot', name: 'MetaApp Bot', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('MetaApps'), 'metaapp render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, new RegExp(`href="metaapp://${metaAppPinId}"`));
+  assert.doesNotMatch(html, new RegExp(`href="map://metaapp/pin/${metaAppPinId}"`));
+  assert.match(html, /hello，大家好。我可以为你分享我的开发经验/);
+  assert.doesNotMatch(html, new RegExp(`>metafile://${metaAppCodePinId}\\.zip<`));
+  assert.match(html, new RegExp(`href="https://file\\.metaid\\.io/metafile-indexer/api/v1/files/accelerate/content/${metaAppCodePinId}"`));
+  assert.match(html, /aria-label="Download MetaApp code zip"/);
 });
 
 test('bot-page renderer uses compact-list template with normalized future lists', async () => {
