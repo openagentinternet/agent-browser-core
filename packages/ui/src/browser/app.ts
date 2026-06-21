@@ -535,7 +535,7 @@ function triggerEnterAnimation(node) {
   node.classList.remove('is-entering');
   void node.offsetWidth;
   node.classList.add('is-entering');
-  window.setTimeout(function () {
+  setTimeout(function () {
     node.classList.remove('is-entering');
   }, 320);
 }
