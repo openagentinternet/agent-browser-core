@@ -5,6 +5,7 @@ import type { BrowserResourceEnvelope } from '@openagentinternet/agent-browser-h
 const INTERNAL_BROWSER_URI_PATTERN = /^(metaid|metaapp|metafile|map|pin):\/\//iu;
 const EXTERNAL_URL_PATTERN = /^https?:\/\//iu;
 const MEDIA_KEYS = ['images', 'image', 'imageUrls', 'attachments', 'files', 'media'];
+const IMAGE_MEDIA_KEYS = new Set(['images', 'image', 'imageUrls']);
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -48,13 +49,26 @@ function jsonBlock(value: unknown): string {
   return `<pre class="browser-protocol-json">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
 }
 
-function linkHtml(value: string, label?: string, extraAttributes = ''): string {
+function shortReference(value: string): string {
+  const normalized = text(value);
+  if (normalized.length <= 42) return normalized;
+  const separator = normalized.indexOf('://');
+  if (separator > 0) {
+    const prefix = normalized.slice(0, separator + 3);
+    const body = normalized.slice(separator + 3);
+    if (body.length > 28) return `${prefix}${body.slice(0, 10)}...${body.slice(-10)}`;
+  }
+  return `${normalized.slice(0, 18)}...${normalized.slice(-14)}`;
+}
+
+function linkHtml(value: string, label?: string, extraAttributes = '', className = ''): string {
   const href = text(value);
   if (!href) return '';
   const content = escapeHtml(label || href);
   const internal = INTERNAL_BROWSER_URI_PATTERN.test(href);
   const external = EXTERNAL_URL_PATTERN.test(href);
-  return `<a href="${escapeHtml(href)}"${internal ? ' data-browser-map-link' : external ? ' target="_blank" rel="noopener"' : ''}${extraAttributes}>${content}</a>`;
+  const classAttribute = className ? ` class="${escapeHtml(className)}"` : '';
+  return `<a${classAttribute} href="${escapeHtml(href)}"${internal ? ' data-browser-map-link' : external ? ' target="_blank" rel="noopener"' : ''}${extraAttributes}>${content}</a>`;
 }
 
 function fieldValueHtml(value: unknown): string {
@@ -71,7 +85,7 @@ function fieldValueHtml(value: unknown): string {
 }
 
 function sectionBlock(title: string, bodyHtml: string, intro = ''): string {
-  return `<section class="browser-pin-section">${intro ? `<p class="browser-pin-intro">${escapeHtml(intro)}</p>` : ''}<h3>${escapeHtml(title)}</h3>${bodyHtml}</section>`;
+  return `<section class="browser-pin-section"><div class="browser-pin-section-head"><h3>${escapeHtml(title)}</h3>${intro ? `<p class="browser-pin-intro">${escapeHtml(intro)}</p>` : ''}</div>${bodyHtml}</section>`;
 }
 
 function infoList(items: Array<{ key: string; value: unknown; copyValue?: string }>): string {
@@ -161,42 +175,64 @@ function verifyIntro(): string {
 const PIN_INSPECTOR_PAGE_STYLE = `
   <style>
     body:has(.browser-pin-page) {
-      background:
-        radial-gradient(circle at top left, rgba(46, 111, 237, 0.08), transparent 28%),
-        radial-gradient(circle at top right, rgba(17, 138, 105, 0.07), transparent 22%),
-        #eef3f9;
+      background: #eef3f9;
     }
     body:has(.browser-pin-page) .browser-viewport { padding: 18px 14px 36px; }
     .browser-pin-page { width: min(1380px, calc(100vw - 28px)); max-width: none; margin: 18px auto 36px; display: grid; gap: 18px; }
-    .browser-pin-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 4px 2px 0; flex-wrap: wrap; }
-    .browser-pin-page-copy { display: grid; gap: 6px; min-width: 0; }
-    .browser-pin-page-eyebrow { margin: 0; color: #6a778b; font-size: 12px; font-weight: 700; letter-spacing: .01em; }
-    .browser-pin-page-head h2 { margin: 0; font-size: 30px; line-height: 1.08; }
-    .browser-pin-page-subtitle { margin: 0; color: #6a778b; font-size: 14px; }
+    .browser-pin-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 4px 2px 0; flex-wrap: wrap; }
+    .browser-pin-page-copy { display: grid; gap: 10px; min-width: 0; }
+    .browser-pin-page-eyebrow { margin: 0; color: #6a778b; font-size: 12px; font-weight: 700; }
+    .browser-pin-page-head h2 { margin: 0; color: #121923; font-size: 30px; line-height: 1.08; letter-spacing: 0; }
+    .browser-pin-meta-pills { display: flex; flex-wrap: wrap; gap: 8px; }
+    .browser-pin-meta-pill { display: inline-flex; align-items: center; min-height: 26px; max-width: 100%; padding: 4px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #fff; color: #4c5b6f; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
     .browser-pin-page-actions { display: flex; align-items: flex-start; flex-shrink: 0; gap: 8px; }
-    .browser-pin-page-actions button { min-height: 34px; border: 1px solid #d9e1ed; border-radius: 10px; background: #fff; color: #162132; padding: 7px 12px; font-size: 12px; font-weight: 700; }
+    .browser-pin-page-actions button { min-height: 34px; border: 1px solid #cfd9e6; border-radius: 8px; background: #fff; color: #162132; padding: 7px 12px; font-size: 12px; font-weight: 700; }
+    .browser-pin-page-actions button:first-child { background: #162132; border-color: #162132; color: #fff; }
     .browser-pin-page-grid { display: grid; grid-template-columns: minmax(0, 1.58fr) minmax(300px, 320px); gap: 16px; align-items: start; }
     .browser-pin-stack, .browser-pin-aside { display: grid; gap: 18px; align-content: start; }
-    .browser-pin-section { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid #d9e1ed; border-radius: 14px; background: rgba(255, 255, 255, .92); box-shadow: 0 18px 46px rgba(19, 35, 67, .08), 0 3px 12px rgba(19, 35, 67, .04); }
-    .browser-pin-aside .browser-pin-section { background: rgba(255, 255, 255, .82); }
-    .browser-pin-section h3 { margin: 0; font-size: 15px; }
+    .browser-pin-section { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid #d9e1ed; border-radius: 8px; background: rgba(255, 255, 255, .94); box-shadow: 0 14px 34px rgba(19, 35, 67, .07), 0 2px 8px rgba(19, 35, 67, .04); }
+    .browser-pin-section-head { display: grid; gap: 5px; }
+    .browser-pin-section h3 { margin: 0; color: #141c29; font-size: 15px; }
+    .browser-pin-section:first-child h3 { font-size: 18px; }
     .browser-pin-intro { margin: 0; color: #6a778b; font-size: 13px; line-height: 1.45; }
     .browser-protocol-json, .browser-protocol-raw, .browser-pin-text { margin: 0; overflow: auto; padding: 16px; border-radius: 12px; background: #182235; color: #d7e3f0; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .browser-pin-json-doc { display: grid; gap: 9px; }
+    .browser-pin-json-row { display: grid; grid-template-columns: minmax(120px, 0.26fr) minmax(0, 1fr); gap: 12px; padding: 10px 0; border-top: 1px solid #e6ebf2; }
+    .browser-pin-json-row:first-child { border-top: 0; padding-top: 0; }
+    .browser-pin-json-key { color: #59687d; font: 700 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
+    .browser-pin-json-value { min-width: 0; color: #172033; line-height: 1.55; overflow-wrap: anywhere; }
+    .browser-pin-json-longtext { white-space: pre-wrap; }
+    .browser-pin-json-token-list { display: flex; flex-wrap: wrap; gap: 6px; }
+    .browser-pin-json-token { display: inline-flex; max-width: 100%; padding: 3px 7px; border-radius: 999px; background: #edf2f7; color: #172033; font-size: 12px; overflow-wrap: anywhere; }
+    .browser-pin-json-list, .browser-pin-json-nested { display: grid; gap: 8px; min-width: 0; }
+    .browser-pin-json-list-item { padding: 8px 10px; border: 1px solid #e0e7f0; border-radius: 8px; background: #f8fafc; }
+    .browser-pin-json-nested { padding: 10px 12px; border: 1px solid #e0e7f0; border-radius: 8px; background: #f8fafc; }
+    .browser-pin-json-nested .browser-pin-json-row { grid-template-columns: minmax(92px, 0.25fr) minmax(0, 1fr); }
+    .browser-pin-json-value a, .browser-pin-link-pill, .browser-pin-file-row a { color: #2563d8; text-decoration: none; }
+    .browser-pin-json-value a:hover, .browser-pin-link-pill:hover, .browser-pin-file-row a:hover { text-decoration: underline; }
     .browser-pin-markdown { display: grid; gap: 10px; line-height: 1.7; color: #162132; }
     .browser-pin-markdown h1, .browser-pin-markdown h2, .browser-pin-markdown h3, .browser-pin-markdown p { margin: 0; }
     .browser-pin-markdown a { color: #2e6fed; text-decoration: none; }
     .browser-pin-markdown a:hover { text-decoration: underline; }
     .browser-pin-binary-notice { margin: 0; color: #6a778b; }
-    .browser-protocol-proof { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 10px 14px; margin: 0; }
+    .browser-protocol-proof { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px 14px; margin: 0; }
     .browser-protocol-proof dt { color: #6a778b; font-size: 12px; font-weight: 700; }
     .browser-protocol-proof dd { margin: 0; overflow-wrap: anywhere; }
     .browser-protocol-proof dd button { margin-left: 8px; border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; padding: 4px 8px; }
+    .browser-pin-media-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+    .browser-pin-media-card { display: grid; gap: 8px; min-width: 0; padding: 10px; border: 1px solid #dce4ef; border-radius: 8px; background: #f8fafc; }
+    .browser-pin-media-preview { display: grid; place-items: center; min-height: 110px; border-radius: 7px; background: #e8eef6; color: #62718a; font-size: 12px; font-weight: 700; text-align: center; overflow: hidden; }
+    .browser-pin-media-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .browser-pin-media-label { min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
+    .browser-pin-file-list { display: grid; gap: 0; }
     .browser-pin-file-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #e6ebf2; }
     .browser-pin-file-row:first-of-type { border-top: 0; padding-top: 0; }
-    .browser-pin-file-row span { min-width: 0; }
-    .browser-pin-file-row a { color: #2e6fed; text-decoration: none; overflow-wrap: anywhere; }
-    .browser-pin-file-row a:hover { text-decoration: underline; }
-    .browser-pin-file-row button { border: 1px solid #d9e1ed; border-radius: 9px; background: #fff; padding: 6px 10px; white-space: nowrap; }
+    .browser-pin-file-row span { min-width: 0; overflow-wrap: anywhere; }
+    .browser-pin-file-row button { border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; padding: 6px 10px; white-space: nowrap; }
+    .browser-pin-link-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .browser-pin-link-pill { display: inline-flex; max-width: 100%; padding: 6px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #f8fafc; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
+    .browser-pin-raw-record { display: grid; gap: 10px; }
+    .browser-pin-raw-record summary { cursor: pointer; color: #334155; font-size: 13px; font-weight: 700; }
     @media (max-width: 1100px) {
       .browser-pin-page-grid { grid-template-columns: minmax(0, 1fr); }
     }
@@ -206,11 +242,64 @@ const PIN_INSPECTOR_PAGE_STYLE = `
       .browser-pin-page-head { flex-direction: column; }
       .browser-pin-page-actions { width: 100%; }
       .browser-pin-page-actions button { width: 100%; }
+      .browser-pin-json-row, .browser-pin-json-nested .browser-pin-json-row { grid-template-columns: 1fr; gap: 5px; }
       .browser-protocol-proof { grid-template-columns: 1fr; }
       .browser-pin-file-row { flex-direction: column; align-items: flex-start; }
     }
   </style>
 `;
+
+function renderJsonValue(value: unknown): string {
+  if (typeof value === 'string') {
+    if (INTERNAL_BROWSER_URI_PATTERN.test(value) || EXTERNAL_URL_PATTERN.test(value)) {
+      return linkHtml(value);
+    }
+    return escapeHtml(value);
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return `<span class="browser-pin-json-token">${escapeHtml(String(value))}</span>`;
+  }
+  if (value === null) {
+    return '<span class="browser-pin-json-token">null</span>';
+  }
+  if (Array.isArray(value)) {
+    if (!value.length) return '<span class="browser-pin-json-token">[]</span>';
+    const shortPrimitiveList = value.every((item) => ['string', 'number', 'boolean'].includes(typeof item) && text(item).length <= 64);
+    if (shortPrimitiveList) {
+      return `<div class="browser-pin-json-token-list">${value.map((item) => `<span class="browser-pin-json-token">${typeof item === 'string' && (INTERNAL_BROWSER_URI_PATTERN.test(item) || EXTERNAL_URL_PATTERN.test(item)) ? linkHtml(item, shortReference(item)) : escapeHtml(String(item))}</span>`).join('')}</div>`;
+    }
+    return `<div class="browser-pin-json-list">${value.map((item) => `<div class="browser-pin-json-list-item">${renderJsonValue(item)}</div>`).join('')}</div>`;
+  }
+  const nested = record(value);
+  if (Object.keys(nested).length) {
+    return `<div class="browser-pin-json-nested">${renderJsonRows(nested)}</div>`;
+  }
+  return '<span class="browser-pin-json-token">{}</span>';
+}
+
+function jsonValueClass(value: unknown): string {
+  if (typeof value === 'string' && (value.length > 120 || value.includes('\n'))) {
+    return 'browser-pin-json-value browser-pin-json-longtext';
+  }
+  return 'browser-pin-json-value';
+}
+
+function renderJsonRows(value: Record<string, unknown>): string {
+  return Object.entries(value).map(([key, item]) => (
+    `<div class="browser-pin-json-row"><div class="browser-pin-json-key">${escapeHtml(key)}</div><div class="${jsonValueClass(item)}">${renderJsonValue(item)}</div></div>`
+  )).join('');
+}
+
+function renderJsonDocument(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `<div class="browser-pin-json-doc">${renderJsonValue(value)}</div>`;
+  }
+  const body = record(value);
+  if (!Object.keys(body).length) {
+    return jsonBlock(value);
+  }
+  return `<div class="browser-pin-json-doc">${renderJsonRows(body)}</div>`;
+}
 
 function renderPayload(resource: BrowserResourceEnvelope): string {
   const contentType = contentTypeValue(resource);
@@ -218,7 +307,7 @@ function renderPayload(resource: BrowserResourceEnvelope): string {
   const rawPayload = data(resource).rawPayload;
 
   if (contentType.includes('json')) {
-    return jsonBlock(parseJsonPayload(payload, rawPayload));
+    return renderJsonDocument(parseJsonPayload(payload, rawPayload));
   }
   if (contentType.startsWith('text/markdown')) {
     return `<div class="browser-pin-markdown">${renderMarkdown(typeof payload === 'string' ? payload : text(rawPayload))}</div>`;
@@ -241,34 +330,54 @@ function renderRawPayload(resource: BrowserResourceEnvelope): string {
   return `<pre class="browser-protocol-raw">${escapeHtml(source ?? '')}</pre>`;
 }
 
-function mediaReference(value: unknown): { uri: string; label: string } | null {
+type PinMediaItem = { uri: string; label: string; kind: 'image' | 'file'; description?: string };
+
+function isImageReference(uri: string, sourceKey = ''): boolean {
+  if (IMAGE_MEDIA_KEYS.has(sourceKey)) return true;
+  return /\.(png|jpe?g|gif|webp|avif|svg)(?:[?#].*)?$/iu.test(uri);
+}
+
+function isMediaReferenceUri(uri: string): boolean {
+  return EXTERNAL_URL_PATTERN.test(uri) || uri.startsWith('metafile://');
+}
+
+function mediaReference(value: unknown, sourceKey = ''): PinMediaItem | null {
   if (typeof value === 'string') {
     const uri = text(value);
-    return uri ? { uri, label: uri } : null;
+    if (!uri || !isMediaReferenceUri(uri)) return null;
+    return { uri, label: shortReference(uri), kind: isImageReference(uri, sourceKey) ? 'image' : 'file' };
   }
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const entry = value as Record<string, unknown>;
     const uri = text(entry.uri ?? entry.url ?? entry.href ?? entry.src ?? entry.pinId);
-    if (!uri) return null;
+    if (!uri || !isMediaReferenceUri(uri)) return null;
     return {
       uri,
       label: text(entry.label ?? entry.name ?? entry.title ?? entry.filename) || uri,
+      kind: isImageReference(uri, sourceKey) ? 'image' : 'file',
+      description: text(entry.description ?? entry.summary ?? entry.type ?? entry.mimeType),
     };
   }
   return null;
 }
 
-function collectBrowserUris(value: unknown, output: Set<string>, seen = new WeakSet<object>()): void {
+function collectBrowserUris(value: unknown, output: Set<string>, seen = new WeakSet<object>(), includeExternal = false): void {
   if (typeof value === 'string') {
     const matches = value.match(/(?:metaid|metaapp|metafile|map|pin):\/\/[^\s"'<>()[\]{}]+/giu) || [];
     for (const uri of matches) {
       output.add(uri.replace(/[),.;!?]+$/u, ''));
     }
+    if (includeExternal) {
+      const externalMatches = value.match(/https?:\/\/[^\s"'<>()[\]{}]+/giu) || [];
+      for (const uri of externalMatches) {
+        output.add(uri.replace(/[),.;!?]+$/u, ''));
+      }
+    }
     return;
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      collectBrowserUris(item, output, seen);
+      collectBrowserUris(item, output, seen, includeExternal);
     }
     return;
   }
@@ -280,7 +389,7 @@ function collectBrowserUris(value: unknown, output: Set<string>, seen = new Weak
   }
   seen.add(value as object);
   for (const item of Object.values(value as Record<string, unknown>)) {
-    collectBrowserUris(item, output, seen);
+    collectBrowserUris(item, output, seen, includeExternal);
   }
 }
 
@@ -293,26 +402,26 @@ function isDownloadableMediaReference(reference: unknown): boolean {
   return /^[0-9a-f]{64}i[0-9]+$/i.test(pinId);
 }
 
-function collectMediaItems(payload: unknown): Array<{ uri: string; label: string }> {
+function collectMediaItems(payload: unknown): PinMediaItem[] {
   const body = record(payload);
-  const items: Array<{ uri: string; label: string }> = [];
+  const items: PinMediaItem[] = [];
   for (const key of MEDIA_KEYS) {
     const candidate = body[key];
     if (Array.isArray(candidate)) {
       for (const item of candidate) {
-        const normalized = mediaReference(item);
+        const normalized = mediaReference(item, key);
         if (normalized) items.push(normalized);
       }
       continue;
     }
-    const normalized = mediaReference(candidate);
+    const normalized = mediaReference(candidate, key);
     if (normalized) items.push(normalized);
   }
   const discoveredUris = new Set<string>();
-  collectBrowserUris(payload, discoveredUris);
+  collectBrowserUris(payload, discoveredUris, new WeakSet<object>(), true);
   for (const uri of discoveredUris) {
-    if (!/^https?:\/\//i.test(uri)) {
-      items.push({ uri, label: uri });
+    if (isMediaReferenceUri(uri)) {
+      items.push({ uri, label: shortReference(uri), kind: isImageReference(uri) ? 'image' : 'file' });
     }
   }
   const seen = new Set<string>();
@@ -322,6 +431,26 @@ function collectMediaItems(payload: unknown): Array<{ uri: string; label: string
     seen.add(dedupeKey);
     return true;
   });
+}
+
+function renderMediaPreview(item: PinMediaItem): string {
+  const download = isDownloadableMediaReference(item.uri)
+    ? `<button type="button" data-browser-download-ref="${escapeHtml(item.uri)}">Download</button>`
+    : '';
+  return `<article class="browser-pin-media-card" data-browser-media-preview-ref="${escapeHtml(item.uri)}">
+    <div class="browser-pin-media-preview" data-browser-media-preview-slot>Image preview</div>
+    <div class="browser-pin-media-label">${linkHtml(item.uri, item.label)}</div>
+    ${download}
+  </article>`;
+}
+
+function renderFileRow(item: PinMediaItem): string {
+  const link = linkHtml(item.uri, item.label);
+  const description = item.description ? `<small>${escapeHtml(item.description)}</small>` : '';
+  const download = isDownloadableMediaReference(item.uri)
+    ? `<button type="button" data-browser-download-ref="${escapeHtml(item.uri)}">Download</button>`
+    : '';
+  return `<div class="browser-pin-file-row"><span>${link}${description}</span>${download}</div>`;
 }
 
 function renderMediaItems(resource: BrowserResourceEnvelope): string {
@@ -335,13 +464,34 @@ function renderMediaItems(resource: BrowserResourceEnvelope): string {
   if (!items.length) {
     return '<p>No related media or file references found.</p>';
   }
-  return items.map((item) => {
-    const link = linkHtml(item.uri, item.label);
-    const download = isDownloadableMediaReference(item.uri)
-      ? `<button type="button" data-browser-download-ref="${escapeHtml(item.uri)}">Download</button>`
-      : '';
-    return `<div class="browser-pin-file-row"><span>${link}</span>${download}</div>`;
-  }).join('');
+  const previews = items.filter((item) => item.kind === 'image');
+  const files = items.filter((item) => item.kind !== 'image');
+  return `${previews.length ? `<div class="browser-pin-media-grid">${previews.map(renderMediaPreview).join('')}</div>` : ''}${files.length ? `<div class="browser-pin-file-list">${files.map(renderFileRow).join('')}</div>` : ''}`;
+}
+
+function renderRelatedLinks(resource: BrowserResourceEnvelope): string {
+  const contentType = contentTypeValue(resource);
+  const payload = payloadValue(resource);
+  const rawPayload = data(resource).rawPayload;
+  const source = contentType.includes('json') ? parseJsonPayload(payload, rawPayload) : payload;
+  const uris = new Set<string>();
+  collectBrowserUris(source, uris);
+  if (!uris.size) {
+    return '<p>No related Browser links found.</p>';
+  }
+  return `<div class="browser-pin-link-list">${Array.from(uris).map((uri) => linkHtml(uri, shortReference(uri), '', 'browser-pin-link-pill')).join('')}</div>`;
+}
+
+function metaPill(value: unknown): string {
+  const normalized = text(value);
+  return normalized ? `<span class="browser-pin-meta-pill">${escapeHtml(normalized)}</span>` : '';
+}
+
+function versionLabel(version: Record<string, unknown>, pin: Record<string, unknown>): string {
+  const selector = text(version.versionSelector);
+  if (selector === 'latest') return 'latest effective version';
+  if (selector === 'history-index') return `history version ${text(version.historyIndex) || '0'}`;
+  return text(pin.version) ? `version ${text(pin.version)}` : selector;
 }
 
 export function renderPinInspectorHtml(resource: BrowserResourceEnvelope, headingOverride = ''): string {
@@ -352,13 +502,20 @@ export function renderPinInspectorHtml(resource: BrowserResourceEnvelope, headin
 
   const txid = text(pin.txid ?? recordValue.txid);
   const contentType = contentTypeValue(resource);
+  const path = text(pin.path ?? recordValue.path);
+  const chain = text(pin.chainName ?? recordValue.chainName ?? recordValue.chain);
+  const pinVersion = text(pin.version ?? recordValue.version);
+  const metaPills = [
+    metaPill(path),
+    metaPill(text(pin.contentType ?? recordValue.contentType ?? resource.renderer.contentType)),
+    metaPill(versionLabel(version, pin)),
+  ].filter(Boolean).join('');
   const facts = [
     { key: 'txid', value: txid, copyValue: txid || undefined },
-    { key: 'path', value: text(pin.path ?? recordValue.path) },
-    { key: 'requestedPinId', value: text(version.requestedPinId) },
-    { key: 'resolvedPinId', value: text(version.resolvedPinId ?? pin.pinId ?? recordValue.pinId ?? recordValue.id) },
-    { key: 'versionSelector', value: text(version.versionSelector) },
-    { key: 'contentType', value: text(pin.contentType ?? recordValue.contentType ?? resource.renderer.contentType) },
+    { key: 'chain', value: chain },
+    { key: 'content-type', value: text(pin.contentType ?? recordValue.contentType ?? resource.renderer.contentType) },
+    { key: 'path', value: path },
+    { key: 'version', value: pinVersion || text(version.versionSelector) },
   ].filter((item) => text(item.value) !== '');
 
   return `${PIN_INSPECTOR_PAGE_STYLE}<article class="browser-protocol-detail browser-pin-inspector browser-pin-page">
@@ -366,19 +523,22 @@ export function renderPinInspectorHtml(resource: BrowserResourceEnvelope, headin
       <div class="browser-pin-page-copy">
         <p class="browser-pin-page-eyebrow">${escapeHtml(text(pin.path ?? recordValue.path) || contentType || 'Pin detail')}</p>
         <h2>${escapeHtml(heading)}</h2>
+        ${metaPills ? `<div class="browser-pin-meta-pills">${metaPills}</div>` : ''}
       </div>
       <div class="browser-pin-page-actions">
         ${txid ? `<button type="button" data-browser-copy-value="${escapeHtml(txid)}">Copy TxID</button>` : ''}
+        <button type="button" data-browser-open-raw-record>View Raw Record</button>
       </div>
     </header>
     <div class="browser-pin-page-grid">
       <div class="browser-pin-stack">
-        ${sectionBlock('Payload', renderPayload(resource), payloadIntro(resource))}
+        ${sectionBlock('Payload Render', renderPayload(resource), payloadIntro(resource))}
         ${sectionBlock('Raw Payload', renderRawPayload(resource), rawIntro())}
         ${sectionBlock('Related Media', renderMediaItems(resource), mediaIntro())}
       </div>
       <aside class="browser-pin-aside">
-        ${sectionBlock('Verify', `${facts.length ? infoList(facts) : '<p>No pin facts available.</p>'}<details><summary>Raw MAN pin record</summary>${jsonBlock(recordValue)}</details>`, verifyIntro())}
+        ${sectionBlock('Related Links', renderRelatedLinks(resource))}
+        ${sectionBlock('Verify', `${facts.length ? infoList(facts) : '<p>No pin facts available.</p>'}<details class="browser-pin-raw-record" data-browser-pin-raw-record><summary>Raw MAN pin record</summary>${jsonBlock(recordValue)}</details>`, verifyIntro())}
       </aside>
     </div>
   </article>`;

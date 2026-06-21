@@ -145,10 +145,19 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
 
   assert.match(html, /browser-pin-page/);
   assert.match(html, /Readable Pin/);
-  assert.match(html, /<h3>Payload<\/h3>/);
+  assert.match(html, /browser-pin-meta-pills/);
+  assert.match(html, /<h3>Payload Render<\/h3>/);
+  assert.match(html, /browser-pin-json-doc/);
+  assert.match(html, /browser-pin-json-key">content</);
   assert.match(html, /<h3>Raw Payload<\/h3>/);
   assert.match(html, /<h3>Related Media<\/h3>/);
+  assert.match(html, /browser-pin-media-grid/);
+  assert.match(html, /data-browser-media-preview-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0"/);
+  assert.match(html, /<h3>Related Links<\/h3>/);
+  assert.match(html, /browser-pin-link-pill/);
   assert.match(html, /<h3>Verify<\/h3>/);
+  assert.match(html, /View Raw Record/);
+  assert.match(html, /data-browser-pin-raw-record/);
   assert.match(html, /guide\.pdf/);
   assert.match(html, /fixture\.zip/);
   assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
@@ -156,10 +165,12 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
   assert.match(html, /data-browser-download-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0\.zip"/);
   assert.match(html, /data-browser-download-ref="https:\/\/files\.example\/guide\.pdf"/);
   assert.match(html, /data-browser-copy-value="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/);
+  assert.doesNotMatch(html, /requestedPinId/);
+  assert.doesNotMatch(html, /resolvedPinId/);
   assert.doesNotMatch(html, /<h3>Identity<\/h3>/);
   assert.doesNotMatch(html, /<h3>Overview<\/h3>/);
-  assert.doesNotMatch(html, /<h3>Media<\/h3>/);
-  assert.doesNotMatch(html, /<h3>Related Links<\/h3>/);
+  assert.doesNotMatch(html, /Content-type routing model/);
+  assert.doesNotMatch(html, /why-this-direction/);
 });
 
 test('UI renders host-action resources as trusted action panels', () => {

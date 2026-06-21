@@ -235,6 +235,38 @@ test('resolveDownloadHref maps metafile and external URLs but rejects Browser-na
   assert.equal(context.resolveDownloadHref('metaid://idq1fixturebot'), '');
 });
 
+test('resolveMediaPreviewHref maps image-capable references and rejects navigation-only URIs', () => {
+  const { context } = createContext();
+
+  assert.match(context.resolveMediaPreviewHref('metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0'), /f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0/i);
+  assert.equal(context.resolveMediaPreviewHref('https://files.example/preview.png'), 'https://files.example/preview.png');
+  assert.equal(context.resolveMediaPreviewHref('pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0'), '');
+  assert.equal(context.resolveMediaPreviewHref('metaid://idq1fixturebot'), '');
+});
+
+test('openPinRawRecord opens the raw MAN record details panel', () => {
+  const { context } = createContext();
+  const details = {
+    open: false,
+    scrolled: false,
+    scrollIntoView() { this.scrolled = true; },
+  };
+  const page = {
+    querySelector(selector) {
+      return selector === '[data-browser-pin-raw-record]' ? details : null;
+    },
+  };
+  const trigger = {
+    closest(selector) {
+      return selector === '.browser-pin-page' ? page : null;
+    },
+  };
+
+  assert.equal(context.openPinRawRecord(trigger), true);
+  assert.equal(details.open, true);
+  assert.equal(details.scrolled, true);
+});
+
 test('copyValue forwards generic page-body copy affordances through Browser copy helper', async () => {
   const { context, clipboardWrites } = createContext();
 
