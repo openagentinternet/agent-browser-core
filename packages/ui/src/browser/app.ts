@@ -977,15 +977,33 @@ function runtimeLabel(key, fallback) {
   return browserText('runtime.' + key, raw);
 }
 
+function effectiveActor(actor) {
+  if (!actor || typeof actor !== 'object') return actor || null;
+  var runtime = state.runtime || {};
+  var defaultActor = runtime.defaultActor;
+  if (!defaultActor || textValue(defaultActor.id) !== textValue(actor.id)) return actor;
+  if (textValue(actor.avatar)) return actor;
+  var merged = {};
+  Object.keys(actor).forEach(function (key) {
+    merged[key] = actor[key];
+  });
+  if (!textValue(merged.avatar) && textValue(defaultActor.avatar)) merged.avatar = defaultActor.avatar;
+  if (!textValue(merged.label) && textValue(defaultActor.label)) merged.label = defaultActor.label;
+  if (!textValue(merged.kind) && textValue(defaultActor.kind)) merged.kind = defaultActor.kind;
+  if (!textValue(merged.globalMetaId) && textValue(defaultActor.globalMetaId)) merged.globalMetaId = defaultActor.globalMetaId;
+  if (!textValue(merged.address) && textValue(defaultActor.address)) merged.address = defaultActor.address;
+  return merged;
+}
+
 function selectedActor() {
   var actors = runtimeActors();
   var targetId = textValue(state.actorId);
   for (var index = 0; index < actors.length; index += 1) {
     if (textValue(actors[index] && actors[index].id) === targetId) {
-      return actors[index];
+      return effectiveActor(actors[index]);
     }
   }
-  return state.runtime && state.runtime.defaultActor ? state.runtime.defaultActor : null;
+  return effectiveActor(state.runtime && state.runtime.defaultActor ? state.runtime.defaultActor : null);
 }
 
 function actorDefaultUri(actor) {
@@ -2059,13 +2077,18 @@ function openUsingIdentitySelector() {
   elements.modalRoot.innerHTML = '<section class="browser-modal-panel" role="dialog" aria-modal="true">' +
     '<header><h2>' + escapeHtml(browserText('modal.usingActorTitle', runtimeLabel('actorChip', 'Using') + ' Actor')) + '</h2><button type="button" data-browser-modal-close aria-label="' + escapeHtml(browserText('modal.close', 'Close')) + '">' + escapeHtml(browserText('modal.close', 'Close')) + '</button></header>' +
     '<div class="browser-modal-body"><div class="browser-using-options">' + actors.map(function (actor) {
-      var actorId = textValue(actor && actor.id);
-      var name = textValue(actor && actor.label) || actorId || 'Actor';
-      var globalMetaId = textValue(actor && actor.globalMetaId);
+      var actorData = effectiveActor(actor);
+      var actorId = textValue(actorData && actorData.id);
+      var name = textValue(actorData && actorData.label) || actorId || 'Actor';
+      var globalMetaId = textValue(actorData && actorData.globalMetaId);
       var selected = state.actorId && actorId === state.actorId;
       return '<button type="button" data-browser-actor-id="' + escapeHtml(actorId) + '"' + (selected ? ' aria-current="true"' : '') + '>' +
-        '<strong>' + escapeHtml(name) + '</strong>' +
-        (globalMetaId ? '<span>' + escapeHtml(globalMetaId) + '</span>' : '') +
+        '<span style="display:inline-flex;align-items:center;gap:8px;min-width:0;">' +
+          avatarHtml(actorData && actorData.avatar, name, 'browser-chip-avatar') +
+          '<span class="browser-chip-copy"><span class="browser-chip-title">' + escapeHtml(name) + '</span>' +
+            (globalMetaId ? '<span class="browser-chip-subtitle">' + escapeHtml(globalMetaId) + '</span>' : '') +
+          '</span>' +
+        '</span>' +
         '</button>';
     }).join('') + '</div></div></section>';
 }
@@ -2074,6 +2097,7 @@ async function selectUsingIdentity(slug) {
   var selectedId = textValue(slug);
   var actors = runtimeActors();
   var selected = null;
+  var previousDefaultActor = state.runtime && state.runtime.defaultActor ? state.runtime.defaultActor : null;
   for (var index = 0; index < actors.length; index += 1) {
     if (textValue(actors[index] && actors[index].id) === selectedId) {
       selected = actors[index];
@@ -2093,6 +2117,14 @@ async function selectUsingIdentity(slug) {
     Object.keys(actor).forEach(function (key) {
       nextActor[key] = actor[key];
     });
+    if (
+      previousDefaultActor &&
+      textValue(previousDefaultActor.id) === actorId &&
+      !textValue(nextActor.avatar) &&
+      textValue(previousDefaultActor.avatar)
+    ) {
+      nextActor.avatar = previousDefaultActor.avatar;
+    }
     nextActor.isDefault = actorId === selectedId;
     return nextActor;
   });
@@ -2102,6 +2134,15 @@ async function selectUsingIdentity(slug) {
       selected = updatedActors[updatedIndex];
       break;
     }
+  }
+  if (
+    selected &&
+    !textValue(selected.avatar) &&
+    previousDefaultActor &&
+    textValue(previousDefaultActor.id) === selectedId &&
+    textValue(previousDefaultActor.avatar)
+  ) {
+    selected.avatar = previousDefaultActor.avatar;
   }
   state.runtime.defaultActor = selected;
   state.runtime.defaultUri = actorDefaultUri(selected) || null;

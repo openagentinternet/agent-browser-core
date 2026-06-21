@@ -851,6 +851,51 @@ test('Browser using identity selector switches identity and reloads current URI 
   assert.equal(context.state.historyIndex, 0);
 });
 
+test('Browser using identity chip and selector render actor avatars when runtime provides them', async () => {
+  const reviewerAvatar = 'https://so.example.test/content/reviewer-avatar';
+  const workerAvatar = 'https://so.example.test/content/worker-avatar';
+  const reviewerActor = {
+    id: 'reviewer',
+    label: 'Reviewer Bot',
+    kind: 'oac-bot',
+    globalMetaId: 'idq1reviewer',
+    avatar: reviewerAvatar,
+    isDefault: false,
+    capabilities: ['private-chat', 'service-call', 'template-settings'],
+  };
+  const workerActor = { ...defaultActor };
+  const { context, elements, fetchCalls } = createBrowserContext({
+    runtimeResponse: runtimePayload({
+      actors: [workerActor, reviewerActor],
+      defaultActor: { ...workerActor, avatar: workerAvatar },
+      defaultUri: 'metaid://idq1worker',
+    }),
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
+
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /browser-avatar-image/);
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /worker-avatar/);
+
+  elements['[data-browser-using-selector]'].click();
+
+  assert.equal(elements['[data-browser-modal-root]'].hidden, false);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /browser-avatar-image/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /worker-avatar/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /reviewer-avatar/);
+
+  await context.selectUsingIdentity('reviewer');
+  await waitFor(() => fetchCalls.length === 3, 'selected identity reload');
+
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /reviewer-avatar/);
+  assert.doesNotMatch(elements['[data-browser-using-selector]'].innerHTML, /browser-avatar-fallback/);
+
+  await context.selectUsingIdentity('worker');
+  await waitFor(() => fetchCalls.length === 4, 'worker identity reload');
+
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /worker-avatar/);
+});
+
 test('Browser menu is data-driven and opens cache management settings', async () => {
   const { context, elements, fetchCalls } = createBrowserContext();
 
