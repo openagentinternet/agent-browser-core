@@ -89,3 +89,17 @@ test('Browser client script includes mature renderer, modal, owner, and share fl
   assert.match(definition.script, /browser-inspector/);
   assert.match(definition.script, /browser-html-frame" sandbox="allow-scripts"/);
 });
+
+test('Browser page HTML preserves inline script text containing dollar signs', async () => {
+  const definition = {
+    ...ui.buildBrowserPageDefinition(),
+    script: "const marker = '$\\''; window.__browserMarker = marker;",
+  };
+
+  const html = await ui.renderBrowserPageHtml(definition);
+
+  assert.equal((html.match(/<script>/g) || []).length, 1);
+  assert.equal((html.match(/<\/script>/g) || []).length, 1);
+  assert.match(html, /window\.__browserMarker = marker;/);
+  assert.doesNotMatch(html, /<body>[\s\S]*<script>\s*const marker = '\$\'';\s*<\/script>[\s\S]*<\/body>/);
+});

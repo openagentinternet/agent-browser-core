@@ -63,7 +63,7 @@ test('Generic renderer escapes raw payload and displays version identity', () =>
 
   assert.match(html, /<h3>Payload<\/h3>/);
   assert.match(html, /<h3>Raw Payload<\/h3>/);
-  assert.match(html, /<h3>Pin Facts<\/h3>/);
+  assert.match(html, /<h3>Verify<\/h3>/);
   assert.doesNotMatch(html, /<h3>Identity<\/h3>/);
   assert.doesNotMatch(html, /<h3>Overview<\/h3>/);
   assert.doesNotMatch(html, /<h3>Media<\/h3>/);
@@ -130,12 +130,12 @@ test('Pin inspector renders JSON payload first with related files and pin facts 
     rawPayload: '{"title":"Inspectable pin","images":["metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0"]}',
   }));
 
-  assert.match(html, /browser-pin-inspector/);
+  assert.match(html, /browser-pin-page/);
   assert.match(html, /Inspectable pin/);
   assert.match(html, /<h3>Payload<\/h3>/);
   assert.match(html, /browser-protocol-json/);
   assert.match(html, /<h3>Raw Payload<\/h3>/);
-  assert.match(html, /<h3>Related Media And Files<\/h3>/);
+  assert.match(html, /<h3>Related Media<\/h3>/);
   assert.match(html, /archive\.zip/);
   assert.match(html, /fixture\.zip/);
   assert.match(html, /guide\.pdf/);
@@ -144,12 +144,12 @@ test('Pin inspector renders JSON payload first with related files and pin facts 
   assert.match(html, /data-browser-download-ref="https:\/\/files\.example\/guide\.pdf"/);
   assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
   assert.match(html, /href="pin:\/\/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0" data-browser-map-link/);
-  assert.match(html, /<h3>Pin Facts<\/h3>/);
+  assert.match(html, /<h3>Verify<\/h3>/);
   assert.match(html, /data-browser-copy-value="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/);
   assert.match(html, /requestedPinId/);
   assert.match(html, /resolvedPinId/);
-  assert.match(html, /rootPinId/);
-  assert.match(html, /historyIndex/);
+  assert.doesNotMatch(html, /rootPinId/);
+  assert.doesNotMatch(html, /historyIndex/);
   assert.match(html, /versionSelector/);
   assert.match(html, /contentType/);
   assert.match(html, /Raw MAN pin record/);

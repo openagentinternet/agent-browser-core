@@ -628,14 +628,14 @@ test('pin-inspector renderer uses payload-first mature shell sections', async ()
     owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
   }));
 
-  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-pin-inspector'), 'pin page render');
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-pin-page'), 'pin page render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
-  assert.match(html, /browser-pin-inspector/);
+  assert.match(html, /browser-pin-page/);
   assert.match(html, /Readable Pin/);
   assert.match(html, /<h3>Payload<\/h3>/);
   assert.match(html, /<h3>Raw Payload<\/h3>/);
-  assert.match(html, /<h3>Related Media And Files<\/h3>/);
-  assert.match(html, /<h3>Pin Facts<\/h3>/);
+  assert.match(html, /<h3>Related Media<\/h3>/);
+  assert.match(html, /<h3>Verify<\/h3>/);
   assert.match(html, /guide\.pdf/);
   assert.match(html, /fixture\.zip/);
   assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);

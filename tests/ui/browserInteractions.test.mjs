@@ -152,5 +152,5 @@ test('mobile topbar reserves space for nav address and menu trigger', () => {
 
 test('pin file rows keep download actions reachable on narrow widths', () => {
   assert.match(ui.BROWSER_PAGE_STYLES, /\.browser-pin-file-row span \{ min-width: 0; \}/);
-  assert.match(ui.BROWSER_PAGE_STYLES, /\.browser-pin-file-row a \{ color: #2563eb; text-decoration: none; overflow-wrap: anywhere; \}/);
+  assert.match(ui.BROWSER_PAGE_STYLES, /\.browser-pin-file-row a \{ color: #2e6fed; text-decoration: none; overflow-wrap: anywhere; \}/);
 });

@@ -40,28 +40,47 @@ export const BROWSER_PAGE_STYLES = `
     .browser-resource-section { background: #fff; border: 1px solid #d1d5db; padding: 12px; }
     .browser-resource-list { display: grid; gap: 8px; }
     .browser-resource-list-item { border-top: 1px solid #e5e7eb; padding-top: 8px; }
-    .browser-protocol-detail { max-width: 920px; margin: 0 auto; display: grid; gap: 14px; }
-    .browser-pin-header { display: grid; gap: 4px; padding: 2px 0; }
-    .browser-pin-header p { margin: 0; color: #6b7280; font-size: 12px; }
-    .browser-pin-header h2 { margin: 0; font-size: 28px; line-height: 1.2; }
-    .browser-pin-section { background: #fff; border: 1px solid #d1d5db; padding: 16px; }
-    .browser-pin-section h3 { margin: 0 0 12px; font-size: 16px; }
-    .browser-protocol-json, .browser-protocol-raw, .browser-pin-text { margin: 0; overflow: auto; padding: 14px; border-radius: 6px; background: #f8fafc; color: #111827; font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    .browser-pin-markdown { display: grid; gap: 10px; line-height: 1.65; }
+    .browser-protocol-detail, .browser-pin-page { width: min(1380px, calc(100vw - 28px)); max-width: none; margin: 18px auto 36px; display: grid; gap: 18px; }
+    .browser-pin-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 4px 2px 0; flex-wrap: wrap; }
+    .browser-pin-page-copy { display: grid; gap: 6px; min-width: 0; }
+    .browser-pin-page-eyebrow { margin: 0; color: #6a778b; font-size: 12px; font-weight: 700; letter-spacing: .01em; }
+    .browser-pin-page-head h2 { margin: 0; font-size: 30px; line-height: 1.08; }
+    .browser-pin-page-subtitle { margin: 0; color: #6a778b; font-size: 14px; }
+    .browser-pin-page-actions { display: flex; align-items: flex-start; flex-shrink: 0; gap: 8px; }
+    .browser-pin-page-actions button { min-height: 34px; border: 1px solid #d9e1ed; border-radius: 10px; background: #fff; color: #162132; padding: 7px 12px; font-size: 12px; font-weight: 700; }
+    .browser-pin-page-grid { display: grid; grid-template-columns: minmax(0, 1.58fr) minmax(300px, 320px); gap: 16px; align-items: start; }
+    .browser-pin-stack, .browser-pin-aside { display: grid; gap: 18px; align-content: start; }
+    .browser-pin-section { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid #d9e1ed; border-radius: 14px; background: rgba(255, 255, 255, .92); box-shadow: 0 18px 46px rgba(19, 35, 67, .08), 0 3px 12px rgba(19, 35, 67, .04); }
+    .browser-pin-aside .browser-pin-section { background: rgba(255, 255, 255, .82); }
+    .browser-pin-section h3 { margin: 0; font-size: 15px; }
+    .browser-pin-intro { margin: 0; color: #6a778b; font-size: 13px; line-height: 1.45; }
+    .browser-protocol-json, .browser-protocol-raw, .browser-pin-text { margin: 0; overflow: auto; padding: 16px; border-radius: 12px; background: #182235; color: #d7e3f0; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .browser-pin-markdown { display: grid; gap: 10px; line-height: 1.7; color: #162132; }
     .browser-pin-markdown h1, .browser-pin-markdown h2, .browser-pin-markdown h3, .browser-pin-markdown p { margin: 0; }
-    .browser-pin-markdown a { color: #2563eb; text-decoration: none; }
+    .browser-pin-markdown a { color: #2e6fed; text-decoration: none; }
     .browser-pin-markdown a:hover { text-decoration: underline; }
-    .browser-pin-binary-notice { margin: 0; color: #4b5563; }
+    .browser-pin-binary-notice { margin: 0; color: #6a778b; }
     .browser-protocol-proof { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 10px 14px; margin: 0; }
-    .browser-protocol-proof dt { color: #4b5563; }
+    .browser-protocol-proof dt { color: #6a778b; font-size: 12px; font-weight: 700; }
     .browser-protocol-proof dd { margin: 0; overflow-wrap: anywhere; }
-    .browser-protocol-proof dd button { margin-left: 8px; border: 1px solid #d1d5db; background: #fff; padding: 4px 8px; }
-    .browser-pin-file-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #e5e7eb; }
+    .browser-protocol-proof dd button { margin-left: 8px; border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; padding: 4px 8px; }
+    .browser-pin-file-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #e6ebf2; }
     .browser-pin-file-row:first-of-type { border-top: 0; padding-top: 0; }
     .browser-pin-file-row span { min-width: 0; }
-    .browser-pin-file-row a { color: #2563eb; text-decoration: none; overflow-wrap: anywhere; }
+    .browser-pin-file-row a { color: #2e6fed; text-decoration: none; overflow-wrap: anywhere; }
     .browser-pin-file-row a:hover { text-decoration: underline; }
-    .browser-pin-file-row button { border: 1px solid #d1d5db; background: #fff; padding: 6px 10px; white-space: nowrap; }
+    .browser-pin-file-row button { border: 1px solid #d9e1ed; border-radius: 9px; background: #fff; padding: 6px 10px; white-space: nowrap; }
+    @media (max-width: 1100px) {
+      .browser-pin-page-grid { grid-template-columns: minmax(0, 1fr); }
+    }
+    @media (max-width: 720px) {
+      .browser-pin-page { width: calc(100vw - 16px); margin: 12px auto 24px; gap: 14px; }
+      .browser-pin-page-head { flex-direction: column; }
+      .browser-pin-page-actions { width: 100%; }
+      .browser-pin-page-actions button { width: 100%; }
+      .browser-protocol-proof { grid-template-columns: 1fr; }
+      .browser-pin-file-row { flex-direction: column; align-items: flex-start; }
+    }
     .browser-html-frame, .browser-pdf { width: 100%; height: 100%; min-height: 520px; border: 0; background: #fff; }
     .browser-image, .browser-video { display: block; max-width: 100%; margin: 0 auto; }
     .browser-modal { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; padding: 18px; }

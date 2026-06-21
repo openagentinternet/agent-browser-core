@@ -143,12 +143,12 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
     sections: [],
   });
 
-  assert.match(html, /browser-pin-inspector/);
+  assert.match(html, /browser-pin-page/);
   assert.match(html, /Readable Pin/);
   assert.match(html, /<h3>Payload<\/h3>/);
   assert.match(html, /<h3>Raw Payload<\/h3>/);
-  assert.match(html, /<h3>Related Media And Files<\/h3>/);
-  assert.match(html, /<h3>Pin Facts<\/h3>/);
+  assert.match(html, /<h3>Related Media<\/h3>/);
+  assert.match(html, /<h3>Verify<\/h3>/);
   assert.match(html, /guide\.pdf/);
   assert.match(html, /fixture\.zip/);
   assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
