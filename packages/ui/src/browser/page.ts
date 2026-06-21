@@ -21,13 +21,13 @@ export async function renderBrowserPageHtml(
 ): Promise<string> {
   const content = definition.contentHtml ?? '';
   return BROWSER_INDEX_HTML
-    .replace(/<html lang="en">/g, `<html lang="${escapeHtml(normalizedLanguage(languagePreference))}">`)
-    .replace(/__PAGE_TITLE__/g, escapeHtml(definition.title))
-    .replace(/__PAGE_EYEBROW__/g, escapeHtml(definition.eyebrow))
-    .replace(/__PAGE_HEADING__/g, escapeHtml(definition.heading))
-    .replace(/__PAGE_DESCRIPTION__/g, escapeHtml(definition.description))
-    .replace(/__PAGE_NAV__/g, '')
-    .replace(/__PAGE_PANELS__/g, '')
-    .replace(/__PAGE_CONTENT__/g, content)
-    .replace(/__PAGE_SCRIPT__/g, definition.script);
+    .split('<html lang="en">').join(`<html lang="${escapeHtml(normalizedLanguage(languagePreference))}">`)
+    .split('__PAGE_TITLE__').join(escapeHtml(definition.title))
+    .split('__PAGE_EYEBROW__').join(escapeHtml(definition.eyebrow))
+    .split('__PAGE_HEADING__').join(escapeHtml(definition.heading))
+    .split('__PAGE_DESCRIPTION__').join(escapeHtml(definition.description))
+    .split('__PAGE_NAV__').join('')
+    .split('__PAGE_PANELS__').join('')
+    .split('__PAGE_CONTENT__').join(content)
+    .split('__PAGE_SCRIPT__').join(definition.script);
 }
