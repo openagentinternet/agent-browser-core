@@ -90,15 +90,8 @@ test('Browser client script includes mature renderer, modal, owner, and share fl
   assert.match(definition.script, /browser-html-frame" sandbox="allow-scripts"/);
 });
 
-test('Browser loading feedback renders skeleton, spinner, and fade-in CSS', async () => {
+test('Browser loading feedback renders reload spinner and fade-in CSS', async () => {
   const html = await ui.renderBrowserPageHtml();
-
-  assert.match(template, /\.browser-skeleton \{/);
-  assert.match(template, /\.browser-skeleton-avatar \{/);
-  assert.match(template, /\.browser-skeleton-line\.browser-skeleton-title \{/);
-  assert.match(template, /\.browser-skeleton-rowicon \{/);
-  assert.match(template, /animation: browser-shimmer 1\.4s ease-in-out infinite/);
-  assert.match(template, /@keyframes browser-shimmer/);
 
   assert.match(template, /\.browser-icon-button\.is-loading \{/);
   assert.match(template, /\.browser-icon-button\.is-loading::after \{/);
@@ -110,24 +103,19 @@ test('Browser loading feedback renders skeleton, spinner, and fade-in CSS', asyn
   assert.match(template, /from \{ opacity: 0; transform: translateY\(6px\); \}/);
 
   // CSS also surfaces in the rendered HTML (styles are inlined into the shell).
-  assert.match(html, /browser-skeleton/);
-  assert.match(html, /browser-shimmer/);
+  assert.match(html, /browser-spin/);
 });
 
-test('Browser client script exposes loading-state helpers and skeleton markup', () => {
+test('Browser client script exposes loading-state helpers', () => {
   const definition = ui.buildBrowserPageDefinition();
 
-  assert.match(definition.script, /function skeletonHtml\(\)/);
   assert.match(definition.script, /function showLoadingState\(\)/);
   assert.match(definition.script, /function clearLoadingState\(\)/);
   assert.match(definition.script, /function triggerEnterAnimation\(node\)/);
 
-  assert.match(definition.script, /'<div class="browser-skeleton">'/);
-  assert.match(definition.script, /browser-skeleton-hero/);
-  assert.match(definition.script, /browser-skeleton-avatar/);
-  assert.match(definition.script, /browser-skeleton-rowbars/);
+  // Loading state clears the viewport to the browser background (no skeleton markup).
+  assert.match(definition.script, /elements\.viewport\.innerHTML = '';/);
 
-  assert.match(definition.script, /state\.loading = true;/);
   assert.match(definition.script, /elements\.reload\.classList\.add\('is-loading'\)/);
   assert.match(definition.script, /elements\.reload\.disabled = true;/);
   assert.match(definition.script, /elements\.reload\.classList\.remove\('is-loading'\)/);
