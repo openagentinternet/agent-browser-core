@@ -117,6 +117,10 @@ var browserSettingsTabs = ${JSON.stringify(BROWSER_SETTINGS_TABS)};
 var browserBaseUrlFields = ${JSON.stringify(BROWSER_BASE_URL_FIELDS)};
 var browserBotHomepageTemplates = ${JSON.stringify(BROWSER_BOT_HOMEPAGE_TEMPLATES)};
 var CUSTOM_BOT_PAGE_HELP = 'When enabled, Bot Pages can render the custom MetaApp or Metafile declared on /info/homepage. When disabled, Browser always uses the selected built-in template.';
+var OFFICIAL_RECOMMENDATIONS = [
+  { uri: 'metaapp://agent-browser', title: 'Agent Browser', kind: 'official' },
+  { uri: 'metaid://docsbot', title: 'Docs Bot', kind: 'official' }
+];
 var browserEndpoints = {
   runtime: '/api/browser/runtime',
   resolve: '/api/browser/resolve',
@@ -153,7 +157,11 @@ var browserLaunchCopy = {
     'bookmark.removed': '已移除书签',
     'bookmark.removeTitle': '移除书签',
     'bookmark.removeConfirm': '确定要移除该书签吗？',
-    'bookmark.removeLabel': '移除'
+    'bookmark.removeLabel': '移除',
+    'welcome.title': 'Agent Internet',
+    'welcome.subtitle': '在地址栏输入 metaid:// URI 即可访问',
+    'welcome.promptPlaceholder': 'metaid://',
+    'welcome.gridHeading': '书签 / 最近访问'
   }
 };
 
@@ -1072,6 +1080,63 @@ function renderOwnerToolbar() {
     '<button type="button" data-browser-owner-action="configure-chat">' + escapeHtml(browserText('owner.configureChat', 'Configure Chat')) + '</button>' +
     '<button type="button" data-browser-owner-action="view-messages">' + escapeHtml(browserText('owner.viewMessages', 'View Messages')) + '</button>' +
     '<button type="button" data-browser-owner-action="share">' + escapeHtml(browserText('owner.share', 'Share Bot Page')) + '</button>';
+}
+
+function buildWelcomeShortcutTiles() {
+  var tiles = [];
+  var seenUris = {};
+  function pushTile(item, kind) {
+    var uri = textValue(item.uri);
+    if (!uri || seenUris[uri]) return;
+    seenUris[uri] = true;
+    var resourceName = textValue(item.title) || shortId(uri);
+    var resourceType = textValue(item.resourceType);
+    var iconName = kind === 'official'
+      ? (uri.indexOf('metaapp://') === 0 ? 'service' : 'bot')
+      : (resourceType === 'metaapp' ? 'service' : resourceType === 'bot' ? 'bot' : 'bookmark');
+    var tileClass = kind === 'official' ? 'browser-welcome-tile is-official' : 'browser-welcome-tile';
+    tiles.push('<a class="' + tileClass + '" data-browser-map-link href="' + escapeHtml(uri) + '">' +
+      '<span class="browser-welcome-tile-icon" aria-hidden="true">' + iconHtml(iconName) + '</span>' +
+      '<span class="browser-welcome-tile-label">' + escapeHtml(resourceName) + '</span>' +
+      '<span class="browser-welcome-tile-uri">' + escapeHtml(shortId(uri)) + '</span>' +
+      '</a>');
+  }
+  for (var i = 0; i < state.bookmarks.length; i += 1) pushTile(state.bookmarks[i], 'bookmark');
+  var recent = uniqueRecent();
+  for (var j = 0; j < recent.length; j += 1) pushTile(recent[j], 'recent');
+  for (var k = 0; k < OFFICIAL_RECOMMENDATIONS.length; k += 1) pushTile(OFFICIAL_RECOMMENDATIONS[k], 'official');
+  return tiles.join('');
+}
+
+function renderWelcome() {
+  setStatus('ready', '');
+  state.current = null;
+  renderOwnerToolbar();
+  if (elements.resourceChip) {
+    elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar') +
+      '<span class="browser-chip-copy"><span class="browser-chip-title">' + escapeHtml(browserText('resource.emptyTitle', 'No resource')) + '</span><span class="browser-chip-subtitle">' + escapeHtml(browserText('welcome.title', 'Agent Internet')) + '</span></span>' +
+      '<span class="browser-chip-proof" aria-hidden="true">' + iconHtml('shield') + '</span>';
+  }
+  if (elements.statusProof) elements.statusProof.innerHTML = proofIconHtml('unverified') + '<span>' + escapeHtml(browserText('status.unverified', 'unverified')) + '</span>';
+  if (elements.statusRenderer) elements.statusRenderer.textContent = browserText('status.rendererNone', 'renderer: none');
+  if (elements.statusTxid) elements.statusTxid.textContent = 'TXID: -';
+  if (elements.viewport) {
+    elements.viewport.innerHTML = '<section class="browser-welcome" data-browser-welcome>' +
+      '<div class="browser-welcome-hero">' +
+        '<h1 class="browser-welcome-title">' + escapeHtml(browserText('welcome.title', 'Agent Internet')) + '</h1>' +
+        '<p class="browser-welcome-subtitle">' + escapeHtml(browserText('welcome.subtitle', 'Enter a metaid:// URI in the address bar to visit a resource.')) + '</p>' +
+        '<button type="button" class="browser-welcome-prompt" data-browser-welcome-prompt>' +
+          iconHtml('link') +
+          '<span>' + escapeHtml(browserText('welcome.promptPlaceholder', 'metaid://')) + '</span>' +
+        '</button>' +
+      '</div>' +
+      '<div class="browser-welcome-grid">' +
+        '<h2 class="browser-welcome-heading">' + escapeHtml(browserText('welcome.gridHeading', 'Bookmarks / Recent')) + '</h2>' +
+        buildWelcomeShortcutTiles() +
+      '</div>' +
+    '</section>';
+  }
+  renderBookmarkStar();
 }
 
 function renderNoLocalBot() {
@@ -2634,7 +2699,10 @@ function resolveUrl(uri) {
 
 async function resolveUri(uri, options) {
   var normalizedUri = textValue(uri);
-  if (!normalizedUri) return null;
+  if (!normalizedUri) {
+    renderWelcome();
+    return null;
+  }
   var shouldRecord = !options || options.record !== false;
   if (elements.input) elements.input.value = normalizedUri;
   if (shouldRecord) pushHistory(normalizedUri);
@@ -2718,6 +2786,11 @@ async function initialize() {
   renderBookmarkStar();
   if (elements.viewport) {
     elements.viewport.addEventListener('click', function (event) {
+      var promptTarget = closestWithAttribute(event && event.target, 'data-browser-welcome-prompt');
+      if (promptTarget) {
+        if (elements.input && typeof elements.input.focus === 'function') elements.input.focus();
+        return;
+      }
       var mapLink = closestWithAttribute(event && event.target, 'data-browser-map-link');
       var mapHref = mapLink && mapLink.getAttribute ? mapLink.getAttribute('href') : '';
       if (mapHref) {
@@ -2926,7 +2999,11 @@ async function initialize() {
     await navigateTo(runtime.defaultUri);
     return;
   }
-  renderNoLocalBot();
+  if (!runtimeActors().length) {
+    renderNoLocalBot();
+    return;
+  }
+  renderWelcome();
 }
 
 globalThis.browserEndpoints = browserEndpoints;

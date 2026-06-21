@@ -44,118 +44,7 @@ import {
 } from './metaapp/artifactCache.js';
 
 const STANDALONE_ACTOR_ID = 'standalone-wallet';
-const STANDALONE_DEFAULT_URI = 'metaid://idq1fixturebot';
-const STANDALONE_FIXTURE_GLOBAL_META_ID = 'idq1fixturebot';
 const STANDALONE_METAFILE_CONTENT_BASE_URL = 'https://file.metaid.io/metafile-indexer';
-
-const FIXTURE_BOT_HOMEPAGE: Record<string, unknown> = {
-  schemaVersion: 'botHomepage.v3',
-  resolvedAt: 1780760000000,
-  identity: {
-    globalMetaId: STANDALONE_FIXTURE_GLOBAL_META_ID,
-    legacyMetaId: 'metaid-fixture',
-    display: 'idq1fixture...bot',
-  },
-  profile: {
-    name: 'Fixture Bot',
-    avatar: {
-      pinId: 'avatar-pin',
-      contentType: 'image/png',
-    },
-    bio: 'Builds Agent Browser fixtures.',
-    chatPubkey: '04fixture',
-    homepage: null,
-    pins: {
-      name: 'name-pin',
-      bio: 'bio-pin',
-      chatPubkey: 'chat-pin',
-    },
-  },
-  presence: {
-    state: 'online',
-    updatedAt: 1780760000000,
-    source: 'fixture-presence',
-  },
-  sections: [
-    {
-      id: 'services',
-      title: 'Services',
-      items: [
-        {
-          pinId: 'service-current-pin',
-          protocolPath: '/protocols/skill-service',
-          timestamp: 1780760000000,
-          data: {
-            payload: {
-              displayName: 'Fixture Review',
-              serviceName: 'fixture-review',
-              description: 'Review a fixture payload.',
-              providerSkill: 'fixture-review',
-              price: '0',
-              currency: 'SPACE',
-              paymentChain: 'mvc',
-              paymentAddress: '18FixtureAddress',
-            },
-          },
-        },
-      ],
-    },
-    {
-      id: 'buzzes',
-      title: 'Buzz',
-      items: [
-        {
-          pinId: 'buzz-pin',
-          protocolPath: '/protocols/simplebuzz',
-          timestamp: 1780760000000,
-          data: {
-            payload: {
-              content: 'Published a v3 homepage fixture.',
-            },
-          },
-        },
-      ],
-    },
-    {
-      id: 'metaapps',
-      title: 'MetaApps',
-      items: [
-        {
-          pinId: 'metaapp-pin',
-          protocolPath: '/protocols/metaapp',
-          timestamp: 1780760000000,
-          data: {
-            payload: {
-              title: 'Fixture MetaApp',
-              appName: 'Fixture MetaApp',
-              intro: 'A fixture MetaApp for standalone Browser.',
-            },
-          },
-        },
-      ],
-    },
-  ],
-  actions: [
-    { id: 'message', label: 'Message', kind: 'private-chat', enabled: true, requiresUsingIdentity: true },
-    { id: 'services', label: 'Services', kind: 'service-list', enabled: true, requiresUsingIdentity: true },
-    { id: 'copy-uri', label: 'Copy URI', kind: 'copy', enabled: true, uri: STANDALONE_DEFAULT_URI },
-  ],
-  proofs: {
-    verificationState: 'partial',
-    identity: {
-      pinId: 'name-pin',
-      protocolPath: '/info/name',
-      publisherGlobalMetaId: STANDALONE_FIXTURE_GLOBAL_META_ID,
-      verificationState: 'partial',
-    },
-  },
-  source: {
-    resolver: 'standalone-fixture',
-    fetchedAt: 1780760000000,
-    stale: false,
-  },
-  warnings: [],
-};
 
 export interface StandaloneBrowserPreviewAsset {
   body: Buffer | string;
@@ -288,10 +177,6 @@ function normalizePreviewAssetPath(value: unknown): string | null {
   return normalized;
 }
 
-function isFixtureMetaIdUri(uri: unknown): boolean {
-  return normalizeText(uri).toLowerCase() === STANDALONE_DEFAULT_URI;
-}
-
 function isZipMetaAppContent(contentType: string, contentReference: string): boolean {
   const normalizedType = normalizeText(contentType).toLowerCase();
   const normalizedReference = normalizeText(contentReference).toLowerCase().split(/[?#]/, 1)[0];
@@ -372,17 +257,6 @@ async function downloadMetaAppZipArchive(input: {
     response,
     maxBytes: input.maxBytes ?? DEFAULT_MAX_ZIP_ARCHIVE_BYTES,
   });
-}
-
-function fixtureFetch(): Promise<Response> {
-  return Promise.resolve(new Response(JSON.stringify({
-    code: 0,
-    message: '',
-    data: FIXTURE_BOT_HOMEPAGE,
-  }), {
-    status: 200,
-    headers: { 'content-type': 'application/json; charset=utf-8' },
-  }));
 }
 
 function toBrowserResult<T>(result: CoreBrowserCommandResult<T>): BrowserCommandResult<T> {
@@ -533,7 +407,7 @@ export function createStandaloneBrowserHostAdapter(
       },
       actors: [actor],
       defaultActor: actor,
-      defaultUri: STANDALONE_DEFAULT_URI,
+      defaultUri: null,
       features: {
         privateChat: false,
         serviceCall: false,
@@ -552,9 +426,6 @@ export function createStandaloneBrowserHostAdapter(
   async function resolveResource(resolveInput: BrowserResolveInput): Promise<BrowserCommandResult<BrowserResolveResult>> {
     const actorFailure = resolveActor(resolveInput);
     if (actorFailure) return actorFailure;
-    if (isFixtureMetaIdUri(resolveInput.uri)) {
-      return toBrowserResult(await resolveResourceWithFetch(resolveInput, fixtureFetch));
-    }
     const result = await resolveResourceWithFetch(resolveInput, fetchImpl);
     return toBrowserResult(result);
   }

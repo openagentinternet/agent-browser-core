@@ -50,7 +50,7 @@ test('standalone Browser server serves Browser shell and health route', async (t
     isDefault: true,
     capabilities: ['template-settings'],
   });
-  assert.equal(runtime.data.defaultUri, 'metaid://idq1fixturebot');
+  assert.equal(runtime.data.defaultUri, null);
   assert.deepEqual(runtime.data.labels, {
     actorChip: 'Wallet',
     noActorTitle: 'No Wallet',
@@ -74,12 +74,6 @@ test('standalone Browser server exposes runtime resolve settings cache and actio
   assert.equal(runtime.ok, true);
   assert.equal(runtime.data.host.kind, 'standalone');
   assert.equal(runtime.data.defaultActor.kind, 'wallet');
-
-  const resolved = await json(await fetch(`${baseUrl}/api/browser/resolve?uri=metaid%3A%2F%2Fidq1fixturebot`));
-  assert.equal(resolved.ok, true);
-  assert.equal(resolved.data.resourceType, 'bot');
-  assert.equal(resolved.data.renderer.type, 'bot-page');
-  assert.equal(resolved.data.title, 'Fixture Bot');
 
   const settings = await json(await fetch(`${baseUrl}/api/browser/settings`));
   assert.equal(settings.ok, true);
