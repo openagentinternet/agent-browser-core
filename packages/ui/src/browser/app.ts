@@ -559,9 +559,9 @@ function fillChatPeerProfile(peerId, profile) {
     if (!partnerSpan.length) continue;
     var target = partnerSpan[partnerSpan.length - 1];
     var avatarHtml = avatarUrl
-      ? '<span aria-hidden="true"><img class="browser-avatar-image" src="' + escapeHtml(avatarUrl) + '" alt="" /></span>'
-      : '<span aria-hidden="true">' + escapeHtml(initials(name)) + '</span>';
-    target.innerHTML = avatarHtml + '<span>' + escapeHtml(name) + '</span>';
+      ? '<span style="' + CHAT_PERSON_AVATAR_STYLE + '" aria-hidden="true"><img class="browser-avatar-image" src="' + escapeHtml(avatarUrl) + '" alt="" /></span>'
+      : '<span style="' + CHAT_PERSON_AVATAR_STYLE + '" aria-hidden="true">' + escapeHtml(initials(name)) + '</span>';
+    target.innerHTML = avatarHtml + '<span style="' + CHAT_PERSON_NAME_STYLE + '">' + escapeHtml(name) + '</span>';
   }
 }
 
@@ -2003,17 +2003,18 @@ function renderMetaAppRows(items, emptyText) {
     : '<p class="browser-muted-row">' + escapeHtml(emptyText) + '</p>';
 }
 
+var CHAT_PERSON_AVATAR_STYLE = 'width:18px;height:18px;border-radius:999px;overflow:hidden;background:#e9eef6;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;color:#344054;font-size:10px;font-weight:700;';
+var CHAT_PERSON_NAME_STYLE = 'max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:650;';
+
 function renderActivityPerson(label, avatarUrl, href, dataAttr) {
   var name = textValue(label) || 'Bot';
   var wrapperStyle = 'display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;white-space:nowrap;vertical-align:middle;' +
     (href ? 'text-decoration:none;color:#3558c8;' : 'color:inherit;');
-  var avatarStyle = 'width:18px;height:18px;border-radius:999px;overflow:hidden;background:#e9eef6;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;color:#344054;font-size:10px;font-weight:700;';
-  var nameStyle = 'max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:650;';
   var marker = dataAttr ? ' ' + dataAttr : '';
   var avatar = safeUrl(avatarUrl)
-    ? '<span style="' + avatarStyle + '" aria-hidden="true"><img class="browser-avatar-image" src="' + escapeHtml(avatarUrl) + '" alt="" /></span>'
-    : '<span style="' + avatarStyle + '" aria-hidden="true">' + escapeHtml(initials(name)) + '</span>';
-  var innerHtml = avatar + '<span style="' + nameStyle + '">' + escapeHtml(name) + '</span>';
+    ? '<span style="' + CHAT_PERSON_AVATAR_STYLE + '" aria-hidden="true"><img class="browser-avatar-image" src="' + escapeHtml(avatarUrl) + '" alt="" /></span>'
+    : '<span style="' + CHAT_PERSON_AVATAR_STYLE + '" aria-hidden="true">' + escapeHtml(initials(name)) + '</span>';
+  var innerHtml = avatar + '<span style="' + CHAT_PERSON_NAME_STYLE + '">' + escapeHtml(name) + '</span>';
   return href
     ? '<a href="' + escapeHtml(href) + '" data-browser-map-link' + marker + ' style="' + wrapperStyle + '">' + innerHtml + '</a>'
     : '<span' + marker + ' style="' + wrapperStyle + '">' + innerHtml + '</span>';
