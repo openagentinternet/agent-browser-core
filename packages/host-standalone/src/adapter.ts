@@ -7,6 +7,7 @@ import {
   buildMetafileAcceleratedContentUrl,
   resolveBrowserConfig,
   resolveBrowserResource,
+  fetchBotProfileInfo,
   type BrowserCommandResult as CoreBrowserCommandResult,
   type BrowserConfigContainer,
   type BrowserNameAliasProvider,
@@ -58,6 +59,7 @@ export interface StandaloneBrowserPreviewAssetInput {
 
 export interface StandaloneBrowserHostAdapter extends BrowserHostAdapter {
   resolvePreviewAsset(input: StandaloneBrowserPreviewAssetInput): Promise<BrowserCommandResult<StandaloneBrowserPreviewAsset>>;
+  resolveBotProfile(input: { globalMetaId: string }): Promise<BrowserCommandResult<{ globalMetaId: string; name: string; avatar: string }>>;
 }
 
 export interface CreateStandaloneBrowserHostAdapterInput {
@@ -573,9 +575,35 @@ export function createStandaloneBrowserHostAdapter(
     }
   }
 
+  async function resolveBotProfile(input: { globalMetaId: string }): Promise<BrowserCommandResult<{ globalMetaId: string; name: string; avatar: string }>> {
+    const targetId = typeof input.globalMetaId === 'string' ? input.globalMetaId.trim() : '';
+    if (!targetId) {
+      return browserFailure('missing_argument', 'globalMetaId query parameter is required.');
+    }
+    const browserConfig = resolveBrowserConfig(config, env);
+    const profile = await fetchBotProfileInfo({
+      baseUrl: browserConfig.metasoP2PBaseUrl,
+      globalMetaId: targetId,
+      fetch: fetchImpl,
+      metafileContentBaseUrl: browserConfig.metafileContentBaseUrl,
+    });
+    if (!profile) {
+      return browserFailure('browser_resource_not_found', `Bot profile not found for ${targetId}.`);
+    }
+    const resolvedId = typeof profile.globalMetaId === 'string' ? profile.globalMetaId : targetId;
+    const resolvedName = typeof profile.name === 'string' ? profile.name : targetId;
+    const resolvedAvatar = typeof profile.avatar === 'string' ? profile.avatar : '';
+    return browserSuccess({
+      globalMetaId: resolvedId,
+      name: resolvedName,
+      avatar: resolvedAvatar,
+    });
+  }
+
   return {
     getRuntime,
     resolveResource,
+    resolveBotProfile,
     getSettings,
     updateSettings,
     getCache,
