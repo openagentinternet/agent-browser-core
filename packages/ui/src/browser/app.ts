@@ -493,6 +493,43 @@ function setStatus(nextStatus, message) {
   if (elements.statusState) elements.statusState.textContent = nextStatus;
 }
 
+function skeletonHtml() {
+  return '<div class="browser-skeleton">' +
+    '<header class="browser-skeleton-hero">' +
+    '<div class="browser-skeleton-avatar"></div>' +
+    '<div class="browser-skeleton-identity">' +
+    '<div class="browser-skeleton-line browser-skeleton-title"></div>' +
+    '<div class="browser-skeleton-line browser-skeleton-subtitle"></div>' +
+    '<div class="browser-skeleton-line browser-skeleton-summary"></div>' +
+    '</div></header>' +
+    '<section class="browser-skeleton-section">' +
+    '<div class="browser-skeleton-line browser-skeleton-heading"></div>' +
+    '<div class="browser-skeleton-row"><div class="browser-skeleton-rowicon"></div>' +
+    '<div class="browser-skeleton-rowbars"><div class="browser-skeleton-line w70"></div><div class="browser-skeleton-line w45"></div></div></div>' +
+    '<div class="browser-skeleton-row"><div class="browser-skeleton-rowicon"></div>' +
+    '<div class="browser-skeleton-rowbars"><div class="browser-skeleton-line w60"></div><div class="browser-skeleton-line w50"></div></div></div>' +
+    '</section></div>';
+}
+
+function showLoadingState() {
+  state.loading = true;
+  if (elements.viewport) {
+    elements.viewport.innerHTML = skeletonHtml();
+  }
+  if (elements.reload) {
+    elements.reload.classList.add('is-loading');
+    elements.reload.disabled = true;
+  }
+}
+
+function clearLoadingState() {
+  state.loading = false;
+  if (elements.reload) {
+    elements.reload.classList.remove('is-loading');
+    elements.reload.disabled = false;
+  }
+}
+
 function endpointWithActor(endpoint) {
   if (!state.actorId) return endpoint;
   var query = new URLSearchParams();
