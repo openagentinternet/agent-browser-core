@@ -530,6 +530,16 @@ function clearLoadingState() {
   }
 }
 
+function triggerEnterAnimation(node) {
+  if (!node) return;
+  node.classList.remove('is-entering');
+  void node.offsetWidth;
+  node.classList.add('is-entering');
+  window.setTimeout(function () {
+    node.classList.remove('is-entering');
+  }, 320);
+}
+
 function endpointWithActor(endpoint) {
   if (!state.actorId) return endpoint;
   var query = new URLSearchParams();
@@ -1231,6 +1241,7 @@ function renderCurrent() {
   renderOwnerToolbar();
   if (elements.viewport) {
     elements.viewport.innerHTML = renderRenderer(current);
+    triggerEnterAnimation(elements.viewport);
   }
   renderBookmarkStar();
   syncPanelState();
