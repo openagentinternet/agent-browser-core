@@ -45,6 +45,48 @@ function parsePayload(content: unknown, contentType: string): unknown {
   return raw;
 }
 
+function isTextualContentType(contentType: string): boolean {
+  return contentType.includes('json')
+    || contentType.startsWith('text/')
+    || contentType === 'application/xhtml+xml'
+    || contentType === 'application/xml'
+    || contentType === 'application/x-www-form-urlencoded';
+}
+
+function decodeBase64Text(value: string): string | null {
+  const compact = value.replace(/\s+/gu, '');
+  if (compact.length < 16 || compact.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/u.test(compact)) {
+    return null;
+  }
+  if (typeof globalThis.atob !== 'function' || typeof TextDecoder === 'undefined') {
+    return null;
+  }
+  try {
+    const binary = globalThis.atob(compact);
+    const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+    const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes).trim();
+    return decoded ? decoded : null;
+  } catch {
+    return null;
+  }
+}
+
+function contentBodyText(pinRecord: Record<string, unknown>, contentType: string): string {
+  const raw = text(pinRecord.contentBody);
+  if (!raw) return '';
+  if (!isTextualContentType(contentType)) return raw;
+  return decodeBase64Text(raw) ?? raw;
+}
+
+function meaningfulPayloadSource(pinRecord: Record<string, unknown>, contentType: string): unknown {
+  const body = contentBodyText(pinRecord, contentType);
+  if (body) return body;
+  if (record(pinRecord.content) || text(pinRecord.content)) return pinRecord.content;
+  if (pinRecord.payload !== undefined && pinRecord.payload !== null) return pinRecord.payload;
+  if (record(pinRecord.contentSummary) || text(pinRecord.contentSummary)) return pinRecord.contentSummary;
+  return '';
+}
+
 function pinIdFromRecord(pinRecord: Record<string, unknown>, fallback: string): string {
   return text(pinRecord.pinId ?? pinRecord.id ?? pinRecord.pin_id) || fallback;
 }
@@ -96,15 +138,18 @@ export async function resolvePinUriToResource(input: ResolvePinUriToResourceInpu
     ...(parsed.historyIndex !== undefined ? { historyIndex: parsed.historyIndex } : {}),
   };
   const contentType = text(pinRecord.contentType ?? pinRecord.content_type) || 'application/octet-stream';
-  const rawPayload = pinRecord.content !== undefined && pinRecord.content !== null
-    ? pinRecord.content
-    : pinRecord.payload !== undefined && pinRecord.payload !== null
-      ? pinRecord.payload
-      : '';
+  const rawPayload = meaningfulPayloadSource(pinRecord, contentType);
   const payload = parsePayload(rawPayload, contentType);
   const ownerGlobalMetaId = text(pinRecord.ownerGlobalMetaId ?? pinRecord.globalMetaId ?? pinRecord.global_meta_id ?? pinRecord.metaid ?? pinRecord.metaId);
   const ownerAddress = text(pinRecord.ownerAddress ?? pinRecord.address);
   const protocolPath = text(pinRecord.path) || undefined;
+  const payloadRecord = record(payload) ?? {};
+  const title = text(
+    payloadRecord.title
+      ?? payloadRecord.name
+      ?? payloadRecord.displayName
+      ?? payloadRecord.serviceName,
+  ) || `Pin ${shortId(resolvedPinId)}`;
   const rendererData = {
     rendererId: 'generic.pin-inspector',
     version,
@@ -129,7 +174,7 @@ export async function resolvePinUriToResource(input: ResolvePinUriToResourceInpu
     uri: parsed.originalUri,
     normalizedUri: parsed.normalizedUri,
     resourceType: 'pin',
-    title: `Pin ${shortId(resolvedPinId)}`,
+    title,
     owner: {
       kind: 'unknown',
       globalMetaId: ownerGlobalMetaId,

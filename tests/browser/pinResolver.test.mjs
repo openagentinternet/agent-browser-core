@@ -159,3 +159,61 @@ test('resolvePinUriToResource parses string JSON content without inventing summa
     false,
   );
 });
+
+test('resolvePinUriToResource decodes base64 contentBody before parsing text payload', async () => {
+  const payload = {
+    title: 'Base64 encoded body',
+    content: 'Visible body text',
+  };
+  const result = await resolvePinUriToResource({
+    uri: `pin://${pinId}`,
+    manApiBaseUrl: 'https://man.example.test',
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          pin: manPin({
+            content: '',
+            contentBody: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64'),
+          }),
+        },
+      }),
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data.renderer.data.rawPayload, JSON.stringify(payload));
+  assert.deepEqual(result.data.renderer.data.payload, payload);
+  assert.equal(result.data.title, 'Base64 encoded body');
+});
+
+test('resolvePinUriToResource prefers contentSummary when MAN content is empty', async () => {
+  const payload = {
+    serviceName: 'weibo-hot-trend-service',
+    displayName: '微博热搜',
+    endpoint: 'simplemsg',
+    paymentAddress: '1EX5NN6npyCp3X6Sv4Yahv6DrBNKRtq4Gw',
+  };
+  const result = await resolvePinUriToResource({
+    uri: `pin://${pinId}`,
+    manApiBaseUrl: 'https://man.example.test',
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          pin: manPin({
+            content: '',
+            contentBody: Buffer.from(JSON.stringify(payload), 'utf8').toString('base64'),
+            contentSummary: JSON.stringify(payload),
+          }),
+        },
+      }),
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data.renderer.data.rawPayload, JSON.stringify(payload));
+  assert.deepEqual(result.data.renderer.data.payload, payload);
+});
