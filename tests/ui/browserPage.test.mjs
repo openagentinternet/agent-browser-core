@@ -57,6 +57,7 @@ test('Browser client script exposes mature endpoints and path/default URI boot l
   assert.match(definition.script, /var browserEndpoints = \{/);
   assert.match(definition.script, /runtime: '\/api\/browser\/runtime'/);
   assert.match(definition.script, /resolve: '\/api\/browser\/resolve'/);
+  assert.match(definition.script, /info: '\/api\/browser\/info'/);
   assert.match(definition.script, /settings: '\/api\/browser\/settings'/);
   assert.match(definition.script, /cache: '\/api\/browser\/cache'/);
   assert.match(definition.script, /actions: '\/api\/browser\/actions'/);
@@ -102,4 +103,58 @@ test('Browser page HTML preserves inline script text containing dollar signs', a
   assert.equal((html.match(/<\/script>/g) || []).length, 1);
   assert.match(html, /window\.__browserMarker = marker;/);
   assert.doesNotMatch(html, /<body>[\s\S]*<script>\s*const marker = '\$\'';\s*<\/script>[\s\S]*<\/body>/);
+});
+
+test('Browser loading feedback renders reload spinner and fade-in CSS', async () => {
+  const html = await ui.renderBrowserPageHtml();
+
+  assert.match(template, /\.browser-icon-button\.is-loading \{/);
+  assert.match(template, /\.browser-icon-button\.is-loading::after \{/);
+  assert.match(template, /animation: browser-spin \.8s linear infinite/);
+  assert.match(template, /@keyframes browser-spin/);
+
+  assert.match(template, /\.browser-viewport\.is-entering > \*/);
+  assert.match(template, /@keyframes browser-enter/);
+  assert.match(template, /from \{ opacity: 0; transform: translateY\(6px\); \}/);
+
+  // CSS also surfaces in the rendered HTML (styles are inlined into the shell).
+  assert.match(html, /browser-spin/);
+});
+
+test('Browser client script exposes loading-state helpers', () => {
+  const definition = ui.buildBrowserPageDefinition();
+
+  assert.match(definition.script, /function showLoadingState\(\)/);
+  assert.match(definition.script, /function clearLoadingState\(\)/);
+  assert.match(definition.script, /function triggerEnterAnimation\(node\)/);
+
+  // Loading state clears the viewport to the browser background (no skeleton markup).
+  assert.match(definition.script, /elements\.viewport\.innerHTML = '';/);
+
+  assert.match(definition.script, /elements\.reload\.classList\.add\('is-loading'\)/);
+  assert.match(definition.script, /elements\.reload\.disabled = true;/);
+  assert.match(definition.script, /elements\.reload\.classList\.remove\('is-loading'\)/);
+  assert.match(definition.script, /void node\.offsetWidth;/);
+  assert.match(definition.script, /triggerEnterAnimation\(elements\.viewport\);/);
+});
+
+test('Browser resolveUri wires showLoadingState before await and clearLoadingState in both paths', () => {
+  const definition = ui.buildBrowserPageDefinition();
+
+  assert.match(definition.script, /state\.lastResolveError = null;\s*showLoadingState\(\);\s*try \{/);
+  assert.match(definition.script, /renderCurrent\(\);\s*clearLoadingState\(\);/);
+  assert.match(definition.script, /\} catch \(error\) \{\s*clearLoadingState\(\);/);
+});
+
+test('Browser client script exposes async chat peer profile enrichment', () => {
+  const definition = ui.buildBrowserPageDefinition();
+
+  assert.match(definition.script, /function collectChatPeerIds\(current\)/);
+  assert.match(definition.script, /function fillChatPeerProfile\(peerId, profile\)/);
+  assert.match(definition.script, /function enrichChatPeerProfiles\(\)/);
+  assert.match(definition.script, /data-chat-peer/);
+  assert.match(definition.script, /data-chat-partner/);
+  assert.match(definition.script, /browserEndpoints\.info \+ '\?globalMetaId='/);
+  assert.match(definition.script, /state\.enrichToken/);
+  assert.match(definition.script, /enrichChatPeerProfiles\(\);/);
 });

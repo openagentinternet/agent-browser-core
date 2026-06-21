@@ -45,11 +45,9 @@ test('resolveBrowserResource resolves metaid URI through homepage client', async
   assert.equal(result.data.renderer.templateId, 'compact-list');
 });
 
-test('resolveBrowserResource enriches homepage chats with peer profiles and dedupes repeated lookups', async () => {
+test('resolveBrowserResource returns raw homepage without enriching chat peer profiles', async () => {
   const firstPeer = 'idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz';
   const secondPeer = 'idq1kwa7ku4w7rrx07cra9t5qr33stszvml3s96qjy';
-  const firstPeerAvatarId = 'd'.repeat(64) + 'i0';
-  const secondPeerAvatarId = 'e'.repeat(64) + 'i0';
   const firstChatPinId = '1'.repeat(64) + 'i0';
   const secondChatPinId = '2'.repeat(64) + 'i0';
   const thirdChatPinId = '3'.repeat(64) + 'i0';
@@ -131,34 +129,6 @@ test('resolveBrowserResource enriches homepage chats with peer profiles and dedu
           json: async () => ({ code: 0, message: '', data: homepage }),
         };
       }
-      if (target === `https://so.example.test/api/info/globalmetaid/${firstPeer}`) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            code: 1,
-            data: {
-              globalMetaId: firstPeer,
-              name: 'AI_Sunny',
-              avatarId: firstPeerAvatarId,
-            },
-          }),
-        };
-      }
-      if (target === `https://so.example.test/api/info/globalmetaid/${secondPeer}`) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({
-            code: 1,
-            data: {
-              globalMetaId: secondPeer,
-              name: 'don-bot',
-              avatarId: secondPeerAvatarId,
-            },
-          }),
-        };
-      }
       throw new Error(`Unexpected fetch URL: ${target}`);
     },
     metaAppLookup: async () => null,
@@ -167,30 +137,18 @@ test('resolveBrowserResource enriches homepage chats with peer profiles and dedu
   assert.equal(result.ok, true);
   const chatsSection = result.data.renderer.data.sections.find((section) => section.id === 'chats');
   assert.equal(Array.isArray(chatsSection.items), true);
+  // Chat items retain the raw interactWith peer id but are NOT enriched with profiles.
+  assert.deepEqual(
+    chatsSection.items.map((item) => item.data.interactWith),
+    [firstPeer, secondPeer, firstPeer],
+  );
   assert.deepEqual(
     chatsSection.items.map((item) => item.data.interactWithProfile),
-    [
-      {
-        globalMetaId: firstPeer,
-        name: 'AI_Sunny',
-        avatar: `https://file.metaid.io/metafile-indexer/content/${firstPeerAvatarId}`,
-      },
-      {
-        globalMetaId: secondPeer,
-        name: 'don-bot',
-        avatar: `https://file.metaid.io/metafile-indexer/content/${secondPeerAvatarId}`,
-      },
-      {
-        globalMetaId: firstPeer,
-        name: 'AI_Sunny',
-        avatar: `https://file.metaid.io/metafile-indexer/content/${firstPeerAvatarId}`,
-      },
-    ],
+    [undefined, undefined, undefined],
   );
+  // Resolve must only fetch the homepage — peer profile enrichment is now async/client-side.
   assert.deepEqual(fetchCalls, [
     'https://so.example.test/api/bot-homepage/globalmetaid/idq1chatfixturebot?version=v3',
-    `https://so.example.test/api/info/globalmetaid/${firstPeer}`,
-    `https://so.example.test/api/info/globalmetaid/${secondPeer}`,
   ]);
 });
 

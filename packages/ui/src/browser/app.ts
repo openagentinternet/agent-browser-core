@@ -124,6 +124,7 @@ var OFFICIAL_RECOMMENDATIONS = [
 var browserEndpoints = {
   runtime: '/api/browser/runtime',
   resolve: '/api/browser/resolve',
+  info: '/api/browser/info',
   settings: '/api/browser/settings',
   cache: '/api/browser/cache',
   actions: '/api/browser/actions',
@@ -185,7 +186,8 @@ var state = {
   status: 'loading',
   error: '',
   lastResolveError: null,
-  toastTimer: null
+  toastTimer: null,
+  enrichToken: 0
 };
 
 var elements = {};
@@ -491,6 +493,93 @@ function setStatus(nextStatus, message) {
   state.status = nextStatus;
   state.error = message || '';
   if (elements.statusState) elements.statusState.textContent = nextStatus;
+}
+
+function showLoadingState() {
+  state.loading = true;
+  if (elements.viewport) {
+    elements.viewport.innerHTML = '';
+  }
+  if (elements.reload) {
+    elements.reload.classList.add('is-loading');
+    elements.reload.disabled = true;
+  }
+}
+
+function clearLoadingState() {
+  state.loading = false;
+  if (elements.reload) {
+    elements.reload.classList.remove('is-loading');
+    elements.reload.disabled = false;
+  }
+}
+
+function triggerEnterAnimation(node) {
+  if (!node) return;
+  node.classList.remove('is-entering');
+  void node.offsetWidth;
+  node.classList.add('is-entering');
+  setTimeout(function () {
+    node.classList.remove('is-entering');
+  }, 320);
+}
+
+function collectChatPeerIds(current) {
+  var renderer = current && current.renderer ? current.renderer : {};
+  var data = renderer.data && typeof renderer.data === 'object' ? renderer.data : {};
+  var sections = Array.isArray(data.sections) ? data.sections : [];
+  var peerIds = [];
+  var seen = {};
+  for (var i = 0; i < sections.length; i += 1) {
+    var section = sections[i] && typeof sections[i] === 'object' ? sections[i] : {};
+    if (textValue(section.id) !== 'chats') continue;
+    var items = Array.isArray(section.items) ? section.items : [];
+    for (var j = 0; j < items.length; j += 1) {
+      var item = items[j] && typeof items[j] === 'object' ? items[j] : {};
+      var itemData = item.data && typeof item.data === 'object' ? item.data : {};
+      var peerId = textValue(itemData.interactWith) || textValue(item.interactWith);
+      if (peerId && !seen[peerId]) {
+        seen[peerId] = true;
+        peerIds.push(peerId);
+      }
+    }
+  }
+  return peerIds;
+}
+
+function fillChatPeerProfile(peerId, profile) {
+  if (!elements.viewport) return;
+  var nodes = elements.viewport.querySelectorAll('[data-chat-peer="' + peerId + '"]');
+  if (!nodes || !nodes.length) return;
+  var name = textValue(profile && profile.name) || peerId;
+  var avatarUrl = safeUrl(profile && profile.avatar);
+  for (var i = 0; i < nodes.length; i += 1) {
+    var node = nodes[i];
+    var partnerSpan = node.querySelectorAll('[data-chat-partner]');
+    if (!partnerSpan.length) continue;
+    var target = partnerSpan[partnerSpan.length - 1];
+    var avatarHtml = avatarUrl
+      ? '<span aria-hidden="true"><img class="browser-avatar-image" src="' + escapeHtml(avatarUrl) + '" alt="" /></span>'
+      : '<span aria-hidden="true">' + escapeHtml(initials(name)) + '</span>';
+    target.innerHTML = avatarHtml + '<span>' + escapeHtml(name) + '</span>';
+  }
+}
+
+function enrichChatPeerProfiles() {
+  var current = state.current;
+  if (!current) return;
+  var peerIds = collectChatPeerIds(current);
+  if (!peerIds.length) return;
+  state.enrichToken += 1;
+  var token = state.enrichToken;
+  peerIds.forEach(function (peerId) {
+    api(browserEndpoints.info + '?globalMetaId=' + encodeURIComponent(peerId))
+      .then(function (profile) {
+        if (token !== state.enrichToken) return;
+        if (profile) fillChatPeerProfile(peerId, profile);
+      })
+      .catch(function () {});
+  });
 }
 
 function endpointWithActor(endpoint) {
@@ -1212,7 +1301,9 @@ function renderCurrent() {
   renderOwnerToolbar();
   if (elements.viewport) {
     elements.viewport.innerHTML = renderRenderer(current);
+    triggerEnterAnimation(elements.viewport);
   }
+  enrichChatPeerProfiles();
   renderBookmarkStar();
   syncPanelState();
 }
@@ -1912,19 +2003,20 @@ function renderMetaAppRows(items, emptyText) {
     : '<p class="browser-muted-row">' + escapeHtml(emptyText) + '</p>';
 }
 
-function renderActivityPerson(label, avatarUrl, href) {
+function renderActivityPerson(label, avatarUrl, href, dataAttr) {
   var name = textValue(label) || 'Bot';
   var wrapperStyle = 'display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;white-space:nowrap;vertical-align:middle;' +
     (href ? 'text-decoration:none;color:#3558c8;' : 'color:inherit;');
   var avatarStyle = 'width:18px;height:18px;border-radius:999px;overflow:hidden;background:#e9eef6;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;color:#344054;font-size:10px;font-weight:700;';
   var nameStyle = 'max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:650;';
+  var marker = dataAttr ? ' ' + dataAttr : '';
   var avatar = safeUrl(avatarUrl)
     ? '<span style="' + avatarStyle + '" aria-hidden="true"><img class="browser-avatar-image" src="' + escapeHtml(avatarUrl) + '" alt="" /></span>'
     : '<span style="' + avatarStyle + '" aria-hidden="true">' + escapeHtml(initials(name)) + '</span>';
   var innerHtml = avatar + '<span style="' + nameStyle + '">' + escapeHtml(name) + '</span>';
   return href
-    ? '<a href="' + escapeHtml(href) + '" data-browser-map-link style="' + wrapperStyle + '">' + innerHtml + '</a>'
-    : '<span style="' + wrapperStyle + '">' + innerHtml + '</span>';
+    ? '<a href="' + escapeHtml(href) + '" data-browser-map-link' + marker + ' style="' + wrapperStyle + '">' + innerHtml + '</a>'
+    : '<span' + marker + ' style="' + wrapperStyle + '">' + innerHtml + '</span>';
 }
 
 function renderChatActivityRow(item) {
@@ -1932,10 +2024,11 @@ function renderChatActivityRow(item) {
   var contentHtml = '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-width:0;line-height:1.5;color:#344054;">' +
     renderActivityPerson(item.actorName, item.actorAvatar, '') +
     '<span style="color:#667085;">' + escapeHtml('在 ' + dateText + ' 和') + '</span>' +
-    renderActivityPerson(item.partnerName, item.partnerAvatar, item.partnerHref) +
+    renderActivityPerson(item.partnerName, item.partnerAvatar, item.partnerHref, 'data-chat-partner') +
     '<span style="color:#667085;">发生了互动</span>' +
     '</div>';
-  return '<article class="browser-activity-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('message') + '</span>' +
+  var peerAttr = item.partnerGlobalMetaId ? ' data-chat-peer="' + escapeHtml(item.partnerGlobalMetaId) + '"' : '';
+  return '<article class="browser-activity-row"' + peerAttr + '><span class="browser-row-icon" aria-hidden="true">' + iconHtml('message') + '</span>' +
     '<div>' + contentHtml + '</div></article>';
 }
 
@@ -2794,6 +2887,7 @@ async function resolveUri(uri, options) {
   if (shouldRecord) pushHistory(normalizedUri);
   setStatus('loading', '');
   state.lastResolveError = null;
+  showLoadingState();
   try {
     var result = await api(resolveUrl(normalizedUri));
     var resolvedUri = textValue(result && (result.normalizedUri || result.uri)) || normalizedUri;
@@ -2804,11 +2898,13 @@ async function resolveUri(uri, options) {
     recordVisit(result);
     setStatus('resolved', '');
     renderCurrent();
+    clearLoadingState();
     if (state.inspectorOpen) {
       renderInspector();
     }
     return result;
   } catch (error) {
+    clearLoadingState();
     state.lastResolveError = {
       inputUri: normalizedUri,
       code: error && error.payload && error.payload.code,

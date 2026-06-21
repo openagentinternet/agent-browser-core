@@ -130,6 +130,26 @@ export async function handleStandaloneBrowserApiRoute(
     return true;
   }
 
+  if (url.pathname === '/api/browser/info') {
+    if (method !== 'GET') {
+      sendJson(res, 405, browserFailure('method_not_allowed', 'Expected GET.'));
+      return true;
+    }
+    const globalMetaId = text(url.searchParams.get('globalMetaId'));
+    if (!globalMetaId) {
+      sendJson(res, 400, browserFailure('missing_argument', 'globalMetaId query parameter is required.'));
+      return true;
+    }
+    const resolveBotProfile = (adapter as { resolveBotProfile?: (input: { globalMetaId: string }) => Promise<unknown> }).resolveBotProfile;
+    if (typeof resolveBotProfile !== 'function') {
+      sendJson(res, 404, browserFailure('not_found', 'This host does not support bot profile lookup.'));
+      return true;
+    }
+    const result = await resolveBotProfile({ globalMetaId });
+    sendJson(res, statusForBrowserResult(result as BrowserCommandResult<unknown>), result);
+    return true;
+  }
+
   if (url.pathname === '/api/browser/settings') {
     if (method === 'GET') {
       const result = await adapter.getSettings({});
