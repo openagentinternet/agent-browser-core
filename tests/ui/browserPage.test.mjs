@@ -57,6 +57,7 @@ test('Browser client script exposes mature endpoints and path/default URI boot l
   assert.match(definition.script, /var browserEndpoints = \{/);
   assert.match(definition.script, /runtime: '\/api\/browser\/runtime'/);
   assert.match(definition.script, /resolve: '\/api\/browser\/resolve'/);
+  assert.match(definition.script, /info: '\/api\/browser\/info'/);
   assert.match(definition.script, /settings: '\/api\/browser\/settings'/);
   assert.match(definition.script, /cache: '\/api\/browser\/cache'/);
   assert.match(definition.script, /actions: '\/api\/browser\/actions'/);
@@ -129,4 +130,17 @@ test('Browser resolveUri wires showLoadingState before await and clearLoadingSta
   assert.match(definition.script, /state\.lastResolveError = null;\s*showLoadingState\(\);\s*try \{/);
   assert.match(definition.script, /renderCurrent\(\);\s*clearLoadingState\(\);/);
   assert.match(definition.script, /\} catch \(error\) \{\s*clearLoadingState\(\);/);
+});
+
+test('Browser client script exposes async chat peer profile enrichment', () => {
+  const definition = ui.buildBrowserPageDefinition();
+
+  assert.match(definition.script, /function collectChatPeerIds\(current\)/);
+  assert.match(definition.script, /function fillChatPeerProfile\(peerId, profile\)/);
+  assert.match(definition.script, /function enrichChatPeerProfiles\(\)/);
+  assert.match(definition.script, /data-chat-peer/);
+  assert.match(definition.script, /data-chat-partner/);
+  assert.match(definition.script, /browserEndpoints\.info \+ '\?globalMetaId='/);
+  assert.match(definition.script, /state\.enrichToken/);
+  assert.match(definition.script, /enrichChatPeerProfiles\(\);/);
 });
