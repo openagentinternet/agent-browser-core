@@ -49,6 +49,11 @@ host support for local/public Browser previews.
 - For docs-only changes, run `git diff --check`.
 - After TypeScript workspace bootstrap exists, run the package-specific build/test command
   named in the relevant implementation plan.
+- Template placeholder injection in `packages/ui/src/browser/page.ts` MUST use
+  `String.prototype.split(placeholder).join(value)`, never `String.prototype.replace(placeholder, value)`.
+  The inline client script (`app.ts`) contains regex literals with `$` (e.g. `replace(/\/+$/, '')`),
+  which `replace` treats as special substitution patterns, silently truncating the emitted `<script>`
+  and breaking all Browser UI (buttons/input/links stop responding with no console error).
 
 ## Commit and Merge Rules
 
