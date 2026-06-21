@@ -2590,34 +2590,37 @@ var PIN_INSPECTOR_PAGE_STYLE = '<style>' +
   '.browser-pin-meta-pill { display: inline-flex; align-items: center; min-height: 26px; max-width: 100%; padding: 4px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #fff; color: #4c5b6f; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }' +
   '.browser-pin-page-actions { display: flex; align-items: flex-start; flex-shrink: 0; gap: 8px; }' +
   '.browser-pin-page-actions button { min-height: 34px; border: 1px solid #cfd9e6; border-radius: 8px; background: #fff; color: #162132; padding: 7px 12px; font-size: 12px; font-weight: 700; }' +
-  '.browser-pin-page-actions button:first-child { background: #162132; border-color: #162132; color: #fff; }' +
+  '.browser-pin-page-actions button:first-child { background: #eaf1ff; border-color: #cfe0ff; color: #2e6fed; }' +
   '.browser-pin-page-grid { display: grid; grid-template-columns: minmax(0, 1.58fr) minmax(300px, 320px); gap: 16px; align-items: start; }' +
   '.browser-pin-stack, .browser-pin-aside { display: grid; gap: 18px; align-content: start; }' +
-  '.browser-pin-section { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid #d9e1ed; border-radius: 8px; background: rgba(255, 255, 255, .94); box-shadow: 0 14px 34px rgba(19, 35, 67, .07), 0 2px 8px rgba(19, 35, 67, .04); }' +
+  '.browser-pin-section { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid #d9e1ed; border-radius: 14px; background: #fff; }' +
   '.browser-pin-section-head { display: grid; gap: 5px; }' +
   '.browser-pin-section h3 { margin: 0; color: #141c29; font-size: 15px; }' +
   '.browser-pin-section:first-child h3 { font-size: 18px; }' +
   '.browser-pin-intro { margin: 0; color: #6a778b; font-size: 13px; line-height: 1.45; }' +
   '.browser-protocol-json, .browser-protocol-raw, .browser-pin-text { margin: 0; overflow: auto; padding: 16px; border-radius: 12px; background: #182235; color: #d7e3f0; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }' +
-  '.browser-pin-json-doc { display: grid; gap: 9px; }' +
-  '.browser-pin-json-row { display: grid; grid-template-columns: minmax(120px, 0.26fr) minmax(0, 1fr); gap: 12px; padding: 10px 0; border-top: 1px solid #e6ebf2; }' +
-  '.browser-pin-json-row:first-child { border-top: 0; padding-top: 0; }' +
-  '.browser-pin-json-key { color: #59687d; font: 700 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }' +
-  '.browser-pin-json-value { min-width: 0; color: #172033; line-height: 1.55; overflow-wrap: anywhere; }' +
-  '.browser-pin-json-longtext { white-space: pre-wrap; }' +
-  '.browser-pin-json-token-list { display: flex; flex-wrap: wrap; gap: 6px; }' +
-  '.browser-pin-json-token { display: inline-flex; max-width: 100%; padding: 3px 7px; border-radius: 999px; background: #edf2f7; color: #172033; font-size: 12px; overflow-wrap: anywhere; }' +
+  '.browser-pin-json-doc { display: grid; gap: 12px; }' +
+  '.browser-pin-json-row { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 14px; align-items: start; }' +
+  '.browser-pin-json-key { color: #8b95a5; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }' +
+  '.browser-pin-json-value { min-width: 0; color: #162132; line-height: 1.55; overflow-wrap: anywhere; word-break: break-word; }' +
+  '.browser-pin-json-text-block { line-height: 1.7; white-space: pre-wrap; }' +
+  '.browser-pin-json-token-list { display: flex; flex-wrap: wrap; gap: 8px; }' +
+  '.browser-pin-json-token { display: inline-flex; align-items: center; max-width: 100%; padding: 7px 10px; border: 1px solid #d9e1ed; border-radius: 999px; background: #f7f9fc; color: #3d4c60; font-size: 12px; overflow-wrap: anywhere; }' +
+  '.browser-pin-json-token-link { color: #2e6fed; background: #eaf1ff; border-color: #cfe0ff; }' +
+  '.browser-pin-json-token-boolean, .browser-pin-json-token-number, .browser-pin-json-token-null { color: #334155; background: #eef3f9; }' +
   '.browser-pin-json-list, .browser-pin-json-nested { display: grid; gap: 8px; min-width: 0; }' +
-  '.browser-pin-json-list-item { padding: 8px 10px; border: 1px solid #e0e7f0; border-radius: 8px; background: #f8fafc; }' +
-  '.browser-pin-json-nested { padding: 10px 12px; border: 1px solid #e0e7f0; border-radius: 8px; background: #f8fafc; }' +
-  '.browser-pin-json-nested .browser-pin-json-row { grid-template-columns: minmax(92px, 0.25fr) minmax(0, 1fr); }' +
+  '.browser-pin-json-list-item, .browser-pin-json-subblock { padding: 12px 14px; border: 1px solid #d9e1ed; border-radius: 12px; background: #f7f9fc; }' +
+  '.browser-pin-json-subblock .browser-pin-json-row { grid-template-columns: minmax(120px, 0.32fr) minmax(0, 1fr); }' +
   '.browser-pin-json-value a, .browser-pin-link-pill, .browser-pin-file-row a { color: #2563d8; text-decoration: none; }' +
   '.browser-pin-json-value a:hover, .browser-pin-link-pill:hover, .browser-pin-file-row a:hover { text-decoration: underline; }' +
   '.browser-pin-markdown { display: grid; gap: 10px; line-height: 1.7; color: #162132; }' +
   '.browser-pin-markdown h1, .browser-pin-markdown h2, .browser-pin-markdown h3, .browser-pin-markdown p { margin: 0; }' +
   '.browser-pin-markdown a { color: #2e6fed; text-decoration: none; }' +
   '.browser-pin-markdown a:hover { text-decoration: underline; }' +
-  '.browser-pin-binary-notice { margin: 0; color: #6a778b; }' +
+  '.browser-pin-binary-card { display: grid; gap: 8px; place-items: center; min-height: 132px; padding: 18px; border: 1px solid #d9e1ed; border-radius: 12px; background: #f7f9fc; text-align: center; color: #6a778b; }' +
+  '.browser-pin-binary-card p { margin: 0; }' +
+  '.browser-pin-binary-badge { display: inline-flex; padding: 8px 12px; border: 1px solid #d9e1ed; border-radius: 999px; background: #fff; color: #162132; font-weight: 700; }' +
+  '.browser-pin-binary-type { font-size: 12px; overflow-wrap: anywhere; }' +
   '.browser-protocol-proof { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px 14px; margin: 0; }' +
   '.browser-protocol-proof dt { color: #6a778b; font-size: 12px; font-weight: 700; }' +
   '.browser-protocol-proof dd { margin: 0; overflow-wrap: anywhere; }' +
@@ -2627,17 +2630,19 @@ var PIN_INSPECTOR_PAGE_STYLE = '<style>' +
   '.browser-pin-media-preview { display: grid; place-items: center; min-height: 110px; border-radius: 7px; background: #e8eef6; color: #62718a; font-size: 12px; font-weight: 700; text-align: center; overflow: hidden; }' +
   '.browser-pin-media-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }' +
   '.browser-pin-media-label { min-width: 0; font-size: 12px; overflow-wrap: anywhere; }' +
-  '.browser-pin-file-list { display: grid; gap: 0; }' +
-  '.browser-pin-file-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #e6ebf2; }' +
-  '.browser-pin-file-row:first-of-type { border-top: 0; padding-top: 0; }' +
+  '.browser-pin-file-list { display: grid; gap: 10px; }' +
+  '.browser-pin-file-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px 14px; border: 1px solid #d9e1ed; border-radius: 12px; background: #f7f9fc; }' +
+  '.browser-pin-file-meta { display: grid; gap: 4px; min-width: 0; }' +
+  '.browser-pin-file-name { font-weight: 700; color: #162132; word-break: break-word; }' +
+  '.browser-pin-file-desc { color: #6a778b; font-size: 12px; word-break: break-word; }' +
   '.browser-pin-file-row span { min-width: 0; overflow-wrap: anywhere; }' +
-  '.browser-pin-file-row button { border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; padding: 6px 10px; white-space: nowrap; }' +
+  '.browser-pin-download { display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 10px; border: 1px solid #cfe0ff; background: #eaf1ff; color: #2e6fed; font-size: 12px; font-weight: 700; white-space: nowrap; }' +
   '.browser-pin-link-list { display: flex; flex-wrap: wrap; gap: 8px; }' +
   '.browser-pin-link-pill { display: inline-flex; max-width: 100%; padding: 6px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #f8fafc; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }' +
   '.browser-pin-raw-record { display: grid; gap: 10px; }' +
   '.browser-pin-raw-record summary { cursor: pointer; color: #334155; font-size: 13px; font-weight: 700; }' +
   '@media (max-width: 1100px) { .browser-pin-page-grid { grid-template-columns: minmax(0, 1fr); } }' +
-  '@media (max-width: 720px) { .browser-pin-page { width: calc(100vw - 16px); margin: 12px auto 24px; gap: 14px; } .browser-pin-page-head { flex-direction: column; } .browser-pin-page-actions { width: 100%; } .browser-pin-page-actions button { width: 100%; } .browser-pin-json-row, .browser-pin-json-nested .browser-pin-json-row { grid-template-columns: 1fr; gap: 5px; } .browser-protocol-proof { grid-template-columns: 1fr; } .browser-pin-file-row { flex-direction: column; align-items: flex-start; } }' +
+  '@media (max-width: 720px) { .browser-pin-page { width: calc(100vw - 16px); margin: 12px auto 24px; gap: 14px; } .browser-pin-page-head { flex-direction: column; } .browser-pin-page-actions { width: 100%; } .browser-pin-page-actions button { width: 100%; } .browser-pin-json-row, .browser-pin-json-subblock .browser-pin-json-row { grid-template-columns: 1fr; gap: 5px; } .browser-protocol-proof { grid-template-columns: 1fr; } .browser-pin-file-row { grid-template-columns: 1fr; align-items: stretch; } }' +
   '</style>';
 
 function pinInspectorParseJsonPayload(payload, rawPayload) {
@@ -2709,33 +2714,57 @@ function pinInspectorContentType(current) {
   return textValue(renderer.contentType || pin.contentType || record.contentType).toLowerCase();
 }
 
-function pinInspectorRenderJsonValue(value) {
-  var nested;
-  var shortPrimitiveList;
+function pinInspectorPayloadIntro(current) {
+  var contentType = pinInspectorContentType(current);
+  if (contentType.indexOf('json') !== -1) return 'JSON is rendered as a structured payload document. Original keys and order are preserved.';
+  if (contentType.indexOf('text/markdown') === 0) return 'Markdown payload rendered as document content.';
+  if (contentType.indexOf('text/plain') === 0) return 'Plain text payload with line breaks preserved.';
+  return 'Binary PIN. No inline payload preview is available.';
+}
+
+function pinInspectorIsLongJsonString(value) {
+  return value.length > 120 || value.indexOf('\\n') !== -1;
+}
+
+function pinInspectorJsonToken(value) {
   if (typeof value === 'string') {
     if (isBrowserInternalHref(value) || /^https?:\\/\\//i.test(value)) {
-      return pinInspectorReferenceHtml(value);
+      return '<span class="browser-pin-json-token browser-pin-json-token-link">' + pinInspectorReferenceHtml(value, escapeHtml(pinInspectorShortReference(value))) + '</span>';
+    }
+    return '<span class="browser-pin-json-token browser-pin-json-token-string">' + escapeHtml(value) + '</span>';
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return '<span class="browser-pin-json-token browser-pin-json-token-' + typeof value + '">' + escapeHtml(String(value)) + '</span>';
+  }
+  if (value === null) {
+    return '<span class="browser-pin-json-token browser-pin-json-token-null">null</span>';
+  }
+  return '<span class="browser-pin-json-token">' + escapeHtml(String(value)) + '</span>';
+}
+
+function pinInspectorRenderJsonValue(value) {
+  var nested;
+  var primitiveList;
+  if (typeof value === 'string') {
+    if (isBrowserInternalHref(value) || /^https?:\\/\\//i.test(value)) {
+      return pinInspectorReferenceHtml(value, escapeHtml(pinInspectorShortReference(value)));
+    }
+    if (pinInspectorIsLongJsonString(value)) {
+      return '<div class="browser-pin-json-text-block">' + escapeHtml(value) + '</div>';
     }
     return escapeHtml(value);
   }
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return '<span class="browser-pin-json-token">' + escapeHtml(String(value)) + '</span>';
-  }
-  if (value === null) {
-    return '<span class="browser-pin-json-token">null</span>';
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
+    return pinInspectorJsonToken(value);
   }
   if (Array.isArray(value)) {
-    if (!value.length) return '<span class="browser-pin-json-token">[]</span>';
-    shortPrimitiveList = value.every(function(item) {
-      return ['string', 'number', 'boolean'].indexOf(typeof item) !== -1 && textValue(item).length <= 64;
+    if (!value.length) return '<span class="browser-pin-json-token browser-pin-json-token-null">[]</span>';
+    primitiveList = value.every(function(item) {
+      return item === null || ['string', 'number', 'boolean'].indexOf(typeof item) !== -1;
     });
-    if (shortPrimitiveList) {
+    if (primitiveList) {
       return '<div class="browser-pin-json-token-list">' + value.map(function(item) {
-        var itemValue = String(item);
-        var body = typeof item === 'string' && (isBrowserInternalHref(item) || /^https?:\\/\\//i.test(item))
-          ? pinInspectorReferenceHtml(item, escapeHtml(pinInspectorShortReference(item)))
-          : escapeHtml(itemValue);
-        return '<span class="browser-pin-json-token">' + body + '</span>';
+        return pinInspectorJsonToken(item);
       }).join('') + '</div>';
     }
     return '<div class="browser-pin-json-list">' + value.map(function(item) {
@@ -2744,22 +2773,20 @@ function pinInspectorRenderJsonValue(value) {
   }
   nested = objectValue(value);
   if (Object.keys(nested).length) {
-    return '<div class="browser-pin-json-nested">' + pinInspectorRenderJsonRows(nested) + '</div>';
+    return '<div class="browser-pin-json-subblock browser-pin-json-nested">' + pinInspectorRenderJsonRows(nested) + '</div>';
   }
-  return '<span class="browser-pin-json-token">{}</span>';
+  return '<span class="browser-pin-json-token browser-pin-json-token-null">{}</span>';
 }
 
 function pinInspectorJsonValueClass(value) {
-  if (typeof value === 'string' && (value.length > 120 || value.indexOf('\\n') !== -1)) {
-    return 'browser-pin-json-value browser-pin-json-longtext';
-  }
   return 'browser-pin-json-value';
 }
 
 function pinInspectorRenderJsonRows(value) {
   return Object.keys(value).map(function(key) {
     var item = value[key];
-    return '<div class="browser-pin-json-row"><div class="browser-pin-json-key">' + escapeHtml(key) + '</div><div class="' + pinInspectorJsonValueClass(item) + '">' + pinInspectorRenderJsonValue(item) + '</div></div>';
+    var rowClass = 'browser-pin-json-row' + (typeof item === 'string' && pinInspectorIsLongJsonString(item) ? ' browser-pin-json-row-longtext' : '');
+    return '<div class="' + rowClass + '"><div class="browser-pin-json-key">' + escapeHtml(key) + '</div><div class="' + pinInspectorJsonValueClass(item) + '">' + pinInspectorRenderJsonValue(item) + '</div></div>';
   }).join('');
 }
 
@@ -2789,7 +2816,7 @@ function pinInspectorRenderPayload(current) {
     var plain = typeof payload === 'string' ? payload : textValue(rawPayload);
     return '<pre class="browser-pin-text">' + escapeHtml(plain) + '</pre>';
   }
-  return '<p class="browser-pin-binary-notice">Binary payload preview is not available for this pin.</p>';
+  return '<div class="browser-pin-binary-card"><span class="browser-pin-binary-badge">Binary PIN</span><p>No inline parse is available in the generic renderer.</p>' + (contentType ? '<p class="browser-pin-binary-type">' + escapeHtml(contentType) + '</p>' : '') + '</div>';
 }
 
 function pinInspectorRenderRawPayload(current) {
@@ -2917,7 +2944,7 @@ function pinInspectorCollectMediaItems(payload) {
 
 function pinInspectorRenderMediaPreview(item) {
   var download = pinInspectorIsDownloadableMediaReference(item.uri)
-    ? '<button type="button" data-browser-download-ref="' + escapeHtml(item.uri) + '">Download</button>'
+    ? '<button class="browser-pin-download" type="button" data-browser-download-ref="' + escapeHtml(item.uri) + '">Download</button>'
     : '';
   return '<article class="browser-pin-media-card" data-browser-media-preview-ref="' + escapeHtml(item.uri) + '">' +
     '<div class="browser-pin-media-preview" data-browser-media-preview-slot>Image preview</div>' +
@@ -2928,11 +2955,11 @@ function pinInspectorRenderMediaPreview(item) {
 
 function pinInspectorRenderFileRow(item) {
   var link = pinInspectorReferenceHtml(item.uri, escapeHtml(item.label));
-  var description = item.description ? '<small>' + escapeHtml(item.description) + '</small>' : '';
+  var description = [item.uri, item.description].filter(Boolean).join(' · ');
   var download = pinInspectorIsDownloadableMediaReference(item.uri)
-    ? '<button type="button" data-browser-download-ref="' + escapeHtml(item.uri) + '">Download</button>'
+    ? '<button class="browser-pin-download" type="button" data-browser-download-ref="' + escapeHtml(item.uri) + '">Download</button>'
     : '';
-  return '<div class="browser-pin-file-row"><span>' + link + description + '</span>' + download + '</div>';
+  return '<div class="browser-pin-file-row"><div class="browser-pin-file-meta"><div class="browser-pin-file-name">' + link + '</div>' + (description ? '<div class="browser-pin-file-desc">' + escapeHtml(description) + '</div>' : '') + '</div>' + download + '</div>';
 }
 
 function pinInspectorRenderMediaItems(current) {
@@ -3043,7 +3070,7 @@ function renderPinInspectorPage(current) {
     '</header>' +
     '<div class="browser-pin-page-grid">' +
       '<div class="browser-pin-stack">' +
-        pinInspectorSection('Payload Render', pinInspectorRenderPayload(current)) +
+        pinInspectorSection('Payload Render', pinInspectorRenderPayload(current), pinInspectorPayloadIntro(current)) +
         pinInspectorSection('Raw Payload', pinInspectorRenderRawPayload(current)) +
         pinInspectorSection('Related Media', pinInspectorRenderMediaItems(current)) +
       '</div>' +

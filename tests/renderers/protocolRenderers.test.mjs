@@ -120,8 +120,15 @@ test('Pin inspector renders prototype-style JSON payload with media, links, and 
     title: 'Inspectable pin',
     content: longContent,
     topic: 'generic pin detail',
+    featured: true,
+    score: 42,
     images: ['metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0'],
     image: 'metaid://idq1fixturebot',
+    tags: ['agent-browser', 'pin-renderer'],
+    extra: {
+      publishedAt: '2026-06-20T13:42:00Z',
+      lang: 'en',
+    },
     attachments: [
       { uri: 'https://files.example/archive.zip', name: 'archive.zip' },
       { uri: 'metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0.zip', name: 'fixture.zip' },
@@ -139,14 +146,25 @@ test('Pin inspector renders prototype-style JSON payload with media, links, and 
   assert.match(html, /application\/vnd\.metaid\+json; charset=utf-8/);
   assert.match(html, /latest effective version/);
   assert.match(html, /<h3>Payload Render<\/h3>/);
+  assert.match(html, /JSON is rendered as a structured payload document/);
   assert.match(html, /browser-pin-json-doc/);
   assert.match(html, /browser-pin-json-key">content</);
-  assert.match(html, /browser-pin-json-value browser-pin-json-longtext/);
+  assert.match(html, /browser-pin-json-row browser-pin-json-row-longtext/);
+  assert.match(html, /browser-pin-json-text-block/);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-boolean/);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-number/);
+  assert.match(html, /browser-pin-json-token-list/);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-link/);
+  assert.match(html, /browser-pin-json-subblock/);
   assert.ok(html.indexOf('browser-pin-json-key">title') < html.indexOf('browser-pin-json-key">content'), 'JSON key order should be preserved');
   assert.match(html, /<h3>Raw Payload<\/h3>/);
   assert.match(html, /<h3>Related Media<\/h3>/);
   assert.match(html, /browser-pin-media-grid/);
   assert.match(html, /data-browser-media-preview-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0"/);
+  assert.match(html, /browser-pin-file-meta/);
+  assert.match(html, /browser-pin-file-name/);
+  assert.match(html, /browser-pin-file-desc/);
+  assert.match(html, /class="browser-pin-download"/);
   assert.match(html, /archive\.zip/);
   assert.match(html, /fixture\.zip/);
   assert.match(html, /guide\.pdf/);
@@ -275,5 +293,7 @@ test('Pin inspector shows compact notice for binary payloads', () => {
     { rawPayload: '' },
   ));
 
-  assert.match(html, /Binary payload preview is not available for this pin\./);
+  assert.match(html, /browser-pin-binary-card/);
+  assert.match(html, /Binary PIN/);
+  assert.match(html, /application\/octet-stream/);
 });

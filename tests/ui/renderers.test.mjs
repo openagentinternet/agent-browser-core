@@ -123,7 +123,9 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
         },
         payload: {
           title: 'Readable Pin',
-          content: 'Rendered via generic pin inspector',
+          content: 'Rendered via generic pin inspector. '.repeat(6).trim(),
+          featured: true,
+          score: 42,
           images: ['metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0'],
           attachments: [
             { uri: 'metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0.zip', name: 'fixture.zip' },
@@ -131,6 +133,11 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
           ],
           files: [{ url: 'https://files.example/guide.pdf', title: 'guide.pdf' }],
           image: 'metaid://idq1fixturebot',
+          tags: ['agent-browser', 'pin-renderer'],
+          extra: {
+            publishedAt: '2026-06-20T13:42:00Z',
+            lang: 'en',
+          },
         },
         rawPayload: '{"title":"Readable Pin"}',
         rawPinRecord: {
@@ -147,12 +154,24 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
   assert.match(html, /Readable Pin/);
   assert.match(html, /browser-pin-meta-pills/);
   assert.match(html, /<h3>Payload Render<\/h3>/);
+  assert.match(html, /JSON is rendered as a structured payload document/);
   assert.match(html, /browser-pin-json-doc/);
   assert.match(html, /browser-pin-json-key">content</);
+  assert.match(html, /browser-pin-json-row browser-pin-json-row-longtext/);
+  assert.match(html, /browser-pin-json-text-block/);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-boolean/);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-number/);
+  assert.match(html, /browser-pin-json-token-list/);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-link/);
+  assert.match(html, /browser-pin-json-subblock/);
   assert.match(html, /<h3>Raw Payload<\/h3>/);
   assert.match(html, /<h3>Related Media<\/h3>/);
   assert.match(html, /browser-pin-media-grid/);
   assert.match(html, /data-browser-media-preview-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0"/);
+  assert.match(html, /browser-pin-file-meta/);
+  assert.match(html, /browser-pin-file-name/);
+  assert.match(html, /browser-pin-file-desc/);
+  assert.match(html, /class="browser-pin-download"/);
   assert.match(html, /<h3>Related Links<\/h3>/);
   assert.match(html, /browser-pin-link-pill/);
   assert.match(html, /<h3>Verify<\/h3>/);

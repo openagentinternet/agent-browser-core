@@ -49,34 +49,37 @@ export const BROWSER_PAGE_STYLES = `
     .browser-pin-meta-pill { display: inline-flex; align-items: center; min-height: 26px; max-width: 100%; padding: 4px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #fff; color: #4c5b6f; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
     .browser-pin-page-actions { display: flex; align-items: flex-start; flex-shrink: 0; gap: 8px; }
     .browser-pin-page-actions button { min-height: 34px; border: 1px solid #cfd9e6; border-radius: 8px; background: #fff; color: #162132; padding: 7px 12px; font-size: 12px; font-weight: 700; }
-    .browser-pin-page-actions button:first-child { background: #162132; border-color: #162132; color: #fff; }
+    .browser-pin-page-actions button:first-child { background: #eaf1ff; border-color: #cfe0ff; color: #2e6fed; }
     .browser-pin-page-grid { display: grid; grid-template-columns: minmax(0, 1.58fr) minmax(300px, 320px); gap: 16px; align-items: start; }
     .browser-pin-stack, .browser-pin-aside { display: grid; gap: 18px; align-content: start; }
-    .browser-pin-section { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid #d9e1ed; border-radius: 8px; background: rgba(255, 255, 255, .94); box-shadow: 0 14px 34px rgba(19, 35, 67, .07), 0 2px 8px rgba(19, 35, 67, .04); }
+    .browser-pin-section { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid #d9e1ed; border-radius: 14px; background: #fff; }
     .browser-pin-section-head { display: grid; gap: 5px; }
     .browser-pin-section h3 { margin: 0; color: #141c29; font-size: 15px; }
     .browser-pin-section:first-child h3 { font-size: 18px; }
     .browser-pin-intro { margin: 0; color: #6a778b; font-size: 13px; line-height: 1.45; }
     .browser-protocol-json, .browser-protocol-raw, .browser-pin-text { margin: 0; overflow: auto; padding: 16px; border-radius: 12px; background: #182235; color: #d7e3f0; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    .browser-pin-json-doc { display: grid; gap: 9px; }
-    .browser-pin-json-row { display: grid; grid-template-columns: minmax(120px, 0.26fr) minmax(0, 1fr); gap: 12px; padding: 10px 0; border-top: 1px solid #e6ebf2; }
-    .browser-pin-json-row:first-child { border-top: 0; padding-top: 0; }
-    .browser-pin-json-key { color: #59687d; font: 700 12px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
-    .browser-pin-json-value { min-width: 0; color: #172033; line-height: 1.55; overflow-wrap: anywhere; }
-    .browser-pin-json-longtext { white-space: pre-wrap; }
-    .browser-pin-json-token-list { display: flex; flex-wrap: wrap; gap: 6px; }
-    .browser-pin-json-token { display: inline-flex; max-width: 100%; padding: 3px 7px; border-radius: 999px; background: #edf2f7; color: #172033; font-size: 12px; overflow-wrap: anywhere; }
+    .browser-pin-json-doc { display: grid; gap: 12px; }
+    .browser-pin-json-row { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 14px; align-items: start; }
+    .browser-pin-json-key { color: #8b95a5; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
+    .browser-pin-json-value { min-width: 0; color: #162132; line-height: 1.55; overflow-wrap: anywhere; word-break: break-word; }
+    .browser-pin-json-text-block { line-height: 1.7; white-space: pre-wrap; }
+    .browser-pin-json-token-list { display: flex; flex-wrap: wrap; gap: 8px; }
+    .browser-pin-json-token { display: inline-flex; align-items: center; max-width: 100%; padding: 7px 10px; border: 1px solid #d9e1ed; border-radius: 999px; background: #f7f9fc; color: #3d4c60; font-size: 12px; overflow-wrap: anywhere; }
+    .browser-pin-json-token-link { color: #2e6fed; background: #eaf1ff; border-color: #cfe0ff; }
+    .browser-pin-json-token-boolean, .browser-pin-json-token-number, .browser-pin-json-token-null { color: #334155; background: #eef3f9; }
     .browser-pin-json-list, .browser-pin-json-nested { display: grid; gap: 8px; min-width: 0; }
-    .browser-pin-json-list-item { padding: 8px 10px; border: 1px solid #e0e7f0; border-radius: 8px; background: #f8fafc; }
-    .browser-pin-json-nested { padding: 10px 12px; border: 1px solid #e0e7f0; border-radius: 8px; background: #f8fafc; }
-    .browser-pin-json-nested .browser-pin-json-row { grid-template-columns: minmax(92px, 0.25fr) minmax(0, 1fr); }
+    .browser-pin-json-list-item, .browser-pin-json-subblock { padding: 12px 14px; border: 1px solid #d9e1ed; border-radius: 12px; background: #f7f9fc; }
+    .browser-pin-json-subblock .browser-pin-json-row { grid-template-columns: minmax(120px, 0.32fr) minmax(0, 1fr); }
     .browser-pin-json-value a, .browser-pin-link-pill, .browser-pin-file-row a { color: #2563d8; text-decoration: none; }
     .browser-pin-json-value a:hover, .browser-pin-link-pill:hover, .browser-pin-file-row a:hover { text-decoration: underline; }
     .browser-pin-markdown { display: grid; gap: 10px; line-height: 1.7; color: #162132; }
     .browser-pin-markdown h1, .browser-pin-markdown h2, .browser-pin-markdown h3, .browser-pin-markdown p { margin: 0; }
     .browser-pin-markdown a { color: #2e6fed; text-decoration: none; }
     .browser-pin-markdown a:hover { text-decoration: underline; }
-    .browser-pin-binary-notice { margin: 0; color: #6a778b; }
+    .browser-pin-binary-card { display: grid; gap: 8px; place-items: center; min-height: 132px; padding: 18px; border: 1px solid #d9e1ed; border-radius: 12px; background: #f7f9fc; text-align: center; color: #6a778b; }
+    .browser-pin-binary-card p { margin: 0; }
+    .browser-pin-binary-badge { display: inline-flex; padding: 8px 12px; border: 1px solid #d9e1ed; border-radius: 999px; background: #fff; color: #162132; font-weight: 700; }
+    .browser-pin-binary-type { font-size: 12px; overflow-wrap: anywhere; }
     .browser-protocol-proof { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px 14px; margin: 0; }
     .browser-protocol-proof dt { color: #6a778b; font-size: 12px; font-weight: 700; }
     .browser-protocol-proof dd { margin: 0; overflow-wrap: anywhere; }
@@ -86,11 +89,13 @@ export const BROWSER_PAGE_STYLES = `
     .browser-pin-media-preview { display: grid; place-items: center; min-height: 110px; border-radius: 7px; background: #e8eef6; color: #62718a; font-size: 12px; font-weight: 700; text-align: center; overflow: hidden; }
     .browser-pin-media-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .browser-pin-media-label { min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
-    .browser-pin-file-list { display: grid; gap: 0; }
-    .browser-pin-file-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #e6ebf2; }
-    .browser-pin-file-row:first-of-type { border-top: 0; padding-top: 0; }
+    .browser-pin-file-list { display: grid; gap: 10px; }
+    .browser-pin-file-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px 14px; border: 1px solid #d9e1ed; border-radius: 12px; background: #f7f9fc; }
+    .browser-pin-file-meta { display: grid; gap: 4px; min-width: 0; }
+    .browser-pin-file-name { font-weight: 700; color: #162132; word-break: break-word; }
+    .browser-pin-file-desc { color: #6a778b; font-size: 12px; word-break: break-word; }
     .browser-pin-file-row span { min-width: 0; overflow-wrap: anywhere; }
-    .browser-pin-file-row button { border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; padding: 6px 10px; white-space: nowrap; }
+    .browser-pin-download { display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 10px; border: 1px solid #cfe0ff; background: #eaf1ff; color: #2e6fed; font-size: 12px; font-weight: 700; white-space: nowrap; }
     .browser-pin-link-list { display: flex; flex-wrap: wrap; gap: 8px; }
     .browser-pin-link-pill { display: inline-flex; max-width: 100%; padding: 6px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #f8fafc; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
     .browser-pin-raw-record { display: grid; gap: 10px; }
@@ -103,9 +108,9 @@ export const BROWSER_PAGE_STYLES = `
       .browser-pin-page-head { flex-direction: column; }
       .browser-pin-page-actions { width: 100%; }
       .browser-pin-page-actions button { width: 100%; }
-      .browser-pin-json-row, .browser-pin-json-nested .browser-pin-json-row { grid-template-columns: 1fr; gap: 5px; }
+      .browser-pin-json-row, .browser-pin-json-subblock .browser-pin-json-row { grid-template-columns: 1fr; gap: 5px; }
       .browser-protocol-proof { grid-template-columns: 1fr; }
-      .browser-pin-file-row { flex-direction: column; align-items: flex-start; }
+      .browser-pin-file-row { grid-template-columns: 1fr; align-items: stretch; }
     }
     .browser-html-frame, .browser-pdf { width: 100%; height: 100%; min-height: 520px; border: 0; background: #fff; }
     .browser-image, .browser-video { display: block; max-width: 100%; margin: 0 auto; }
