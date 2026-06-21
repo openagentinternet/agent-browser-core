@@ -2745,6 +2745,7 @@ async function resolveUri(uri, options) {
   if (shouldRecord) pushHistory(normalizedUri);
   setStatus('loading', '');
   state.lastResolveError = null;
+  showLoadingState();
   try {
     var result = await api(resolveUrl(normalizedUri));
     var resolvedUri = textValue(result && (result.normalizedUri || result.uri)) || normalizedUri;
@@ -2755,11 +2756,13 @@ async function resolveUri(uri, options) {
     recordVisit(result);
     setStatus('resolved', '');
     renderCurrent();
+    clearLoadingState();
     if (state.inspectorOpen) {
       renderInspector();
     }
     return result;
   } catch (error) {
+    clearLoadingState();
     state.lastResolveError = {
       inputUri: normalizedUri,
       code: error && error.payload && error.payload.code,
