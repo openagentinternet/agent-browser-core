@@ -179,7 +179,7 @@ function avatarIdFromPath(value: string): string {
   return match?.[1] ?? '';
 }
 
-async function fetchBotProfileInfo(input: {
+export async function fetchBotProfileInfo(input: {
   baseUrl: string;
   globalMetaId: string;
   fetch?: typeof fetch;
@@ -224,93 +224,6 @@ async function fetchBotProfileInfo(input: {
   } catch {
     return null;
   }
-}
-
-async function enrichHomepageChats(input: {
-  homepage: Record<string, unknown>;
-  baseUrl: string;
-  fetch?: typeof fetch;
-  metafileContentBaseUrl?: unknown;
-}): Promise<Record<string, unknown>> {
-  const sections = recordListField(input.homepage, 'sections');
-  if (!sections.length) {
-    return input.homepage;
-  }
-
-  const peerIds: string[] = [];
-  const seen = new Set<string>();
-  for (const section of sections) {
-    if (text(section.id) !== 'chats') {
-      continue;
-    }
-    for (const item of recordListField(section, 'items')) {
-      const peerId = text(recordField(item, 'data').interactWith) || text(item.interactWith);
-      if (!peerId || seen.has(peerId)) {
-        continue;
-      }
-      seen.add(peerId);
-      peerIds.push(peerId);
-    }
-  }
-  if (!peerIds.length) {
-    return input.homepage;
-  }
-
-  const profiles = new Map<string, Record<string, unknown>>();
-  await Promise.all(peerIds.map(async (peerId) => {
-    const profile = await fetchBotProfileInfo({
-      baseUrl: input.baseUrl,
-      globalMetaId: peerId,
-      fetch: input.fetch,
-      metafileContentBaseUrl: input.metafileContentBaseUrl,
-    });
-    if (profile) {
-      profiles.set(peerId, profile);
-    }
-  }));
-  if (!profiles.size) {
-    return input.homepage;
-  }
-
-  let changed = false;
-  const nextSections = sections.map((section) => {
-    if (text(section.id) !== 'chats') {
-      return section;
-    }
-    let sectionChanged = false;
-    const nextItems = recordListField(section, 'items').map((item) => {
-      const data = recordField(item, 'data');
-      const peerId = text(data.interactWith) || text(item.interactWith);
-      const profile = peerId ? profiles.get(peerId) : null;
-      if (!profile) {
-        return item;
-      }
-      sectionChanged = true;
-      return {
-        ...item,
-        data: {
-          ...data,
-          interactWithProfile: profile,
-        },
-      };
-    });
-    if (!sectionChanged) {
-      return section;
-    }
-    changed = true;
-    return {
-      ...section,
-      items: nextItems,
-    };
-  });
-
-  if (!changed) {
-    return input.homepage;
-  }
-  return {
-    ...input.homepage,
-    sections: nextSections,
-  };
 }
 
 async function resolveMetaAppResource(input: {
@@ -417,15 +330,9 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
       return browserCommandFailed('browser_resolve_failed', homepage.message);
     }
 
-    const enrichedHomepage = await enrichHomepageChats({
-      homepage: homepage.data,
-      baseUrl: input.config.metasoP2PBaseUrl,
-      fetch: input.fetch,
-      metafileContentBaseUrl: input.config.metafileContentBaseUrl,
-    });
     const visibleMetaIdUri = normalizedMetaIdBotPageUri(parsed.normalizedUri, botPageOverride.forceDefaultBotPage);
     const aliasUri = visibleMetaIdUri;
-    const customHomepageUri = readCustomHomepageUri(enrichedHomepage);
+    const customHomepageUri = readCustomHomepageUri(homepage.data);
     if (!botPageOverride.forceDefaultBotPage && input.config.renderCustomBotPages !== false && customHomepageUri) {
       let customParsed;
       try {
@@ -457,14 +364,14 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
         aliasUri,
         customHomepageUri,
         botHomepageSourceUrl: homepage.url,
-        botHomepageRaw: enrichedHomepage,
+        botHomepageRaw: homepage.data,
       }));
     }
 
     return browserCommandSuccess(buildBotPageResolveResult({
       uri: visibleMetaIdUri,
       normalizedUri: visibleMetaIdUri,
-      homepage: enrichedHomepage,
+      homepage: homepage.data,
       resolverUrl: homepage.url,
       templateId: input.config.botHomepageTemplateId,
       metafileContentBaseUrl: input.config.metafileContentBaseUrl,
