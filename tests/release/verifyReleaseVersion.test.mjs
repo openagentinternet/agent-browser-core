@@ -35,10 +35,10 @@ async function mutateJson(filePath, mutate) {
   await writeFile(filePath, `${JSON.stringify(contents, null, 2)}\n`, "utf8");
 }
 
-test("accepts repo tag v0.3.1", async () => {
-  const result = await verifyReleaseVersion({ tag: "v0.3.1", repoRoot });
+test("accepts repo tag v0.3.2", async () => {
+  const result = await verifyReleaseVersion({ tag: "v0.3.2", repoRoot });
 
-  assert.deepEqual(result, { version: "0.3.1" });
+  assert.deepEqual(result, { version: "0.3.2" });
 });
 
 test("rejects repo tag v0.2.0", async () => {
@@ -57,7 +57,7 @@ test("rejects mismatched internal dependency pin", async () => {
     });
 
     await assert.rejects(
-      () => verifyReleaseVersion({ tag: "v0.3.1", repoRoot: fixtureRoot }),
+      () => verifyReleaseVersion({ tag: "v0.3.2", repoRoot: fixtureRoot }),
       /@openagentinternet\/agent-browser-core depends on @openagentinternet\/agent-browser-host-contract@0\.2\.0, expected 0\.3\.1/,
     );
   } finally {
