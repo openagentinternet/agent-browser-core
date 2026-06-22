@@ -41,12 +41,18 @@ function rawPinRecord(resource: BrowserResourceEnvelope): Record<string, unknown
   return record(data(resource).rawPinRecord ?? data(resource).pin);
 }
 
+function pinTxid(resource: BrowserResourceEnvelope): string {
+  const pin = pinValue(resource);
+  const recordValue = rawPinRecord(resource);
+  return text(pin.genesisTransaction ?? recordValue.genesisTransaction ?? pin.txid ?? recordValue.txid);
+}
+
 function versionValue(resource: BrowserResourceEnvelope): Record<string, unknown> {
   return record(data(resource).version);
 }
 
-function jsonBlock(value: unknown): string {
-  return `<pre class="browser-protocol-json">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
+function jsonBlock(value: unknown, className = 'browser-protocol-json'): string {
+  return `<pre class="${escapeHtml(className)}">${escapeHtml(JSON.stringify(value, null, 2))}</pre>`;
 }
 
 function shortReference(value: string): string {
@@ -152,7 +158,13 @@ function contentTypeValue(resource: BrowserResourceEnvelope): string {
 
 function payloadIntro(resource: BrowserResourceEnvelope): string {
   const contentType = contentTypeValue(resource);
-  if (contentType.includes('json')) {
+  const payload = payloadValue(resource);
+  const rawPayload = data(resource).rawPayload;
+  const jsonPayload = parseJsonPayload(payload, rawPayload);
+  const renderAsJson = contentType.includes('json')
+    || (payload && typeof payload === 'object')
+    || (jsonPayload && typeof jsonPayload === 'object');
+  if (renderAsJson) {
     return 'JSON is rendered as a structured payload document. Original keys and order are preserved.';
   }
   if (contentType.startsWith('text/markdown')) {
@@ -327,9 +339,13 @@ function renderPayload(resource: BrowserResourceEnvelope): string {
   const contentType = contentTypeValue(resource);
   const payload = payloadValue(resource);
   const rawPayload = data(resource).rawPayload;
+  const jsonPayload = parseJsonPayload(payload, rawPayload);
+  const renderAsJson = contentType.includes('json')
+    || (payload && typeof payload === 'object')
+    || (jsonPayload && typeof jsonPayload === 'object');
 
-  if (contentType.includes('json')) {
-    return renderJsonDocument(parseJsonPayload(payload, rawPayload));
+  if (renderAsJson) {
+    return renderJsonDocument(jsonPayload);
   }
   if (contentType.startsWith('text/markdown')) {
     return `<div class="browser-pin-markdown">${renderMarkdown(typeof payload === 'string' ? payload : text(rawPayload))}</div>`;
@@ -344,6 +360,13 @@ function renderPayload(resource: BrowserResourceEnvelope): string {
 function renderRawPayload(resource: BrowserResourceEnvelope): string {
   const rawPayload = data(resource).rawPayload;
   const payload = payloadValue(resource);
+  const jsonPayload = parseJsonPayload(payload, rawPayload);
+  const renderAsJson = contentTypeValue(resource).includes('json')
+    || (payload && typeof payload === 'object')
+    || (jsonPayload && typeof jsonPayload === 'object');
+  if (renderAsJson) {
+    return jsonBlock(jsonPayload, 'browser-protocol-raw');
+  }
   const source = typeof rawPayload === 'string'
     ? rawPayload
     : typeof payload === 'string'
@@ -479,8 +502,11 @@ function renderMediaItems(resource: BrowserResourceEnvelope): string {
   const contentType = contentTypeValue(resource);
   const payload = payloadValue(resource);
   const rawPayload = data(resource).rawPayload;
+  const jsonPayload = parseJsonPayload(payload, rawPayload);
   const mediaSource = contentType.includes('json')
-    ? parseJsonPayload(payload, rawPayload)
+    || (payload && typeof payload === 'object')
+    || (jsonPayload && typeof jsonPayload === 'object')
+    ? jsonPayload
     : payload;
   const items = collectMediaItems(mediaSource);
   if (!items.length) {
@@ -495,7 +521,12 @@ function renderRelatedLinks(resource: BrowserResourceEnvelope): string {
   const contentType = contentTypeValue(resource);
   const payload = payloadValue(resource);
   const rawPayload = data(resource).rawPayload;
-  const source = contentType.includes('json') ? parseJsonPayload(payload, rawPayload) : payload;
+  const jsonPayload = parseJsonPayload(payload, rawPayload);
+  const source = contentType.includes('json')
+    || (payload && typeof payload === 'object')
+    || (jsonPayload && typeof jsonPayload === 'object')
+    ? jsonPayload
+    : payload;
   const uris = new Set<string>();
   collectBrowserUris(source, uris);
   if (!uris.size) {
@@ -522,7 +553,7 @@ export function renderPinInspectorHtml(resource: BrowserResourceEnvelope, headin
   const recordValue = rawPinRecord(resource);
   const heading = headingOverride || text(resource.title) || 'Pin';
 
-  const txid = text(pin.txid ?? recordValue.txid);
+  const txid = pinTxid(resource);
   const contentType = contentTypeValue(resource);
   const path = text(pin.path ?? recordValue.path);
   const chain = text(pin.chainName ?? recordValue.chainName ?? recordValue.chain);
@@ -560,7 +591,7 @@ export function renderPinInspectorHtml(resource: BrowserResourceEnvelope, headin
       </div>
       <aside class="browser-pin-aside">
         ${sectionBlock('Related Links', renderRelatedLinks(resource))}
-        ${sectionBlock('Verify', `${facts.length ? infoList(facts) : '<p>No pin facts available.</p>'}<details class="browser-pin-raw-record" data-browser-pin-raw-record><summary>Raw MAN pin record</summary>${jsonBlock(recordValue)}</details>`, verifyIntro())}
+        ${sectionBlock('Verify', `${facts.length ? infoList(facts) : '<p>No pin facts available.</p>'}`, verifyIntro())}
       </aside>
     </div>
   </article>`;

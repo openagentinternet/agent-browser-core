@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const renderers = await import('../../packages/renderers/dist/index.js');
+const legacyTxid = 'a'.repeat(64);
+const genesisTxid = 'b'.repeat(64);
 
 function protocolResource(rendererId, payload, overrides = {}) {
   return {
@@ -98,12 +100,15 @@ function pinInspectorResource(contentType, payload, overrides = {}) {
           chainName: 'btc',
           encryption: 'public',
           version: '1',
+          txid: legacyTxid,
+          genesisTransaction: genesisTxid,
         },
         payload,
         rawPayload: typeof payload === 'string' ? payload : '{"title":"Inspectable pin"}',
         rawPinRecord: {
           path: '/protocols/simplebuzz',
-          txid: 'a'.repeat(64),
+          txid: legacyTxid,
+          genesisTransaction: genesisTxid,
           contentType,
         },
         ...overrides,
@@ -177,19 +182,34 @@ test('Pin inspector renders prototype-style JSON payload with media, links, and 
   assert.match(html, /href="pin:\/\/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0" data-browser-map-link/);
   assert.match(html, /<h3>Verify<\/h3>/);
   assert.match(html, /View Raw Record/);
-  assert.match(html, /data-browser-pin-raw-record/);
-  assert.match(html, /data-browser-copy-value="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/);
+  assert.match(html, /data-browser-copy-value="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"/);
+  assert.match(html, /<dt>txid<\/dt>/);
   assert.match(html, /chain/);
   assert.match(html, /content-type/);
   assert.doesNotMatch(html, /requestedPinId/);
   assert.doesNotMatch(html, /resolvedPinId/);
   assert.doesNotMatch(html, /rootPinId/);
   assert.doesNotMatch(html, /historyIndex/);
-  assert.match(html, /Raw MAN pin record/);
+  assert.doesNotMatch(html, /Raw MAN pin record/);
+  assert.doesNotMatch(html, /data-browser-pin-raw-record/);
   assert.doesNotMatch(html, /<h3>Identity<\/h3>/);
   assert.doesNotMatch(html, /<h3>Overview<\/h3>/);
   assert.doesNotMatch(html, /Content-type routing model/);
   assert.doesNotMatch(html, /why-this-direction/);
+});
+
+test('Pin inspector renders JSON strings from plain text payloads as structured documents', () => {
+  const rawPayload = '{"content":"7\\n#美食工厂","contentType":"application/json;utf-8","attachments":["metafile://50d939b24815df1afd4c37137eebe15f65dbd71ae2ea505b465558a3f170c342i0.jpg"]}';
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource('text/plain;utf-8', rawPayload, {
+    rawPayload,
+  }));
+
+  assert.match(html, /JSON is rendered as a structured payload document/);
+  assert.match(html, /browser-pin-json-doc/);
+  assert.match(html, /browser-pin-json-key">content</);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-link/);
+  assert.match(html, /browser-pin-file-meta/);
+  assert.match(html, /browser-protocol-raw">\{\n  &quot;content&quot;: &quot;7\\n#美食工厂&quot;,\n  &quot;contentType&quot;: &quot;application\/json;utf-8&quot;/);
 });
 
 test('Pin inspector discovers related files from JSON-string payload sources', () => {

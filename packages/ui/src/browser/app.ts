@@ -2511,6 +2511,12 @@ function pinInspectorRawPinRecord(current) {
   return objectValue(data.rawPinRecord || data.pin);
 }
 
+function pinInspectorTxid(current) {
+  var pin = pinInspectorPin(current);
+  var record = pinInspectorRawPinRecord(current);
+  return textValue(pin.genesisTransaction || record.genesisTransaction || pin.txid || record.txid);
+}
+
 function pinInspectorVersion(current) {
   return objectValue(pinInspectorData(current).version);
 }
@@ -2716,7 +2722,11 @@ function pinInspectorContentType(current) {
 
 function pinInspectorPayloadIntro(current) {
   var contentType = pinInspectorContentType(current);
-  if (contentType.indexOf('json') !== -1) return 'JSON is rendered as a structured payload document. Original keys and order are preserved.';
+  var payload = pinInspectorPayload(current);
+  var rawPayload = pinInspectorData(current).rawPayload;
+  var jsonPayload = pinInspectorParseJsonPayload(payload, rawPayload);
+  var renderAsJson = contentType.indexOf('json') !== -1 || (payload && typeof payload === 'object') || (jsonPayload && typeof jsonPayload === 'object');
+  if (renderAsJson) return 'JSON is rendered as a structured payload document. Original keys and order are preserved.';
   if (contentType.indexOf('text/markdown') === 0) return 'Markdown payload rendered as document content.';
   if (contentType.indexOf('text/plain') === 0) return 'Plain text payload with line breaks preserved.';
   return 'Binary PIN. No inline payload preview is available.';
@@ -2806,8 +2816,10 @@ function pinInspectorRenderPayload(current) {
   var contentType = pinInspectorContentType(current);
   var payload = pinInspectorPayload(current);
   var rawPayload = pinInspectorData(current).rawPayload;
-  if (contentType.indexOf('json') !== -1) {
-    return pinInspectorRenderJsonDocument(pinInspectorParseJsonPayload(payload, rawPayload));
+  var jsonPayload = pinInspectorParseJsonPayload(payload, rawPayload);
+  var renderAsJson = contentType.indexOf('json') !== -1 || (payload && typeof payload === 'object') || (jsonPayload && typeof jsonPayload === 'object');
+  if (renderAsJson) {
+    return pinInspectorRenderJsonDocument(jsonPayload);
   }
   if (contentType.indexOf('text/markdown') === 0) {
     return '<div class="browser-pin-markdown">' + pinInspectorRenderMarkdown(typeof payload === 'string' ? payload : textValue(rawPayload)) + '</div>';
@@ -2823,6 +2835,11 @@ function pinInspectorRenderRawPayload(current) {
   var data = pinInspectorData(current);
   var rawPayload = data.rawPayload;
   var payload = pinInspectorPayload(current);
+  var jsonPayload = pinInspectorParseJsonPayload(payload, rawPayload);
+  var renderAsJson = pinInspectorContentType(current).indexOf('json') !== -1 || (payload && typeof payload === 'object') || (jsonPayload && typeof jsonPayload === 'object');
+  if (renderAsJson) {
+    return pinInspectorJsonBlock(jsonPayload, 'browser-protocol-raw');
+  }
   var source = typeof rawPayload === 'string'
     ? rawPayload
     : (typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2));
@@ -2966,8 +2983,9 @@ function pinInspectorRenderMediaItems(current) {
   var contentType = pinInspectorContentType(current);
   var payload = pinInspectorPayload(current);
   var rawPayload = pinInspectorData(current).rawPayload;
-  var mediaSource = contentType.indexOf('json') !== -1
-    ? pinInspectorParseJsonPayload(payload, rawPayload)
+  var jsonPayload = pinInspectorParseJsonPayload(payload, rawPayload);
+  var mediaSource = contentType.indexOf('json') !== -1 || (payload && typeof payload === 'object') || (jsonPayload && typeof jsonPayload === 'object')
+    ? jsonPayload
     : payload;
   var items = pinInspectorCollectMediaItems(mediaSource);
   if (!items.length) {
@@ -2987,8 +3005,9 @@ function pinInspectorRenderRelatedLinks(current) {
   var contentType = pinInspectorContentType(current);
   var payload = pinInspectorPayload(current);
   var rawPayload = pinInspectorData(current).rawPayload;
-  var source = contentType.indexOf('json') !== -1
-    ? pinInspectorParseJsonPayload(payload, rawPayload)
+  var jsonPayload = pinInspectorParseJsonPayload(payload, rawPayload);
+  var source = contentType.indexOf('json') !== -1 || (payload && typeof payload === 'object') || (jsonPayload && typeof jsonPayload === 'object')
+    ? jsonPayload
     : payload;
   var uris = new Set();
   pinInspectorCollectBrowserUris(source, uris);
@@ -3025,10 +3044,16 @@ function enhancePinMediaPreviews(root) {
 
 function openPinRawRecord(trigger) {
   var page = trigger && trigger.closest ? trigger.closest('.browser-pin-page') : null;
-  var details = page && page.querySelector ? page.querySelector('[data-browser-pin-raw-record]') : null;
-  if (!details) return false;
-  details.open = true;
-  if (typeof details.scrollIntoView === 'function') details.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  if (!page || !state.current) return false;
+  var rawRecord = pinInspectorRawPinRecord(state.current);
+  if (!rawRecord) return false;
+  if (!elements.modalRoot) return false;
+  elements.modalRoot.hidden = false;
+  elements.modalRoot.innerHTML = '<div class="browser-modal-backdrop" data-browser-modal-close></div>' +
+    '<section class="browser-modal-panel" role="document">' +
+      '<header class="browser-modal-header"><h2>Raw PIN record</h2><button type="button" class="browser-modal-close" data-browser-modal-close aria-label="Close">x</button></header>' +
+      '<div class="browser-modal-body"><pre class="browser-protocol-json">' + escapeHtml(JSON.stringify(rawRecord, null, 2)) + '</pre></div>' +
+    '</section>';
   return true;
 }
 
@@ -3037,7 +3062,7 @@ function renderPinInspectorPage(current) {
   var version = pinInspectorVersion(current);
   var record = pinInspectorRawPinRecord(current);
   var heading = textValue(current && current.title) || 'Pin';
-  var txid = textValue(pin.txid || record.txid);
+  var txid = pinInspectorTxid(current);
   var contentType = pinInspectorContentType(current);
   var path = textValue(pin.path || record.path);
   var chain = textValue(pin.chainName || record.chainName || record.chain);
@@ -3076,8 +3101,7 @@ function renderPinInspectorPage(current) {
       '</div>' +
       '<aside class="browser-pin-aside">' +
         pinInspectorSection('Related Links', pinInspectorRenderRelatedLinks(current)) +
-        pinInspectorSection('Verify', (facts.length ? pinInspectorInfoList(facts) : '<p>No pin facts available.</p>') +
-          '<details class="browser-pin-raw-record" data-browser-pin-raw-record><summary>Raw MAN pin record</summary>' + pinInspectorJsonBlock(record, 'browser-protocol-json') + '</details>') +
+        pinInspectorSection('Verify', facts.length ? pinInspectorInfoList(facts) : '<p>No pin facts available.</p>') +
       '</aside>' +
     '</div>' +
     '</article>';

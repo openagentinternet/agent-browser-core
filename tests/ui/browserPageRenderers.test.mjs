@@ -14,6 +14,8 @@ const multilineBuzzPinId = '9ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc4307
 const metaAppPinId = 'a'.repeat(64) + 'i0';
 const olderMetaAppPinId = 'b'.repeat(64) + 'i0';
 const metaAppCodePinId = 'c'.repeat(64) + 'i0';
+const legacyTxid = 'a'.repeat(64);
+const genesisTxid = 'b'.repeat(64);
 const chatPeerSunny = 'idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz';
 const chatPeerDon = 'idq1kwa7ku4w7rrx07cra9t5qr33stszvml3s96qjy';
 const chatPeerAtlas = 'idq1g6d3c36xl5uphy8z2w4q8g2jp3xcz9n9s7t4nq';
@@ -603,6 +605,8 @@ test('pin-inspector renderer uses payload-first mature shell sections', async ()
         chainName: 'btc',
         encryption: 'public',
         version: '1',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
       },
       payload: {
         title: 'Readable Pin',
@@ -625,7 +629,8 @@ test('pin-inspector renderer uses payload-first mature shell sections', async ()
       rawPayload: '{"title":"Readable Pin"}',
       rawPinRecord: {
         path: '/protocols/simplebuzz',
-        txid: 'a'.repeat(64),
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
       },
     },
   }, {
@@ -663,18 +668,71 @@ test('pin-inspector renderer uses payload-first mature shell sections', async ()
   assert.match(html, /browser-pin-link-pill/);
   assert.match(html, /<h3>Verify<\/h3>/);
   assert.match(html, /View Raw Record/);
-  assert.match(html, /data-browser-pin-raw-record/);
   assert.match(html, /guide\.pdf/);
   assert.match(html, /fixture\.zip/);
   assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
   assert.match(html, /href="pin:\/\/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0" data-browser-map-link/);
   assert.match(html, /data-browser-download-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0\.zip"/);
   assert.match(html, /data-browser-download-ref="https:\/\/files\.example\/guide\.pdf"/);
-  assert.match(html, /data-browser-copy-value="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/);
+  assert.match(html, /data-browser-copy-value="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"/);
+  assert.match(html, /<dt>txid<\/dt>/);
   assert.doesNotMatch(html, /requestedPinId/);
   assert.doesNotMatch(html, /resolvedPinId/);
   assert.doesNotMatch(html, /Content-type routing model/);
   assert.doesNotMatch(html, /why-this-direction/);
+  assert.doesNotMatch(html, /Raw MAN pin record/);
+  assert.doesNotMatch(html, /data-browser-pin-raw-record/);
+});
+
+test('pin-inspector renders JSON strings from plain text payloads as structured documents', async () => {
+  const rawPayload = '{"content":"7\\n#美食工厂","contentType":"application/json;utf-8","attachments":["metafile://50d939b24815df1afd4c37137eebe15f65dbd71ae2ea505b465558a3f170c342i0.jpg"]}';
+  const { nodes } = runWithResolve(result({
+    type: 'pin-inspector',
+    contentType: 'text/plain;utf-8',
+    data: {
+      rendererId: 'generic.pin-inspector',
+      version: {
+        requestedPinId: '06a1ecf0944fd0a86eaac7afa67dff03d913e5c76cc7a098cbed56b476d6af3ci0',
+        resolvedPinId: '06a1ecf0944fd0a86eaac7afa67dff03d913e5c76cc7a098cbed56b476d6af3ci0',
+        versionSelector: 'latest',
+      },
+      pin: {
+        pinId: '06a1ecf0944fd0a86eaac7afa67dff03d913e5c76cc7a098cbed56b476d6af3ci0',
+        path: '/protocols/simplebuzz',
+        contentType: 'text/plain;utf-8',
+        operation: 'create',
+        chainName: 'mvc',
+        encryption: '0',
+        version: '1',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+      payload: rawPayload,
+      rawPayload,
+      rawPinRecord: {
+        path: '/protocols/simplebuzz',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+        contentType: 'text/plain;utf-8',
+        contentBody: 'eyJjb250ZW50IjoiN1xuI+e+jumjn+W3peWOgiIsImNvbnRlbnRUeXBlIjoiYXBwbGljYXRpb24vanNvbjt1dGYtOCIsImF0dGFjaG1lbnRzIjpbIm1ldGFmaWxlOi8vNTBkOTM5YjI0ODE1ZGYxYWZkNGMzNzEzN2VlYmUxNWY2NWRiZDcxYWUyZWE1MDViNDY1NTU4YTNmMTcwYzM0MmkwLmpwZyJdfQ==',
+      },
+    },
+  }, {
+    uri: 'pin://06a1ecf0944fd0a86eaac7afa67dff03d913e5c76cc7a098cbed56b476d6af3ci0?version=0',
+    normalizedUri: 'pin://06a1ecf0944fd0a86eaac7afa67dff03d913e5c76cc7a098cbed56b476d6af3ci0?version=0',
+    resourceType: 'pin',
+    title: 'Pin 06a1ecf094...af3ci0',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-pin-page'), 'plain-text-json pin render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /JSON is rendered as a structured payload document/);
+  assert.match(html, /browser-pin-json-doc/);
+  assert.match(html, /browser-pin-json-key">content</);
+  assert.match(html, /browser-pin-json-row browser-pin-json-row-longtext/);
+  assert.match(html, /browser-pin-json-subblock/);
+  assert.match(html, /browser-protocol-raw">\{\n  &quot;content&quot;: &quot;7\\n#美食工厂&quot;/);
 });
 
 test('pin-inspector markdown payload renders structured lists in the mature shell', async () => {

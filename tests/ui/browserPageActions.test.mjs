@@ -244,27 +244,51 @@ test('resolveMediaPreviewHref maps image-capable references and rejects navigati
   assert.equal(context.resolveMediaPreviewHref('metaid://idq1fixturebot'), '');
 });
 
-test('openPinRawRecord opens the raw MAN record details panel', () => {
-  const { context } = createContext();
-  const details = {
-    open: false,
-    scrolled: false,
-    scrollIntoView() { this.scrolled = true; },
-  };
-  const page = {
-    querySelector(selector) {
-      return selector === '[data-browser-pin-raw-record]' ? details : null;
-    },
-  };
+test('openPinRawRecord opens the raw MAN record modal', () => {
+  const { context, nodes } = createContext();
   const trigger = {
     closest(selector) {
-      return selector === '.browser-pin-page' ? page : null;
+      return selector === '.browser-pin-page' ? {} : null;
+    },
+  };
+
+  context.state.current = {
+    uri: 'pin://fixture',
+    normalizedUri: 'pin://fixture',
+    resourceType: 'pin',
+    title: 'Fixture Pin',
+    renderer: {
+      type: 'pin-inspector',
+      contentType: 'application/vnd.metaid+json; charset=utf-8',
+      data: {
+        rendererId: 'generic.pin-inspector',
+        version: { requestedPinId: 'pin', resolvedPinId: 'pin', versionSelector: 'latest' },
+        pin: {
+          pinId: 'pin',
+          path: '/protocols/simplebuzz',
+          contentType: 'application/vnd.metaid+json; charset=utf-8',
+          operation: 'create',
+          chainName: 'btc',
+          version: '1',
+          genesisTransaction: 'b'.repeat(64),
+        },
+        rawPinRecord: {
+          path: '/protocols/simplebuzz',
+          genesisTransaction: 'b'.repeat(64),
+          txid: 'a'.repeat(64),
+        },
+        payload: { title: 'Fixture Pin' },
+        rawPayload: '{"title":"Fixture Pin"}',
+      },
     },
   };
 
   assert.equal(context.openPinRawRecord(trigger), true);
-  assert.equal(details.open, true);
-  assert.equal(details.scrolled, true);
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Raw PIN record/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /&quot;genesisTransaction&quot;: &quot;b{64}&quot;/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /&quot;txid&quot;: &quot;a{64}&quot;/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /browser-protocol-json/);
 });
 
 test('copyValue forwards generic page-body copy affordances through Browser copy helper', async () => {
