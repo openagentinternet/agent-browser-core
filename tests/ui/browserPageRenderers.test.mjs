@@ -19,9 +19,12 @@ const genesisTxid = 'b'.repeat(64);
 const chatPeerSunny = 'idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz';
 const chatPeerDon = 'idq1kwa7ku4w7rrx07cra9t5qr33stszvml3s96qjy';
 const chatPeerAtlas = 'idq1g6d3c36xl5uphy8z2w4q8g2jp3xcz9n9s7t4nq';
-const chatPeerSunnyAvatarUrl = `https://file.metaid.io/metafile-indexer/content/${'d'.repeat(64)}i0`;
-const chatPeerDonAvatarUrl = `https://file.metaid.io/metafile-indexer/content/${'e'.repeat(64)}i0`;
-const chatPeerAtlasAvatarUrl = `https://file.metaid.io/metafile-indexer/content/${'f'.repeat(64)}i0`;
+const chatPeerSunnyAvatarPinId = 'd'.repeat(64) + 'i0';
+const chatPeerDonAvatarPinId = 'e'.repeat(64) + 'i0';
+const chatPeerAtlasAvatarPinId = 'f'.repeat(64) + 'i0';
+const chatPeerSunnyAvatarUrl = `https://file.metaid.io/metafile-indexer/content/${chatPeerSunnyAvatarPinId}`;
+const chatPeerDonAvatarUrl = `https://file.metaid.io/metafile-indexer/content/${chatPeerDonAvatarPinId}`;
+const chatPeerAtlasAvatarUrl = `https://file.metaid.io/metafile-indexer/content/${chatPeerAtlasAvatarPinId}`;
 
 class FakeElement {
   constructor() {
@@ -79,6 +82,7 @@ function elements() {
 
 function runWithResolve(resolvePayload) {
   const nodes = elements();
+  const fetchCalls = [];
   const context = {
     console,
     URL,
@@ -98,6 +102,7 @@ function runWithResolve(resolvePayload) {
       addEventListener: () => {},
     },
     fetch: async (url) => {
+      fetchCalls.push(String(url));
       if (String(url).startsWith('/api/browser/resolve')) {
         return { ok: true, json: async () => ({ ok: true, data: resolvePayload }) };
       }
@@ -105,7 +110,7 @@ function runWithResolve(resolvePayload) {
     },
   };
   vm.runInNewContext(buildBrowserPageDefinition().script, context);
-  return { context, nodes };
+  return { context, nodes, fetchCalls };
 }
 
 function result(renderer, overrides = {}) {
@@ -129,7 +134,7 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   fixture.sections[0].items[0].pinId = servicePinId;
   fixture.sections[1].items[0].pinId = buzzPinId;
   const avatarUrl = 'https://file.metaid.io/metafile-indexer/content/avatar-pin';
-  const { nodes } = runWithResolve(result({
+  const { nodes, fetchCalls } = runWithResolve(result({
     type: 'bot-page',
     contentType: 'application/vnd.oac.bot-homepage+json',
     data: fixture,
@@ -175,7 +180,7 @@ test('bot-page renderer does not create pin detail links from non-pin service id
       },
     ],
   };
-  const { nodes } = runWithResolve(result({
+  const { nodes, fetchCalls } = runWithResolve(result({
     type: 'bot-page',
     contentType: 'application/vnd.oac.bot-homepage+json',
     data: homepage,
@@ -216,7 +221,7 @@ test('bot-page renderer truncates buzz detail longer than 200 characters with el
       },
     ],
   };
-  const { nodes } = runWithResolve(result({
+  const { nodes, fetchCalls } = runWithResolve(result({
     type: 'bot-page',
     contentType: 'application/vnd.oac.bot-homepage+json',
     data: homepage,
@@ -262,11 +267,10 @@ test('bot-page renderer mixes buzzes and chats in Recent Activity by descending 
             protocolPath: '/protocols/simplemsg',
             timestamp: Math.floor(Date.UTC(2026, 5, 19) / 1000),
             data: {
-              interactWith: chatPeerSunny,
-              interactWithProfile: {
+              interactWith: {
                 globalMetaId: chatPeerSunny,
                 name: 'AI_Sunny',
-                avatar: chatPeerSunnyAvatarUrl,
+                avatarId: chatPeerSunnyAvatarPinId,
               },
             },
           },
@@ -275,11 +279,10 @@ test('bot-page renderer mixes buzzes and chats in Recent Activity by descending 
             protocolPath: '/protocols/simplemsg',
             timestamp: Math.floor(Date.UTC(2026, 5, 18) / 1000),
             data: {
-              interactWith: chatPeerDon,
-              interactWithProfile: {
+              interactWith: {
                 globalMetaId: chatPeerDon,
                 name: 'don-bot',
-                avatar: chatPeerDonAvatarUrl,
+                avatarId: chatPeerDonAvatarPinId,
               },
             },
           },
@@ -288,11 +291,10 @@ test('bot-page renderer mixes buzzes and chats in Recent Activity by descending 
             protocolPath: '/protocols/simplemsg',
             timestamp: Math.floor(Date.UTC(2026, 5, 16) / 1000),
             data: {
-              interactWith: chatPeerAtlas,
-              interactWithProfile: {
+              interactWith: {
                 globalMetaId: chatPeerAtlas,
                 name: 'Atlas',
-                avatar: chatPeerAtlasAvatarUrl,
+                avatarId: chatPeerAtlasAvatarPinId,
               },
             },
           },
@@ -336,7 +338,7 @@ test('bot-page renderer mixes buzzes and chats in Recent Activity by descending 
       },
     ],
   };
-  const { nodes } = runWithResolve(result({
+  const { nodes, fetchCalls } = runWithResolve(result({
     type: 'bot-page',
     contentType: 'application/vnd.oac.bot-homepage+json',
     data: homepage,
@@ -364,6 +366,7 @@ test('bot-page renderer mixes buzzes and chats in Recent Activity by descending 
   assert.ok(html.indexOf('don-bot') < html.indexOf('Published earlier build.'), 'older buzz should remain below newer chat');
   assert.ok(html.indexOf('Published earlier build.') < html.indexOf('Atlas'), 'older chat should remain below older buzz');
   assert.ok(html.indexOf('Atlas') < html.indexOf('Oldest activity entry.'), 'oldest buzz should render last');
+  assert.equal(fetchCalls.filter((url) => url.includes('/api/browser/info')).length, 0);
 });
 
 test('bot-page renderer removes linked title for multiline simplebuzz recent activity rows', async () => {

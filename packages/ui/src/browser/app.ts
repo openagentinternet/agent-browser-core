@@ -285,6 +285,18 @@ function buildMetafileDownloadHref(reference) {
     : baseUrl + '/' + encodedPinId;
 }
 
+function buildMetafileContentHref(reference) {
+  var value = textValue(reference);
+  if (!value) return '';
+  if (/^https?:\\/\\//i.test(value)) return safeUrl(value);
+  if (!isBrowserPinId(value)) return '';
+  var baseUrl = normalizeMetafileContentBaseUrl(settingValue('metafileContentBaseUrl') || DEFAULT_METAFILE_CONTENT_BASE_URL);
+  var encodedPinId = encodeURIComponent(value.toLowerCase());
+  return isMetafileIndexerRoot(baseUrl)
+    ? baseUrl + '/content/' + encodedPinId
+    : baseUrl + '/' + encodedPinId;
+}
+
 function isBrowserInternalHref(value) {
   return /^(metaid|metaapp|metafile|map|pin):\\/\\//i.test(textValue(value));
 }
@@ -530,64 +542,6 @@ function triggerEnterAnimation(node) {
   setTimeout(function () {
     node.classList.remove('is-entering');
   }, 320);
-}
-
-function collectChatPeerIds(current) {
-  var renderer = current && current.renderer ? current.renderer : {};
-  var data = renderer.data && typeof renderer.data === 'object' ? renderer.data : {};
-  var sections = Array.isArray(data.sections) ? data.sections : [];
-  var peerIds = [];
-  var seen = {};
-  for (var i = 0; i < sections.length; i += 1) {
-    var section = sections[i] && typeof sections[i] === 'object' ? sections[i] : {};
-    if (textValue(section.id) !== 'chats') continue;
-    var items = Array.isArray(section.items) ? section.items : [];
-    for (var j = 0; j < items.length; j += 1) {
-      var item = items[j] && typeof items[j] === 'object' ? items[j] : {};
-      var itemData = item.data && typeof item.data === 'object' ? item.data : {};
-      var peerId = textValue(itemData.interactWith) || textValue(item.interactWith);
-      if (peerId && !seen[peerId]) {
-        seen[peerId] = true;
-        peerIds.push(peerId);
-      }
-    }
-  }
-  return peerIds;
-}
-
-function fillChatPeerProfile(peerId, profile) {
-  if (!elements.viewport) return;
-  var nodes = elements.viewport.querySelectorAll('[data-chat-peer="' + peerId + '"]');
-  if (!nodes || !nodes.length) return;
-  var name = textValue(profile && profile.name) || peerId;
-  var avatarUrl = safeUrl(profile && profile.avatar);
-  for (var i = 0; i < nodes.length; i += 1) {
-    var node = nodes[i];
-    var partnerSpan = node.querySelectorAll('[data-chat-partner]');
-    if (!partnerSpan.length) continue;
-    var target = partnerSpan[partnerSpan.length - 1];
-    var avatarHtml = avatarUrl
-      ? '<span style="' + CHAT_PERSON_AVATAR_STYLE + '" aria-hidden="true"><img class="browser-avatar-image" src="' + escapeHtml(avatarUrl) + '" alt="" /></span>'
-      : '<span style="' + CHAT_PERSON_AVATAR_STYLE + '" aria-hidden="true">' + escapeHtml(initials(name)) + '</span>';
-    target.innerHTML = avatarHtml + '<span style="' + CHAT_PERSON_NAME_STYLE + '">' + escapeHtml(name) + '</span>';
-  }
-}
-
-function enrichChatPeerProfiles() {
-  var current = state.current;
-  if (!current) return;
-  var peerIds = collectChatPeerIds(current);
-  if (!peerIds.length) return;
-  state.enrichToken += 1;
-  var token = state.enrichToken;
-  peerIds.forEach(function (peerId) {
-    api(browserEndpoints.info + '?globalMetaId=' + encodeURIComponent(peerId))
-      .then(function (profile) {
-        if (token !== state.enrichToken) return;
-        if (profile) fillChatPeerProfile(peerId, profile);
-      })
-      .catch(function () {});
-  });
 }
 
 function endpointWithActor(endpoint) {
@@ -1312,7 +1266,6 @@ function renderCurrent() {
     enhancePinMediaPreviews(elements.viewport);
     triggerEnterAnimation(elements.viewport);
   }
-  enrichChatPeerProfiles();
   renderBookmarkStar();
   syncPanelState();
 }
@@ -1865,9 +1818,10 @@ function normalizeBotHomepageChats(items, identity) {
   var actorName = textValue(identity && identity.name) || 'Bot';
   var actorAvatar = safeUrl(identity && identity.avatar);
   return firstArray(items).map(function (chat, index) {
-    var profile = objectValue(chat && chat.interactWithProfile);
-    var partnerGlobalMetaId = textValue(profile.globalMetaId || (chat && chat.interactWith));
-    var partnerName = textValue(profile.name) || shortId(partnerGlobalMetaId) || ('Chat ' + (index + 1));
+    var peer = objectValue(chat && chat.interactWith);
+    var partnerGlobalMetaId = textValue(peer.globalMetaId || peer.globalMetaID || peer.globalmetaid || (chat && chat.interactWith));
+    var partnerName = textValue(peer.name) || shortId(partnerGlobalMetaId) || ('Chat ' + (index + 1));
+    var partnerAvatarId = textValue(peer.avatarId || peer.avatarID || peer.avatarid);
     return {
       id: textValue(chat && chat.pinId) || ('chat-' + index),
       activityType: 'chat',
@@ -1880,7 +1834,7 @@ function normalizeBotHomepageChats(items, identity) {
       actorName: actorName,
       actorAvatar: actorAvatar,
       partnerName: partnerName,
-      partnerAvatar: safeUrl(profile.avatar),
+      partnerAvatar: partnerAvatarId ? buildMetafileContentHref(partnerAvatarId) : safeUrl(peer.avatar),
       partnerGlobalMetaId: partnerGlobalMetaId,
       partnerHref: partnerGlobalMetaId ? ('metaid://' + partnerGlobalMetaId) : '',
       raw: chat
