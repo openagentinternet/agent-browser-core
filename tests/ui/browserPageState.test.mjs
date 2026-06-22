@@ -295,6 +295,7 @@ function createBrowserContext(options = {}) {
         openCalls.push([url, target, features]);
         return null;
       },
+      metaidwallet: options.metaidwallet,
     },
     document: {
       readyState: 'complete',
@@ -343,9 +344,16 @@ function createBrowserContext(options = {}) {
           }),
         };
       }
+      if (options.walletProfileResponse && String(url).includes('/api/v1/users/address/')) {
+        return {
+          ok: true,
+          json: async () => JSON.parse(JSON.stringify(options.walletProfileResponse)),
+        };
+      }
       throw new Error(`Unexpected fetch ${url}`);
     },
   };
+  context.globalThis = context;
   vm.runInNewContext(buildBrowserPageDefinition().script, context);
   return { context, elements, fetchCalls, openCalls };
 }
@@ -1032,6 +1040,56 @@ test('standalone Metalet install action opens the wallet site in a new window', 
   assert.deepEqual(openCalls, [
     ['https://metalet.space', '_blank', 'noopener'],
   ]);
+});
+
+test('standalone Metalet connect updates the single wallet actor and keeps chip inert', async () => {
+  let connectCalls = 0;
+  const metaidwallet = {
+    isConnected: async () => ({ status: connectCalls ? 'connected' : 'not-connected' }),
+    connect: async () => {
+      connectCalls += 1;
+      return { status: 'connected' };
+    },
+    getNetwork: async () => ({ network: 'livenet' }),
+    getAddress: async () => 'mvc-address-1234567890',
+    getPublicKey: async () => 'mvc-public-key',
+    btc: {
+      getAddress: async () => 'btc-address-1234567890',
+      getPublicKey: async () => 'btc-public-key',
+    },
+  };
+  const { context, elements, fetchCalls } = createBrowserContext({
+    runtimeResponse: standaloneWalletRuntimePayload(),
+    metaidwallet,
+    walletProfileResponse: {
+      code: 0,
+      data: {
+        name: 'Sunny Fung',
+        globalMetaId: 'idq1walletuser',
+        avatar: '/avatar.png',
+      },
+    },
+  });
+
+  await waitFor(() => context.state.runtime, 'standalone runtime load');
+
+  elements['[data-browser-using-selector]'].click();
+  await waitFor(() => context.state.actorId === 'metalet:mvc-address-1234567890', 'wallet actor selection');
+
+  assert.equal(connectCalls, 1);
+  assert.equal(context.state.runtime.defaultActor.id, 'metalet:mvc-address-1234567890');
+  assert.equal(context.state.runtime.actors.length, 1);
+  assert.equal(context.state.runtime.actors[0].globalMetaId, 'idq1walletuser');
+  assert.equal(context.state.runtime.actors[0].wallet.btcAddress, 'btc-address-1234567890');
+  assert.ok(fetchCalls.includes('https://file.metaid.io/metafile-indexer/api/v1/users/address/mvc-address-1234567890'));
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Wallet: Sunny Fung/);
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /idq1walletuser/);
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /https:\/\/file\.metaid\.io\/metafile-indexer\/avatar\.png/);
+
+  elements['[data-browser-modal-root]'].innerHTML = 'unchanged';
+  elements['[data-browser-using-selector]'].click();
+  assert.equal(elements['[data-browser-modal-root]'].innerHTML, 'unchanged');
+  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, /data-browser-actor-id/);
 });
 
 test('Browser menu is data-driven and opens cache management settings', async () => {

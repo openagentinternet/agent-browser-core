@@ -328,6 +328,11 @@ function shortId(value) {
   return text.slice(0, 10) + '...' + text.slice(-6);
 }
 
+function shortAddress(address) {
+  var value = textValue(address);
+  return value.length > 14 ? value.slice(0, 8) + '...' + value.slice(-6) : value;
+}
+
 function txidFromPinId(value) {
   var text = textValue(value);
   var match = text.match(/^([0-9a-f]{64})i[0-9]+$/i);
@@ -697,6 +702,11 @@ function settingValue(key) {
   if (Object.prototype.hasOwnProperty.call(effectiveBrowser, key)) return effectiveBrowser[key];
   if (Object.prototype.hasOwnProperty.call(defaults, key)) return defaults[key];
   return '';
+}
+
+function browserEffectiveSettings() {
+  var data = state.settingsData || {};
+  return objectValue(data.effectiveBrowser || data.browser || {});
 }
 
 function customBotPagesEnabled() {
@@ -1097,6 +1107,41 @@ function selectedStandaloneWalletActor() {
   return isStandaloneWalletRuntime() && isMetaletActor(actor) ? actor : null;
 }
 
+function normalizeProfileAvatar(value) {
+  var raw = textValue(value);
+  if (!raw) return '';
+  if (/^https?:\\/\\//i.test(raw)) return raw;
+  var base = textValue(browserEffectiveSettings().metafileContentBaseUrl).replace(/\\/+$/, '');
+  if (!base) return raw;
+  return base + (raw.charAt(0) === '/' ? raw : '/' + raw);
+}
+
+function normalizeWalletProfile(raw) {
+  var data = objectValue(raw && raw.data ? raw.data : raw);
+  return {
+    name: textValue(data.name || data.displayName || data.nickname),
+    globalMetaId: textValue(data.globalMetaId || data.globalMetaID || data.metaId || data.metaid),
+    avatar: normalizeProfileAvatar(data.avatar || data.avatarUrl || data.avatarUri || data.avatar_uri || data.avatarPinId)
+  };
+}
+
+async function resolveMetaletWalletProfile(address) {
+  var walletAddress = textValue(address);
+  var settings = state.settingsData || await api(browserSettingsEndpoint());
+  state.settingsData = settings;
+  var effective = browserEffectiveSettings();
+  var base = textValue(effective.metafileContentBaseUrl).replace(/\\/+$/, '');
+  if (!base || !walletAddress) return {};
+  try {
+    var response = await fetch(base + '/api/v1/users/address/' + encodeURIComponent(walletAddress));
+    if (!response || !response.ok) return {};
+    var payload = await response.json();
+    return normalizeWalletProfile(payload);
+  } catch (error) {
+    return {};
+  }
+}
+
 function actorDefaultUri(actor) {
   var globalMetaId = textValue(actor && actor.globalMetaId);
   return globalMetaId ? 'metaid://' + globalMetaId : '';
@@ -1162,7 +1207,21 @@ function renderUsingIdentity() {
   var actor = selectedActor();
   if (elements.usingChip) {
     var standaloneWalletActor = selectedStandaloneWalletActor();
-    if (isStandaloneWalletRuntime() && !standaloneWalletActor) {
+    if (standaloneWalletActor) {
+      var walletName = textValue(standaloneWalletActor.label) || shortAddress(standaloneWalletActor.address) || 'Metalet Wallet';
+      var walletMetaId = textValue(standaloneWalletActor.globalMetaId);
+      elements.usingChip.innerHTML = avatarHtml(standaloneWalletActor.avatar, walletName, 'browser-chip-avatar') +
+        '<span class="browser-chip-copy"><span class="browser-chip-title">' +
+        escapeHtml(runtimeLabel('actorChip', 'Wallet')) + ': ' + escapeHtml(walletName) + '</span>' +
+        (walletMetaId ? '<span class="browser-chip-subtitle">' + escapeHtml(walletMetaId) + '</span>' : '') +
+        '</span>';
+      if (typeof elements.usingChip.setAttribute === 'function') {
+        elements.usingChip.setAttribute('aria-expanded', 'false');
+      }
+      elements.usingChip.disabled = false;
+      return;
+    }
+    if (isStandaloneWalletRuntime()) {
       var connectLabel = browserText('wallet.connect', 'Connect Wallet');
       elements.usingChip.innerHTML = avatarHtml('', connectLabel, 'browser-chip-avatar') +
         '<span class="browser-chip-copy"><span class="browser-chip-title">' +
@@ -2201,7 +2260,7 @@ function openMetaletInstallModal() {
 }
 
 function installMetaletWallet() {
-  if (window && typeof window.open === 'function') {
+  if (typeof window !== 'undefined' && typeof window.open === 'function') {
     window.open('https://metalet.space', '_blank', 'noopener');
   }
 }
@@ -2211,15 +2270,68 @@ async function connectStandaloneWalletActor() {
     openUsingIdentitySelector();
     return null;
   }
-  if (!window || !window.metaidwallet) {
+  if (typeof window === 'undefined' || !window.metaidwallet) {
     openMetaletInstallModal();
     return null;
   }
-  return null;
+  var wallet = window.metaidwallet;
+  try {
+    var connected = typeof wallet.isConnected === 'function' ? await wallet.isConnected() : null;
+    var status = typeof connected === 'boolean' ? (connected ? 'connected' : 'not-connected') : textValue(connected && connected.status);
+    if (status === 'locked') throw new Error('Please unlock Metalet first.');
+    if (status === 'no-wallets') throw new Error('Please initialize Metalet first.');
+    if (!connected || status === 'not-connected') {
+      var result = typeof wallet.connect === 'function' ? await wallet.connect() : null;
+      if (textValue(result && result.status) === 'canceled') {
+        setStatus('wallet canceled', '');
+        return null;
+      }
+    }
+
+    var network = typeof wallet.getNetwork === 'function' ? await wallet.getNetwork() : null;
+    var mvcAddress = typeof wallet.getAddress === 'function' ? await wallet.getAddress() : '';
+    var mvcPublicKey = typeof wallet.getPublicKey === 'function' ? await wallet.getPublicKey() : '';
+    var btcAddress = wallet.btc && typeof wallet.btc.getAddress === 'function' ? await wallet.btc.getAddress() : '';
+    var btcPublicKey = wallet.btc && typeof wallet.btc.getPublicKey === 'function' ? await wallet.btc.getPublicKey() : '';
+    var address = textValue(mvcAddress) || textValue(btcAddress);
+    if (!address) throw new Error('Metalet did not return a wallet address.');
+
+    var profile = await resolveMetaletWalletProfile(address);
+    var label = textValue(profile.name) || shortAddress(address) || 'Metalet Wallet';
+    var actor = {
+      id: 'metalet:' + address,
+      label: label,
+      kind: 'wallet',
+      isDefault: true,
+      address: address,
+      globalMetaId: textValue(profile.globalMetaId),
+      avatar: textValue(profile.avatar),
+      capabilities: ['template-settings'],
+      wallet: {
+        provider: 'metalet',
+        network: textValue(network && network.network),
+        mvcAddress: textValue(mvcAddress),
+        mvcPublicKey: textValue(mvcPublicKey),
+        btcAddress: textValue(btcAddress),
+        btcPublicKey: textValue(btcPublicKey)
+      }
+    };
+    if (!state.runtime) state.runtime = {};
+    state.runtime.actors = [actor];
+    state.runtime.defaultActor = actor;
+    state.actorId = actor.id;
+    renderUsingIdentity();
+    setStatus('wallet connected', '');
+    return actor;
+  } catch (error) {
+    setStatus('error', error && error.message ? error.message : 'Wallet connection failed.');
+    return null;
+  }
 }
 
 function handleUsingIdentityClick() {
   if (isStandaloneWalletRuntime()) {
+    if (selectedStandaloneWalletActor()) return;
     connectStandaloneWalletActor().catch(function (error) {
       setStatus('error', error && error.message ? error.message : 'Wallet connection failed.');
     });
