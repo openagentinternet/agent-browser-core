@@ -44,7 +44,7 @@ test("accepts repo tag v0.3.2", async () => {
 test("rejects repo tag v0.2.0", async () => {
   await assert.rejects(
     () => verifyReleaseVersion({ tag: "v0.2.0", repoRoot }),
-    /Tag version 0\.2\.0 does not match root package version 0\.3\.1/,
+    /Tag version 0\.2\.0 does not match root package version 0\.3\.2/,
   );
 });
 
@@ -58,7 +58,7 @@ test("rejects mismatched internal dependency pin", async () => {
 
     await assert.rejects(
       () => verifyReleaseVersion({ tag: "v0.3.2", repoRoot: fixtureRoot }),
-      /@openagentinternet\/agent-browser-core depends on @openagentinternet\/agent-browser-host-contract@0\.2\.0, expected 0\.3\.1/,
+      /@openagentinternet\/agent-browser-core depends on @openagentinternet\/agent-browser-host-contract@0\.2\.0, expected 0\.3\.2/,
     );
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true });

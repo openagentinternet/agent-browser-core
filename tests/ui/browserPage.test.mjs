@@ -146,15 +146,12 @@ test('Browser resolveUri wires showLoadingState before await and clearLoadingSta
   assert.match(definition.script, /\} catch \(error\) \{\s*clearLoadingState\(\);/);
 });
 
-test('Browser client script exposes async chat peer profile enrichment', () => {
+test('Browser client script exposes chat peer metadata markers', () => {
   const definition = ui.buildBrowserPageDefinition();
 
-  assert.match(definition.script, /function collectChatPeerIds\(current\)/);
-  assert.match(definition.script, /function fillChatPeerProfile\(peerId, profile\)/);
-  assert.match(definition.script, /function enrichChatPeerProfiles\(\)/);
+  assert.match(definition.script, /function normalizeBotHomepageChats\(items, identity\)/);
+  assert.match(definition.script, /var partnerGlobalMetaId = textValue\(peer\.globalMetaId \|\| peer\.globalMetaID \|\| peer\.globalmetaid \|\| \(chat && chat\.interactWith\)\);/);
+  assert.match(definition.script, /partnerHref: partnerGlobalMetaId \? \('metaid:\/\/' \+ partnerGlobalMetaId\) : ''/);
   assert.match(definition.script, /data-chat-peer/);
   assert.match(definition.script, /data-chat-partner/);
-  assert.match(definition.script, /browserEndpoints\.info \+ '\?globalMetaId='/);
-  assert.match(definition.script, /state\.enrichToken/);
-  assert.match(definition.script, /enrichChatPeerProfiles\(\);/);
 });
