@@ -3614,6 +3614,31 @@ function renderPinInspectorPage(current) {
     '</article>';
 }
 
+// Renders a centered media stage for metafile video/audio resources. The slot
+// uses the same data attributes as pin-inspector media cards so the existing
+// enhanceVideoSlot / enhanceAudioSlot logic (including chunked-video assembly)
+// is reused unchanged.
+var MEDIA_STAGE_STYLE = '<style>' +
+  '.browser-media-stage { display: grid; place-items: center; gap: 12px; padding: 28px 18px; }' +
+  '.browser-media-stage .browser-pin-media-preview { width: min(100%, 720px); max-width: 100%; min-height: 120px; border-radius: 12px; }' +
+  '.browser-media-stage .browser-pin-media-preview-video { min-height: 240px; background: #141c29; color: #b7c4d6; }' +
+  '.browser-media-stage .browser-pin-media-preview-audio { min-height: 80px; background: #f0f4fa; color: #5a6b82; }' +
+  '.browser-media-stage .browser-pin-media-preview video { width: 100%; max-height: 70vh; height: auto; display: block; background: #000; border-radius: 12px; }' +
+  '.browser-media-stage .browser-pin-media-preview audio { width: 100%; display: block; padding: 10px; box-sizing: border-box; }' +
+  '.browser-media-stage .browser-pin-media-preview.is-loading .browser-pin-media-pending { display: inline-flex; align-items: center; gap: 6px; }' +
+  '.browser-media-stage .browser-pin-media-preview.is-error { background: #fdecec; color: #b3261e; }' +
+  '.browser-pin-media-pending { padding: 6px 10px; }' +
+  '</style>';
+
+function renderMediaStage(renderer, kind) {
+  var pinId = textValue(renderer.data && renderer.data.pinId);
+  var reference = pinId ? 'metafile://' + pinId : '';
+  var slotAttr = kind === 'video' ? 'data-browser-video-preview' : 'data-browser-audio-preview';
+  var refAttr = reference ? ' data-browser-media-ref="' + escapeHtml(reference) + '"' : '';
+  var message = kind === 'video' ? 'Loading video…' : 'Loading audio…';
+  return MEDIA_STAGE_STYLE + '<section class="browser-media-stage"><div class="browser-pin-media-preview browser-pin-media-preview-' + kind + '" ' + slotAttr + refAttr + '><span class="browser-pin-media-pending">' + escapeHtml(message) + '</span></div></section>';
+}
+
 function renderRenderer(current) {
   var renderer = current.renderer || {};
   var type = textValue(renderer.type) || 'unsupported';
@@ -3624,7 +3649,7 @@ function renderRenderer(current) {
   if (type === 'pin-inspector') {
     return renderPinInspectorPage(current);
   }
-  if (['html-iframe', 'pdf', 'image', 'video'].includes(type) && !url) {
+  if (['html-iframe', 'pdf', 'image'].includes(type) && !url) {
     return renderBlockedRenderer('Renderer URL blocked.');
   }
   if (type === 'html-iframe') {
@@ -3636,8 +3661,8 @@ function renderRenderer(current) {
   if (type === 'image') {
     return '<img class="browser-image" src="' + escapeHtml(url) + '" alt="" />';
   }
-  if (type === 'video') {
-    return '<video class="browser-video" src="' + escapeHtml(url) + '" controls></video>';
+  if (type === 'video' || type === 'audio') {
+    return renderMediaStage(renderer, type);
   }
   return '<section class="browser-empty-state" data-browser-unsupported-renderer><h2>Unsupported renderer</h2><p>' + escapeHtml(renderer.error || 'Unsupported renderer.') + '</p>' + (url ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Download file</a>' : '') + '</section>';
 }

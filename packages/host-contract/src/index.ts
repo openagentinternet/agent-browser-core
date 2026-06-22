@@ -172,7 +172,7 @@ export interface BrowserOwnerAffinity {
 export type BrowserResolutionState = 'resolved' | 'loading' | 'not_found' | 'error';
 export type BrowserVerificationState = 'verified' | 'partial' | 'unverified';
 export type BrowserResourceType = 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'protocol' | 'conversation' | 'pin' | 'unsupported' | 'unknown';
-export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'protocol-pin' | 'pin-inspector' | 'host-action' | 'unsupported';
+export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'audio' | 'protocol-pin' | 'pin-inspector' | 'host-action' | 'unsupported';
 export type BrowserResolveActionKind = 'private-chat' | 'service-list' | 'service-call' | 'copy' | 'proof' | 'creator' | 'open-conversation';
 
 export interface BrowserResolutionStatus {

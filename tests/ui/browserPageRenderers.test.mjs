@@ -879,9 +879,14 @@ test('pdf, image, and video render with content-specific elements', async () => 
   await waitFor(() => image.nodes['[data-browser-viewport]'].innerHTML.includes('browser-image'), 'image render');
   assert.match(image.nodes['[data-browser-viewport]'].innerHTML, /<img class="browser-image" src="https:\/\/files\.example\/a\.png" alt=""/);
 
-  const video = runWithResolve(result({ type: 'video', contentType: 'video/mp4', url: 'https://files.example/a.mp4' }));
-  await waitFor(() => video.nodes['[data-browser-viewport]'].innerHTML.includes('browser-video'), 'video render');
-  assert.match(video.nodes['[data-browser-viewport]'].innerHTML, /<video class="browser-video" src="https:\/\/files\.example\/a\.mp4" controls/);
+  const video = runWithResolve(result({ type: 'video', contentType: 'video/mp4', url: 'https://files.example/a.mp4', data: { pinId: 'c20fb7af7b8c2b88a782ae02f6ea7f68f3b280a861838e70ee55950cfe8793bbi0' } }));
+  await waitFor(() => video.nodes['[data-browser-viewport]'].innerHTML.includes('browser-media-stage'), 'video render');
+  assert.match(video.nodes['[data-browser-viewport]'].innerHTML, /data-browser-video-preview/);
+  assert.match(video.nodes['[data-browser-viewport]'].innerHTML, /data-browser-media-ref="metafile:\/\/c20fb7af/);
+
+  const audio = runWithResolve(result({ type: 'audio', contentType: 'audio/mpeg', url: 'https://files.example/a.mp3', data: { pinId: 'dd53ea8c3f3d51a7f9af2c06807ffabd3f560cff4e80f6ae8881d628f186ab91i0' } }));
+  await waitFor(() => audio.nodes['[data-browser-viewport]'].innerHTML.includes('browser-media-stage'), 'audio render');
+  assert.match(audio.nodes['[data-browser-viewport]'].innerHTML, /data-browser-audio-preview/);
 });
 
 test('unsupported renderer keeps source details available for Inspector', async () => {

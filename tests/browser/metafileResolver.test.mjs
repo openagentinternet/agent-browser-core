@@ -122,3 +122,48 @@ test('resolveMetafilePinToResource returns a download link for unsupported ZIP c
   assert.equal(result.data.status.state, 'resolved');
   assert.match(result.data.renderer.error, /download/i);
 });
+
+test('resolveMetafilePinToResource strips the typed-path prefix (metafile://video/<pinid>)', async () => {
+  const pinId = 'ca285872c9a994bdceab001f31ba82c67455a06a295948b97def0682e04b64dei0';
+  const result = await resolveMetafilePinToResource({
+    uri: `metafile://video/${pinId}`,
+    id: `video/${pinId}`,
+    manApiBaseUrl,
+    metafileContentBaseUrl,
+    fetch: fetchPin(pinId, pinRecord(pinId, {
+      path: '/file/index',
+      contentType: 'metafile/index;utf-8',
+      contentTypeDetect: 'text/plain; charset=utf-8',
+      contentSummary: JSON.stringify({ dataType: 'video/mp4;binary', name: 'clip.mp4' }),
+    })),
+    now: () => 1780760000001,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.normalizedUri, `metafile://${pinId}`);
+  assert.equal(result.data.resourceType, 'document');
+  assert.equal(result.data.renderer.type, 'video');
+  assert.equal(result.data.renderer.url, `${acceleratedContentBaseUrl}/${pinId}`);
+});
+
+test('resolveMetafilePinToResource selects audio renderer for audio content types', async () => {
+  const pinId = 'dd53ea8c3f3d51a7f9af2c06807ffabd3f560cff4e80f6ae8881d628f186ab91i0';
+  const result = await resolveMetafilePinToResource({
+    uri: `metafile://${pinId}.wav`,
+    id: `${pinId}.wav`,
+    manApiBaseUrl,
+    metafileContentBaseUrl,
+    fetch: fetchPin(pinId, pinRecord(pinId, {
+      path: '/file/voice.wav',
+      contentType: 'audio/wave',
+    })),
+    now: () => 1780760000001,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.normalizedUri, `metafile://${pinId}`);
+  assert.equal(result.data.resourceType, 'document');
+  assert.equal(result.data.renderer.type, 'audio');
+  assert.equal(result.data.renderer.contentType, 'audio/wave');
+  assert.equal(result.data.renderer.url, `${acceleratedContentBaseUrl}/${pinId}`);
+});

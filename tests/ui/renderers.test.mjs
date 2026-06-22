@@ -339,7 +339,13 @@ test('pdf image and video render with content-specific elements', () => {
   assert.match(pdf, /sandbox=""/);
   assert.doesNotMatch(pdf, /allow-same-origin/);
   assert.match(ui.renderResourceHtml({ uri: 'metaapp://image', normalizedUri: 'metaapp://image', resourceType: 'image', title: 'Image', renderer: { type: 'image', contentType: 'image/png', url: 'https://files.example/a.png' }, actions: [], sections: [] }), /class="browser-image"/);
-  assert.match(ui.renderResourceHtml({ uri: 'metaapp://video', normalizedUri: 'metaapp://video', resourceType: 'metaapp', title: 'Video', renderer: { type: 'video', contentType: 'video/mp4', url: 'https://files.example/a.mp4' }, actions: [], sections: [] }), /class="browser-video"/);
+  // Video and audio metafiles render a centered media stage whose player slot
+  // the client enhances (supporting the chunked-video manifest scheme).
+  const videoHtml = ui.renderResourceHtml({ uri: 'metafile://video/abc', normalizedUri: 'metafile://video/abc', resourceType: 'document', title: 'Video', renderer: { type: 'video', contentType: 'video/mp4', url: 'https://files.example/a.mp4', data: { pinId: 'abc' } }, actions: [], sections: [] });
+  assert.match(videoHtml, /browser-media-stage/);
+  assert.match(videoHtml, /data-browser-video-preview/);
+  const audioHtml = ui.renderResourceHtml({ uri: 'metafile://audio/xyz', normalizedUri: 'metafile://audio/xyz', resourceType: 'document', title: 'Audio', renderer: { type: 'audio', contentType: 'audio/mpeg', url: 'https://files.example/a.mp3', data: { pinId: 'xyz' } }, actions: [], sections: [] });
+  assert.match(audioHtml, /data-browser-audio-preview/);
 });
 
 test('unsupported renderer exposes a safe download link when available', () => {

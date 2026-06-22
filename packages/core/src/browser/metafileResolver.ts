@@ -40,7 +40,14 @@ function normalizeBaseUrl(value: unknown, fallback: string): string {
 }
 
 export function normalizeMetafilePinId(value: unknown): string {
-  const id = normalizeText(value).split(/[?#]/, 1)[0]?.replace(/\.[A-Za-z0-9]+$/u, '') ?? '';
+  let id = normalizeText(value).split(/[?#]/, 1)[0] ?? '';
+  // Strip a typed-path prefix segment such as "video/", "audio/", "image/"
+  // (e.g. metafile://video/<pinid>, metafile://audio/<pinid>).
+  const slash = id.indexOf('/');
+  if (slash > 0 && !/^[0-9a-f]{64}i0$/iu.test(id.slice(0, slash))) {
+    id = id.slice(slash + 1);
+  }
+  id = id.replace(/\.[A-Za-z0-9]+$/u, '');
   return /^[0-9a-f]{64}i0$/iu.test(id) ? id.toLowerCase() : '';
 }
 
@@ -132,6 +139,22 @@ function contentTypeFromExtension(extension: string): string {
       return 'video/ogg';
     case '.webm':
       return 'video/webm';
+    case '.aac':
+      return 'audio/aac';
+    case '.flac':
+      return 'audio/flac';
+    case '.m4a':
+      return 'audio/mp4';
+    case '.mp3':
+      return 'audio/mpeg';
+    case '.oga':
+      return 'audio/ogg';
+    case '.opus':
+      return 'audio/ogg';
+    case '.wav':
+      return 'audio/wav';
+    case '.wma':
+      return 'audio/x-ms-wma';
     case '.zip':
       return 'application/zip';
     default:
@@ -169,6 +192,9 @@ function selectRenderer(contentType: string): {
   }
   if (contentType.startsWith('video/')) {
     return { rendererType: 'video', resourceType: 'document' };
+  }
+  if (contentType.startsWith('audio/')) {
+    return { rendererType: 'audio', resourceType: 'document' };
   }
   if (contentType === 'text/html' || contentType === 'application/xhtml+xml') {
     return { rendererType: 'html-iframe', resourceType: 'document' };
