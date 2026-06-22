@@ -346,6 +346,106 @@ test('resolveBrowserResource enriches direct metaapp owners with bot profile nam
   );
 });
 
+test('resolveBrowserResource enriches direct pin owners with bot profile name and avatar', async () => {
+  const pinId = '8ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  const ownerAvatarId = '9'.repeat(64) + 'i0';
+  const result = await resolveBrowserResource({
+    uri: `pin://${pinId}`,
+    config: browserConfig(),
+    fetch: async (url) => {
+      if (String(url) === 'https://so.example.test/api/info/globalmetaid/idq1publisher') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            code: 1,
+            data: {
+              globalMetaId: 'idq1publisher',
+              name: 'Pin Owner',
+              avatarId: ownerAvatarId,
+            },
+          }),
+        };
+      }
+      assert.equal(String(url), `https://man.example.test/pin/${pinId}`);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            id: pinId,
+            path: '/protocols/skill-service',
+            operation: 'create',
+            contentType: 'application/json',
+            content: JSON.stringify({ name: 'Evidence Skill' }),
+            ownerGlobalMetaId: 'idq1publisher',
+          },
+        }),
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.resourceType, 'pin');
+  assert.equal(result.data.owner.globalMetaId, 'idq1publisher');
+  assert.equal(result.data.owner.name, 'Pin Owner');
+  assert.equal(
+    result.data.owner.avatar,
+    `https://file.metaid.io/metafile-indexer/content/${ownerAvatarId}`,
+  );
+});
+
+test('resolveBrowserResource enriches direct metafile owners with bot profile name and avatar', async () => {
+  const pinId = 'f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0';
+  const ownerAvatarId = '8'.repeat(64) + 'i0';
+  const result = await resolveBrowserResource({
+    uri: `metafile://${pinId}.png`,
+    config: browserConfig(),
+    fetch: async (url) => {
+      if (String(url) === 'https://so.example.test/api/info/globalmetaid/idq1fileowner') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            code: 1,
+            data: {
+              globalMetaId: 'idq1fileowner',
+              name: 'File Owner',
+              avatarId: ownerAvatarId,
+            },
+          }),
+        };
+      }
+      assert.equal(String(url), `https://man.example.test/pin/${pinId}`);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            id: pinId,
+            path: '/file/image.png',
+            contentTypeDetect: 'image/png',
+            globalMetaId: 'idq1fileowner',
+            timestamp: 1780760000,
+          },
+        }),
+      };
+    },
+    metaAppLookup: async () => {
+      throw new Error('metafile URI should not use MetaApp lookup');
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.resourceType, 'image');
+  assert.equal(result.data.owner.globalMetaId, 'idq1fileowner');
+  assert.equal(result.data.owner.name, 'File Owner');
+  assert.equal(
+    result.data.owner.avatar,
+    `https://file.metaid.io/metafile-indexer/content/${ownerAvatarId}`,
+  );
+});
+
 test('resolveBrowserResource aliases custom metaapp homepage without rewriting normalized URI', async () => {
   const customHomepageUri = `metaapp://${customMetaAppPinId}`;
   const result = await resolveBrowserResource({
