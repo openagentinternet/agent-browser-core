@@ -2930,7 +2930,7 @@ function pinInspectorSection(title, bodyHtml, intro) {
 function pinInspectorInfoList(items) {
   return '<dl class="browser-protocol-proof">' + items.map(function(item) {
     var copyButton = item.copyValue
-      ? ' <button type="button" data-browser-copy-value="' + escapeHtml(item.copyValue) + '">Copy</button>'
+      ? ' <button type="button" class="browser-pin-copy-btn" title="Copy" aria-label="Copy" data-browser-copy-value="' + escapeHtml(item.copyValue) + '">' + iconHtml('copy') + '</button>'
       : '';
     return '<dt>' + escapeHtml(item.key) + '</dt><dd>' + pinInspectorFieldValueHtml(item.value) + copyButton + '</dd>';
   }).join('') + '</dl>';
@@ -3402,7 +3402,7 @@ function openPinRawRecord(trigger) {
   if (!elements.modalRoot) return false;
   elements.modalRoot.hidden = false;
   elements.modalRoot.innerHTML = '<div class="browser-modal-backdrop" data-browser-modal-close></div>' +
-    '<section class="browser-modal-panel" role="document">' +
+    '<section class="browser-modal-panel browser-pin-raw-modal" role="document">' +
       '<header class="browser-modal-header"><h2>Raw PIN record</h2><button type="button" class="browser-modal-close" data-browser-modal-close aria-label="Close">x</button></header>' +
       '<div class="browser-modal-body"><pre class="browser-protocol-json">' + escapeHtml(JSON.stringify(rawRecord, null, 2)) + '</pre></div>' +
     '</section>';
@@ -3441,8 +3441,7 @@ function renderPinInspectorPage(current) {
         (metaPills ? '<div class="browser-pin-meta-pills">' + metaPills + '</div>' : '') +
       '</div>' +
       '<div class="browser-pin-page-actions">' +
-        (txid ? '<button type="button" data-browser-copy-value="' + escapeHtml(txid) + '">Copy TxID</button>' : '') +
-        '<button type="button" data-browser-open-raw-record>View Raw Record</button>' +
+        '<button type="button" class="browser-pin-primary-action" data-browser-open-raw-record>View Raw Record</button>' +
       '</div>' +
     '</header>' +
     '<div class="browser-pin-page-grid">' +
@@ -3602,7 +3601,9 @@ async function initialize() {
       var copyTarget = closestWithAttribute(event && event.target, 'data-browser-copy-value');
       if (copyTarget) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
-        copyUri({ uri: copyTarget.getAttribute('data-browser-copy-value') || '' }).catch(function (error) {
+        copyUri({ uri: copyTarget.getAttribute('data-browser-copy-value') || '' }).then(function () {
+          showToast(browserText('ownerPanel.copied', 'copied'));
+        }).catch(function (error) {
           setStatus('error', error && error.message ? error.message : 'Copy failed.');
         });
         return;

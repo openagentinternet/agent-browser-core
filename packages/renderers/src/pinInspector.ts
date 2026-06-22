@@ -94,10 +94,12 @@ function sectionBlock(title: string, bodyHtml: string, intro = ''): string {
   return `<section class="browser-pin-section"><div class="browser-pin-section-head"><h3>${escapeHtml(title)}</h3>${intro ? `<p class="browser-pin-intro">${escapeHtml(intro)}</p>` : ''}</div>${bodyHtml}</section>`;
 }
 
+const COPY_ICON_SVG = '<svg class="browser-pin-copy-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><rect x="8" y="8" width="10" height="10" rx="2"></rect><path d="M6 14H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1"></path></svg>';
+
 function infoList(items: Array<{ key: string; value: unknown; copyValue?: string }>): string {
   return `<dl class="browser-protocol-proof">${items.map((item) => {
     const copyButton = item.copyValue
-      ? ` <button type="button" data-browser-copy-value="${escapeHtml(item.copyValue)}">Copy</button>`
+      ? ` <button type="button" class="browser-pin-copy-btn" title="Copy" aria-label="Copy" data-browser-copy-value="${escapeHtml(item.copyValue)}">${COPY_ICON_SVG}</button>`
       : '';
     return `<dt>${escapeHtml(item.key)}</dt><dd>${fieldValueHtml(item.value)}${copyButton}</dd>`;
   }).join('')}</dl>`;
@@ -254,6 +256,11 @@ const PIN_INSPECTOR_PAGE_STYLE = `
     .browser-pin-link-pill { display: inline-flex; max-width: 100%; padding: 6px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #f8fafc; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
     .browser-pin-raw-record { display: grid; gap: 10px; }
     .browser-pin-raw-record summary { cursor: pointer; color: #334155; font-size: 13px; font-weight: 700; }
+    .browser-pin-primary-action { cursor: pointer; min-height: 34px; border: 1px solid #2563eb; border-radius: 8px; background: #2563eb; color: #fff; padding: 7px 14px; font-size: 12px; font-weight: 700; }
+    .browser-pin-primary-action:hover, .browser-pin-primary-action:focus { background: #1d4ed8; border-color: #1d4ed8; }
+    .browser-pin-copy-btn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-left: 8px; padding: 0; border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; color: #4c5b6f; cursor: pointer; vertical-align: middle; }
+    .browser-pin-copy-btn:hover, .browser-pin-copy-btn:focus { border-color: #cfe0ff; background: #eaf1ff; color: #2e6fed; }
+    .browser-pin-copy-icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
     @media (max-width: 1100px) {
       .browser-pin-page-grid { grid-template-columns: minmax(0, 1fr); }
     }
@@ -579,8 +586,7 @@ export function renderPinInspectorHtml(resource: BrowserResourceEnvelope, headin
         ${metaPills ? `<div class="browser-pin-meta-pills">${metaPills}</div>` : ''}
       </div>
       <div class="browser-pin-page-actions">
-        ${txid ? `<button type="button" data-browser-copy-value="${escapeHtml(txid)}">Copy TxID</button>` : ''}
-        <button type="button" data-browser-open-raw-record>View Raw Record</button>
+        <button type="button" class="browser-pin-primary-action" data-browser-open-raw-record>View Raw Record</button>
       </div>
     </header>
     <div class="browser-pin-page-grid">
