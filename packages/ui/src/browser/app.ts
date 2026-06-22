@@ -152,6 +152,10 @@ var browserLaunchCopy = {
     'share.localUrl': '复制本地 Browser URL',
     'share.publicUrl': '复制公开 Browser URL',
     'share.close': '关闭',
+    'wallet.connect': '连接钱包',
+    'wallet.installTitle': '安装 Metalet',
+    'wallet.installBody': '请先安装 Metalet 钱包。',
+    'wallet.installAction': '安装',
     'bookmark.starLabel': '收藏当前页面',
     'bookmark.starLabelActive': '已收藏，点击移除书签',
     'bookmark.added': '已添加书签',
@@ -1031,6 +1035,12 @@ function runtimeActors() {
   return state.runtime && Array.isArray(state.runtime.actors) ? state.runtime.actors : [];
 }
 
+function runtimeFeatures() {
+  return state.runtime && state.runtime.features && typeof state.runtime.features === 'object'
+    ? state.runtime.features
+    : {};
+}
+
 function runtimeLabels() {
   return state.runtime && state.runtime.labels && typeof state.runtime.labels === 'object'
     ? state.runtime.labels
@@ -1069,6 +1079,22 @@ function selectedActor() {
     }
   }
   return effectiveActor(state.runtime && state.runtime.defaultActor ? state.runtime.defaultActor : null);
+}
+
+function isStandaloneWalletRuntime() {
+  return !!(state.runtime &&
+    state.runtime.host &&
+    state.runtime.host.kind === 'standalone' &&
+    runtimeFeatures().walletLogin === true);
+}
+
+function isMetaletActor(actor) {
+  return textValue(actor && actor.id).indexOf('metalet:') === 0;
+}
+
+function selectedStandaloneWalletActor() {
+  var actor = selectedActor();
+  return isStandaloneWalletRuntime() && isMetaletActor(actor) ? actor : null;
 }
 
 function actorDefaultUri(actor) {
@@ -1135,6 +1161,19 @@ function findLocalOwnerActor() {
 function renderUsingIdentity() {
   var actor = selectedActor();
   if (elements.usingChip) {
+    var standaloneWalletActor = selectedStandaloneWalletActor();
+    if (isStandaloneWalletRuntime() && !standaloneWalletActor) {
+      var connectLabel = browserText('wallet.connect', 'Connect Wallet');
+      elements.usingChip.innerHTML = avatarHtml('', connectLabel, 'browser-chip-avatar') +
+        '<span class="browser-chip-copy"><span class="browser-chip-title">' +
+        escapeHtml(runtimeLabel('actorChip', 'Wallet')) + ': ' + escapeHtml(connectLabel) +
+        '</span></span>';
+      if (typeof elements.usingChip.setAttribute === 'function') {
+        elements.usingChip.setAttribute('aria-expanded', 'false');
+      }
+      elements.usingChip.disabled = false;
+      return;
+    }
     var name = textValue(actor && actor.label) || runtimeLabel('noActorTitle', 'No actor');
     var chipLabel = runtimeLabel('actorChip', 'Using');
     elements.usingChip.innerHTML = avatarHtml(actor && actor.avatar, name, 'browser-chip-avatar') +
@@ -2144,6 +2183,49 @@ function closeModal() {
     elements.modalRoot.hidden = true;
     elements.modalRoot.innerHTML = '';
   }
+}
+
+function openMetaletInstallModal() {
+  if (!elements.modalRoot) return;
+  if (elements.usingChip && typeof elements.usingChip.setAttribute === 'function') {
+    elements.usingChip.setAttribute('aria-expanded', 'true');
+  }
+  elements.modalRoot.hidden = false;
+  elements.modalRoot.innerHTML = '<section class="browser-modal-panel" role="dialog" aria-modal="true">' +
+    '<header><h2>' + escapeHtml(browserText('wallet.installTitle', 'Install Metalet')) + '</h2><button type="button" data-browser-modal-close aria-label="' + escapeHtml(browserText('modal.close', 'Close')) + '">' + escapeHtml(browserText('modal.close', 'Close')) + '</button></header>' +
+    '<div class="browser-modal-body"><p>' + escapeHtml(browserText('wallet.installBody', 'Please install Metalet wallet first.')) + '</p></div>' +
+    '<footer class="browser-modal-footer"><div class="browser-modal-footer-start"></div><div class="browser-modal-footer-end">' +
+      '<button type="button" data-browser-modal-close>' + escapeHtml(browserText('modal.cancel', 'Cancel')) + '</button>' +
+      '<button type="button" data-browser-wallet-install>' + escapeHtml(browserText('wallet.installAction', 'Install')) + '</button>' +
+    '</div></footer></section>';
+}
+
+function installMetaletWallet() {
+  if (window && typeof window.open === 'function') {
+    window.open('https://metalet.space', '_blank', 'noopener');
+  }
+}
+
+async function connectStandaloneWalletActor() {
+  if (!isStandaloneWalletRuntime()) {
+    openUsingIdentitySelector();
+    return null;
+  }
+  if (!window || !window.metaidwallet) {
+    openMetaletInstallModal();
+    return null;
+  }
+  return null;
+}
+
+function handleUsingIdentityClick() {
+  if (isStandaloneWalletRuntime()) {
+    connectStandaloneWalletActor().catch(function (error) {
+      setStatus('error', error && error.message ? error.message : 'Wallet connection failed.');
+    });
+    return;
+  }
+  openUsingIdentitySelector();
 }
 
 function openUsingIdentitySelector() {
@@ -3351,6 +3433,10 @@ async function initialize() {
         copyUri({ uri: shareCopy.getAttribute('data-browser-share-copy') || '' });
         return;
       }
+      if (closestWithAttribute(event && event.target, 'data-browser-wallet-install')) {
+        installMetaletWallet();
+        return;
+      }
       var target = closestWithAttribute(event && event.target, 'data-browser-modal-action') ||
         closestWithAttribute(event && event.target, 'data-browser-actor-id');
       if (!target) return;
@@ -3458,7 +3544,7 @@ async function initialize() {
   if (elements.reload) elements.reload.addEventListener('click', reloadCurrent);
   if (elements.drawerToggle) elements.drawerToggle.addEventListener('click', toggleDrawer);
   if (elements.bookmarkStar) elements.bookmarkStar.addEventListener('click', toggleBookmark);
-  if (elements.usingChip) elements.usingChip.addEventListener('click', openUsingIdentitySelector);
+  if (elements.usingChip) elements.usingChip.addEventListener('click', handleUsingIdentityClick);
   if (elements.resourceChip) elements.resourceChip.addEventListener('click', openCreatorFromChip);
   if (elements.statusProof) elements.statusProof.addEventListener('click', openInspector);
   if (elements.statusTxid) elements.statusTxid.addEventListener('click', openInspector);
@@ -3509,6 +3595,10 @@ globalThis.closeInspector = closeInspector;
 globalThis.renderInspector = renderInspector;
 globalThis.openUsingIdentitySelector = openUsingIdentitySelector;
 globalThis.selectUsingIdentity = selectUsingIdentity;
+globalThis.openMetaletInstallModal = openMetaletInstallModal;
+globalThis.installMetaletWallet = installMetaletWallet;
+globalThis.connectStandaloneWalletActor = connectStandaloneWalletActor;
+globalThis.handleUsingIdentityClick = handleUsingIdentityClick;
 globalThis.openBrowserMenu = openBrowserMenu;
 globalThis.closeBrowserMenu = closeBrowserMenu;
 globalThis.toggleBrowserMenu = toggleBrowserMenu;

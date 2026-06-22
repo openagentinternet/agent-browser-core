@@ -182,9 +182,40 @@ function runtimePayload(overrides = {}) {
   };
 }
 
+const standaloneWalletActor = {
+  id: 'standalone-wallet',
+  label: 'Standalone Wallet',
+  kind: 'wallet',
+  isDefault: true,
+  capabilities: ['template-settings'],
+};
+
+function standaloneWalletRuntimePayload(overrides = {}) {
+  return runtimePayload({
+    host: { kind: 'standalone', name: 'Agent Internet Browser', localMode: false },
+    actors: [standaloneWalletActor],
+    defaultActor: standaloneWalletActor,
+    defaultUri: null,
+    features: {
+      privateChat: false,
+      serviceCall: false,
+      cacheManagement: true,
+      templateSettings: true,
+      walletLogin: true,
+    },
+    labels: {
+      actorChip: 'Wallet',
+      noActorTitle: 'No Wallet',
+      noActorBody: 'Connect Metalet to use standalone Browser.',
+    },
+    ...overrides,
+  });
+}
+
 function createBrowserContext(options = {}) {
   const elements = createElements();
   const fetchCalls = [];
+  const openCalls = [];
   const runtimeResponse = options.runtimeResponse ?? runtimePayload();
   const resolveResponse = options.resolveResponse ?? ((uri) => resolvedBot(uri));
   const settingsData = options.settingsData ?? {
@@ -260,6 +291,10 @@ function createBrowserContext(options = {}) {
     window: {
       location: { pathname: options.pathname || '/ui/browser', search: options.search || '' },
       history: { replaceState() {} },
+      open: (url, target, features) => {
+        openCalls.push([url, target, features]);
+        return null;
+      },
     },
     document: {
       readyState: 'complete',
@@ -312,7 +347,7 @@ function createBrowserContext(options = {}) {
     },
   };
   vm.runInNewContext(buildBrowserPageDefinition().script, context);
-  return { context, elements, fetchCalls };
+  return { context, elements, fetchCalls, openCalls };
 }
 
 test('Browser query URI is decoded into the address bar and resolved', async () => {
@@ -953,6 +988,50 @@ test('Browser using identity chip and selector render actor avatars when runtime
   await waitFor(() => fetchCalls.length === 4, 'worker identity reload');
 
   assert.match(elements['[data-browser-using-selector]'].innerHTML, /worker-avatar/);
+});
+
+test('standalone wallet chip opens Metalet install modal when extension is missing', async () => {
+  const { context, elements } = createBrowserContext({
+    runtimeResponse: standaloneWalletRuntimePayload(),
+  });
+
+  await waitFor(() => context.state.runtime, 'standalone runtime load');
+
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Connect Wallet/);
+
+  elements['[data-browser-using-selector]'].click();
+
+  assert.equal(elements['[data-browser-modal-root]'].hidden, false);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /Install Metalet/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /data-browser-wallet-install/);
+  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, /data-browser-actor-id/);
+});
+
+test('standalone Metalet install action opens the wallet site in a new window', async () => {
+  const { context, elements, openCalls } = createBrowserContext({
+    runtimeResponse: standaloneWalletRuntimePayload(),
+  });
+
+  await waitFor(() => context.state.runtime, 'standalone runtime load');
+
+  elements['[data-browser-using-selector]'].click();
+  const modalClick = elements['[data-browser-modal-root]'].listeners.get('click');
+  assert.equal(typeof modalClick, 'function');
+  modalClick({
+    target: {
+      parentElement: null,
+      getAttribute(name) {
+        return name === 'data-browser-wallet-install' ? '' : null;
+      },
+      hasAttribute(name) {
+        return name === 'data-browser-wallet-install';
+      },
+    },
+  });
+
+  assert.deepEqual(openCalls, [
+    ['https://metalet.space', '_blank', 'noopener'],
+  ]);
 });
 
 test('Browser menu is data-driven and opens cache management settings', async () => {
