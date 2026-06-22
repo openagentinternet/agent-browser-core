@@ -852,8 +852,8 @@ test('Browser using identity selector switches identity and reloads current URI 
 });
 
 test('Browser using identity chip and selector render actor avatars when runtime provides them', async () => {
-  const reviewerAvatar = 'https://so.example.test/content/reviewer-avatar';
-  const workerAvatar = 'https://so.example.test/content/worker-avatar';
+  const reviewerAvatar = 'data:image/png;base64,reviewer-avatar';
+  const workerAvatar = 'data:image/jpeg;base64,worker-avatar';
   const reviewerActor = {
     id: 'reviewer',
     label: 'Reviewer Bot',
@@ -875,25 +875,33 @@ test('Browser using identity chip and selector render actor avatars when runtime
   await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
 
   assert.match(elements['[data-browser-using-selector]'].innerHTML, /browser-avatar-image/);
-  assert.match(elements['[data-browser-using-selector]'].innerHTML, /worker-avatar/);
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /data:image\/jpeg;base64,worker-avatar/);
 
   elements['[data-browser-using-selector]'].click();
 
   assert.equal(elements['[data-browser-modal-root]'].hidden, false);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /browser-avatar-image/);
-  assert.match(elements['[data-browser-modal-root]'].innerHTML, /worker-avatar/);
-  assert.match(elements['[data-browser-modal-root]'].innerHTML, /reviewer-avatar/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /data:image\/jpeg;base64,worker-avatar/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /data:image\/png;base64,reviewer-avatar/);
 
   await context.selectUsingIdentity('reviewer');
   await waitFor(() => fetchCalls.length === 3, 'selected identity reload');
 
-  assert.match(elements['[data-browser-using-selector]'].innerHTML, /reviewer-avatar/);
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /data:image\/png;base64,reviewer-avatar/);
   assert.doesNotMatch(elements['[data-browser-using-selector]'].innerHTML, /browser-avatar-fallback/);
 
   await context.selectUsingIdentity('worker');
   await waitFor(() => fetchCalls.length === 4, 'worker identity reload');
 
-  assert.match(elements['[data-browser-using-selector]'].innerHTML, /worker-avatar/);
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /data:image\/jpeg;base64,worker-avatar/);
+});
+
+test('Browser safeUrl keeps data and blob avatar URLs', async () => {
+  const { context } = createBrowserContext();
+
+  assert.equal(context.safeUrl('data:image/png;base64,avatar-data'), 'data:image/png;base64,avatar-data');
+  assert.equal(context.safeUrl('blob:https://example.test/avatar-data'), 'blob:https://example.test/avatar-data');
+  assert.equal(context.safeUrl('javascript:alert(1)'), '');
 });
 
 test('Browser menu is data-driven and opens cache management settings', async () => {

@@ -232,7 +232,9 @@ function safeUrl(rawValue) {
   if (value.charAt(0) === '/' && value.slice(0, 2) !== '//') return value;
   try {
     var parsed = new URL(value);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? parsed.href : '';
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return parsed.href;
+    if (parsed.protocol === 'data:' || parsed.protocol === 'blob:') return value;
+    return '';
   } catch (error) {
     return '';
   }

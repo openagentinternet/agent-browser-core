@@ -76,6 +76,7 @@ export interface BrowserActor {
   kind: BrowserActorKind;
   globalMetaId?: string;
   address?: string;
+  // Avatar URLs may be http(s), data, or blob URLs depending on host transport.
   avatar?: string;
   isDefault: boolean;
   capabilities: BrowserActorCapability[];
