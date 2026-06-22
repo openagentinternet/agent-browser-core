@@ -41,20 +41,19 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
             </span>
             <span>Bot Browser</span>
           </div>
-          <div class="browser-window-actions" aria-hidden="true"><span></span><span></span><span></span></div>
         </div>
         <header class="browser-topbar" data-browser-topbar>
           <nav class="browser-nav" aria-label="Browser navigation">
-            <button type="button" class="browser-icon-button" data-browser-back aria-label="Back">
+            <button type="button" class="browser-icon-button" data-browser-back aria-label="Back" title="Back">
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M15 6l-6 6 6 6"></path></svg>
             </button>
-            <button type="button" class="browser-icon-button" data-browser-forward aria-label="Forward">
+            <button type="button" class="browser-icon-button" data-browser-forward aria-label="Forward" title="Forward">
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M9 6l6 6-6 6"></path></svg>
             </button>
-            <button type="button" class="browser-icon-button" data-browser-reload aria-label="Reload">
+            <button type="button" class="browser-icon-button" data-browser-reload aria-label="Reload" title="Reload">
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 5v6h-6"></path></svg>
             </button>
-            <button type="button" class="browser-icon-button" data-browser-drawer-toggle aria-label="Bookmarks and history" aria-expanded="false">
+            <button type="button" class="browser-icon-button" data-browser-drawer-toggle aria-label="Bookmarks and history" title="Bookmarks and history" aria-expanded="false">
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="M9 5v14M13 9h4M13 13h4"></path></svg>
             </button>
           </nav>
@@ -62,22 +61,21 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
             <span class="browser-address-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false"><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"></path></svg>
             </span>
-            <input data-browser-uri-input aria-label="Agent Internet URI" placeholder="metaid://idq1example" />
-            <button type="submit" class="browser-address-submit" aria-label="Visit URI">
+            <input data-browser-uri-input aria-label="Agent Internet URI" title="Search or enter address" placeholder="metaid://idq1example" />
+            <button type="submit" class="browser-address-submit" aria-label="Visit URI" title="Go">
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
             </button>
           </form>
-          <button type="button" class="browser-icon-button browser-bookmark-star" data-browser-bookmark-star aria-label="收藏当前页面" disabled>
+          <button type="button" class="browser-icon-button browser-bookmark-star" data-browser-bookmark-star aria-label="收藏当前页面" title="Bookmark this page" disabled>
             <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
           </button>
-          <button type="button" class="browser-resource-chip" data-browser-resource-chip aria-expanded="false">
-            <span class="browser-chip-avatar browser-avatar-fallback" aria-hidden="true">R</span>
-            <span class="browser-chip-copy"><span class="browser-chip-title">Resource</span><span class="browser-chip-subtitle">No resource</span></span>
-            <span class="browser-chip-proof" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false"><path d="M12 3l7 3v5c0 4.1-2.8 7.9-7 10-4.2-2.1-7-5.9-7-10V6l7-3z"></path><path d="M8.8 12l2.1 2.1 4.5-4.7"></path></svg>
-            </span>
-          </button>
-          <button type="button" class="browser-using-chip" data-browser-using-selector aria-expanded="false">
+          <div class="browser-owner-chip-wrap">
+            <button type="button" class="browser-resource-chip browser-owner-avatar" data-browser-resource-chip aria-haspopup="menu" aria-expanded="false" title="Owner">
+              <span class="browser-chip-avatar browser-avatar-fallback" aria-hidden="true">R</span>
+            </button>
+            <div class="browser-owner-panel" data-browser-owner-panel role="menu" hidden></div>
+          </div>
+          <button type="button" class="browser-using-chip" data-browser-using-selector title="Switch identity" aria-expanded="false">
             <span class="browser-chip-avatar browser-avatar-fallback" aria-hidden="true">M</span>
             <span class="browser-chip-copy"><span class="browser-chip-title">Using: My Bot</span></span>
             <span class="browser-chip-caret" aria-hidden="true">
@@ -85,7 +83,7 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
             </span>
           </button>
           <div class="browser-menu-wrap">
-            <button type="button" class="browser-icon-button browser-menu-trigger" data-browser-menu-trigger aria-label="Browser menu" aria-haspopup="menu" aria-expanded="false">
+            <button type="button" class="browser-icon-button browser-menu-trigger" data-browser-menu-trigger aria-label="Browser menu" title="Customize and control" aria-haspopup="menu" aria-expanded="false">
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M12 5.5h.01M12 12h.01M12 18.5h.01"></path></svg>
             </button>
             <div class="browser-chrome-menu" data-browser-menu role="menu" hidden></div>
@@ -144,6 +142,11 @@ var browserLaunchCopy = {
     'owner.configureChat': '配置聊天',
     'owner.viewMessages': '查看消息',
     'owner.share': '分享主页',
+    'ownerPanel.visitHome': '访问主页',
+    'ownerPanel.sendMessage': '发送信息',
+    'ownerPanel.follow': '关注该 Bot',
+    'ownerPanel.copied': '已复制',
+    'ownerPanel.copyMetaId': '复制 GlobalMetaId',
     'modal.close': '关闭',
     'modal.cancel': '取消',
     'modal.usingActorTitle': '选择当前 Bot',
@@ -179,6 +182,7 @@ var state = {
   drawerOpen: false,
   inspectorOpen: false,
   menuOpen: false,
+  ownerPanelOpen: false,
   settingsTab: 'baseUrls',
   settingsData: null,
   cacheData: null,
@@ -490,6 +494,7 @@ function bindElements() {
     reload: document.querySelector('[data-browser-reload]'),
     drawerToggle: document.querySelector('[data-browser-drawer-toggle]'),
     resourceChip: document.querySelector('[data-browser-resource-chip]'),
+    ownerPanel: document.querySelector('[data-browser-owner-panel]'),
     usingChip: document.querySelector('[data-browser-using-selector]'),
     menuTrigger: document.querySelector('[data-browser-menu-trigger]'),
     menu: document.querySelector('[data-browser-menu]'),
@@ -665,6 +670,86 @@ function toggleBrowserMenu() {
   } else {
     openBrowserMenu();
   }
+}
+
+function renderOwnerPanel() {
+  if (!elements.ownerPanel) return;
+  var current = state.current;
+  var owner = objectValue(current && current.owner);
+  var name = textValue(owner && owner.name) || textValue(current && current.title) || browserText('resource.emptyTitle', 'No resource');
+  var globalMetaId = textValue(owner && (owner.globalMetaId || owner.metaid || owner.address)) || textValue(current && (current.normalizedUri || current.uri)) || '-';
+  var avatar = textValue(owner && owner.avatar);
+  var visitHomeText = browserText('ownerPanel.visitHome', 'Visit home');
+  var sendMessageText = browserText('ownerPanel.sendMessage', 'Send message');
+  var followText = browserText('ownerPanel.follow', 'Follow this Bot');
+  var copyMetaTitle = browserText('ownerPanel.copyMetaId', 'Copy GlobalMetaId');
+  elements.ownerPanel.innerHTML =
+    '<div class="browser-owner-panel-head">' +
+      avatarHtml(avatar, name, 'browser-owner-panel-avatar') +
+      '<div class="browser-owner-panel-id">' +
+        '<span class="browser-owner-panel-name">' + escapeHtml(name) + '</span>' +
+        '<span class="browser-owner-panel-meta">' + escapeHtml(shortId(globalMetaId)) + '</span>' +
+      '</div>' +
+      '<button type="button" class="browser-owner-panel-copy" data-browser-owner-copy-meta="' + escapeHtml(globalMetaId) + '" aria-label="' + escapeHtml(copyMetaTitle) + '" title="' + escapeHtml(copyMetaTitle) + '">' + iconHtml('copy') + '</button>' +
+    '</div>' +
+    '<div class="browser-owner-panel-menu" role="none">' +
+      '<button type="button" role="menuitem" class="browser-owner-panel-item" data-browser-owner-panel-action="visit-home">' +
+        iconHtml('external') + '<span>' + escapeHtml(visitHomeText) + '</span>' +
+      '</button>' +
+      '<button type="button" role="menuitem" class="browser-owner-panel-item" data-browser-owner-panel-action="send-message" disabled>' +
+        iconHtml('message') + '<span>' + escapeHtml(sendMessageText) + '</span>' +
+      '</button>' +
+      '<button type="button" role="menuitem" class="browser-owner-panel-item" data-browser-owner-panel-action="follow" disabled>' +
+        iconHtml('star') + '<span>' + escapeHtml(followText) + '</span>' +
+      '</button>' +
+    '</div>';
+}
+
+function closeOwnerPanel() {
+  state.ownerPanelOpen = false;
+  if (elements.ownerPanel) elements.ownerPanel.hidden = true;
+  if (elements.resourceChip && typeof elements.resourceChip.setAttribute === 'function') {
+    elements.resourceChip.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function openOwnerPanel() {
+  if (!elements.ownerPanel) return;
+  state.ownerPanelOpen = true;
+  renderOwnerPanel();
+  elements.ownerPanel.hidden = false;
+  if (elements.resourceChip && typeof elements.resourceChip.setAttribute === 'function') {
+    elements.resourceChip.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function toggleOwnerPanel() {
+  if (state.ownerPanelOpen) {
+    closeOwnerPanel();
+  } else {
+    openOwnerPanel();
+  }
+}
+
+function copyOwnerMetaId(metaId) {
+  var value = textValue(metaId);
+  if (!value) return;
+  if (navigator && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+    navigator.clipboard.writeText(value);
+  }
+  showToast(browserText('ownerPanel.copied', 'Copied'));
+}
+
+function handleOwnerPanelAction(action) {
+  closeOwnerPanel();
+  if (action === 'visit-home') {
+    var creatorUri = currentCreatorUri();
+    if (creatorUri) {
+      closeInspector();
+      return navigateTo(creatorUri);
+    }
+  }
+  return Promise.resolve();
 }
 
 function settingsTabExists(tabId) {
@@ -1300,9 +1385,8 @@ function renderWelcome() {
   state.current = null;
   renderOwnerToolbar();
   if (elements.resourceChip) {
-    elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar') +
-      '<span class="browser-chip-copy"><span class="browser-chip-title">' + escapeHtml(browserText('resource.emptyTitle', 'No resource')) + '</span><span class="browser-chip-subtitle">' + escapeHtml(browserText('welcome.title', 'Agent Internet')) + '</span></span>' +
-      '<span class="browser-chip-proof" aria-hidden="true">' + iconHtml('shield') + '</span>';
+    elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar');
+    elements.resourceChip.disabled = true;
   }
   if (elements.statusProof) elements.statusProof.innerHTML = proofIconHtml('unverified') + '<span>' + escapeHtml(browserText('status.unverified', 'unverified')) + '</span>';
   if (elements.statusRenderer) elements.statusRenderer.textContent = browserText('status.rendererNone', 'renderer: none');
@@ -1336,9 +1420,8 @@ function renderNoLocalBot() {
   state.current = null;
   renderOwnerToolbar();
   if (elements.resourceChip) {
-    elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar') +
-      '<span class="browser-chip-copy"><span class="browser-chip-title">' + escapeHtml(browserText('resource.emptyTitle', 'No resource')) + '</span><span class="browser-chip-subtitle">' + escapeHtml(title) + '</span></span>' +
-      '<span class="browser-chip-proof" aria-hidden="true">' + iconHtml('shield') + '</span>';
+    elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar');
+    elements.resourceChip.disabled = true;
   }
   if (elements.statusProof) elements.statusProof.innerHTML = proofIconHtml('unverified') + '<span>' + escapeHtml(browserText('status.unverified', 'unverified')) + '</span>';
   if (elements.statusRenderer) elements.statusRenderer.textContent = browserText('status.rendererNone', 'renderer: none');
@@ -1370,10 +1453,9 @@ function renderCurrent() {
   var proofState = textValue(current.status && current.status.verificationState) || 'unverified';
   var txid = proofTxid(current.proof);
   if (elements.resourceChip) {
-    elements.resourceChip.innerHTML = avatarHtml(ownerAvatar, ownerName, 'browser-chip-avatar') +
-      '<span class="browser-chip-copy"><span class="browser-chip-title">' + escapeHtml(ownerName) + '</span>' +
-      '<span class="browser-chip-subtitle">' + escapeHtml(shortId(ownerId)) + '</span></span>' +
-      '<span class="browser-chip-proof" aria-hidden="true">' + iconHtml('shield') + '</span>';
+    elements.resourceChip.innerHTML = avatarHtml(ownerAvatar, ownerName, 'browser-chip-avatar');
+    elements.resourceChip.disabled = false;
+    elements.resourceChip.setAttribute('title', ownerName || ownerId || 'Owner');
   }
   if (elements.statusProof) elements.statusProof.innerHTML = proofIconHtml(proofState) + '<span>' + escapeHtml(proofState) + '</span>';
   if (elements.statusRenderer) elements.statusRenderer.textContent = 'renderer: ' + rendererType;
@@ -1390,23 +1472,34 @@ function renderCurrent() {
 
 function recordVisit(current) {
   if (!current) return;
+  var uri = textValue(current.normalizedUri) || textValue(current.uri);
+  if (!uri || !isHistoryUri(uri)) return;
+  for (var i = 0; i < state.visits.length; i += 1) {
+    if (textValue(state.visits[i].uri) === uri) {
+      state.visits.splice(i, 1);
+      break;
+    }
+  }
   state.visits.push({
-    uri: textValue(current.normalizedUri) || textValue(current.uri),
-    title: textValue(current.title) || textValue(current.owner && current.owner.name) || textValue(current.normalizedUri),
+    uri: uri,
+    title: textValue(current.title) || textValue(current.owner && current.owner.name) || uri,
     resourceType: textValue(current.resourceType)
   });
+  while (state.visits.length > HISTORY_MAX) state.visits.shift();
+  saveHistory();
 }
 
 function uniqueRecent(type) {
   var seen = {};
   var output = [];
+  var limit = type === 'bot' ? RECENT_BOT_MAX : 6;
   for (var index = state.visits.length - 1; index >= 0; index -= 1) {
     var visit = state.visits[index];
     if (type && visit.resourceType !== type) continue;
     if (!visit.uri || seen[visit.uri]) continue;
     seen[visit.uri] = true;
     output.push(visit);
-    if (output.length >= 6) break;
+    if (output.length >= limit) break;
   }
   return output;
 }
@@ -1448,6 +1541,45 @@ function saveBookmarks() {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return;
     window.localStorage.setItem(BOOKMARKS_STORAGE_KEY, JSON.stringify(state.bookmarks));
+  } catch (error) {
+    /* ignore persistence errors */
+  }
+}
+
+var HISTORY_STORAGE_KEY = 'agent-browser:history';
+var HISTORY_MAX = 20;
+var RECENT_BOT_MAX = 5;
+var HISTORY_PROTOCOLS = ['metaid://', 'metaapp://', 'metafile://', 'map://', 'pin://'];
+
+function isHistoryUri(uri) {
+  var value = textValue(uri);
+  for (var i = 0; i < HISTORY_PROTOCOLS.length; i += 1) {
+    if (value.indexOf(HISTORY_PROTOCOLS[i]) === 0) return true;
+  }
+  return false;
+}
+
+function loadHistory() {
+  state.visits = [];
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    var raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
+    if (!raw) return;
+    var parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      state.visits = parsed.filter(function (item) {
+        return item && typeof item === 'object' && textValue(item.uri);
+      });
+    }
+  } catch (error) {
+    state.visits = [];
+  }
+}
+
+function saveHistory() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(state.visits));
   } catch (error) {
     /* ignore persistence errors */
   }
@@ -1591,6 +1723,7 @@ function syncPanelState() {
   if (elements.drawerToggle && typeof elements.drawerToggle.setAttribute === 'function') {
     elements.drawerToggle.setAttribute('aria-expanded', state.drawerOpen ? 'true' : 'false');
   }
+  if (state.ownerPanelOpen) closeOwnerPanel();
   if (elements.resourceChip && typeof elements.resourceChip.setAttribute === 'function') {
     elements.resourceChip.setAttribute('aria-expanded', 'false');
   }
@@ -3450,6 +3583,7 @@ async function initialize() {
   if (elements.modalRoot) elements.modalRoot.hidden = true;
   if (elements.toast) elements.toast.hidden = true;
   loadBookmarks();
+  loadHistory();
   renderBookmarkStar();
   if (elements.viewport) {
     elements.viewport.addEventListener('click', function (event) {
@@ -3664,7 +3798,27 @@ async function initialize() {
   if (elements.drawerToggle) elements.drawerToggle.addEventListener('click', toggleDrawer);
   if (elements.bookmarkStar) elements.bookmarkStar.addEventListener('click', toggleBookmark);
   if (elements.usingChip) elements.usingChip.addEventListener('click', handleUsingIdentityClick);
-  if (elements.resourceChip) elements.resourceChip.addEventListener('click', openCreatorFromChip);
+  if (elements.resourceChip) elements.resourceChip.addEventListener('click', function (event) {
+    if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+    toggleOwnerPanel();
+  });
+  if (elements.ownerPanel) {
+    elements.ownerPanel.addEventListener('click', function (event) {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      var copyTarget = closestWithAttribute(event && event.target, 'data-browser-owner-copy-meta');
+      if (copyTarget) {
+        copyOwnerMetaId(copyTarget.getAttribute('data-browser-owner-copy-meta'));
+        return;
+      }
+      var target = closestWithAttribute(event && event.target, 'data-browser-owner-panel-action');
+      if (!target) return;
+      if (target.disabled) return;
+      handleOwnerPanelAction(target.getAttribute('data-browser-owner-panel-action'));
+    });
+  }
+  document.addEventListener('click', function () {
+    if (state.ownerPanelOpen) closeOwnerPanel();
+  });
   if (elements.statusProof) elements.statusProof.addEventListener('click', openInspector);
   if (elements.statusTxid) elements.statusTxid.addEventListener('click', openInspector);
 
@@ -3709,6 +3863,8 @@ globalThis.renderRenderer = renderRenderer;
 globalThis.renderDrawer = renderDrawer;
 globalThis.closeDrawer = closeDrawer;
 globalThis.openCreatorFromChip = openCreatorFromChip;
+globalThis.toggleOwnerPanel = toggleOwnerPanel;
+globalThis.handleOwnerPanelAction = handleOwnerPanelAction;
 globalThis.openInspector = openInspector;
 globalThis.closeInspector = closeInspector;
 globalThis.renderInspector = renderInspector;
@@ -3739,6 +3895,7 @@ globalThis.closeModal = closeModal;
 globalThis.renderModal = renderModal;
 globalThis.loadBookmarks = loadBookmarks;
 globalThis.saveBookmarks = saveBookmarks;
+globalThis.loadHistory = loadHistory;
 globalThis.bookmarkItems = bookmarkItems;
 globalThis.renderBookmarkList = renderBookmarkList;
 globalThis.currentBookmarkKey = currentBookmarkKey;

@@ -87,7 +87,7 @@ test('browser chrome navigation and status buttons are wired or disabled', () =>
   assert.match(definition.script, /elements\.forward\.addEventListener\('click', goForward\)/);
   assert.match(definition.script, /elements\.reload\.addEventListener\('click', reloadCurrent\)/);
   assert.match(definition.script, /function openCreatorFromChip\(/);
-  assert.match(definition.script, /elements\.resourceChip\.addEventListener\('click', openCreatorFromChip\)/);
+  assert.match(definition.script, /elements\.resourceChip\.addEventListener\('click'[\s\S]*toggleOwnerPanel\(\)/);
   assert.match(definition.script, /elements\.statusProof\.addEventListener\('click', openInspector\)/);
   assert.match(definition.script, /elements\.statusTxid\.addEventListener\('click', openInspector\)/);
 });
