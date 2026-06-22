@@ -182,9 +182,50 @@ function runtimePayload(overrides = {}) {
   };
 }
 
+const standaloneWalletActor = {
+  id: 'standalone-wallet',
+  label: 'Standalone Wallet',
+  kind: 'wallet',
+  isDefault: true,
+  capabilities: ['template-settings'],
+};
+
+function standaloneWalletRuntimePayload(overrides = {}) {
+  return runtimePayload({
+    host: { kind: 'standalone', name: 'Agent Internet Browser', localMode: false },
+    actors: [standaloneWalletActor],
+    defaultActor: standaloneWalletActor,
+    defaultUri: null,
+    features: {
+      privateChat: false,
+      serviceCall: false,
+      cacheManagement: true,
+      templateSettings: true,
+      walletLogin: true,
+    },
+    labels: {
+      actorChip: 'Wallet',
+      noActorTitle: 'No Wallet',
+      noActorBody: 'Connect Metalet to use standalone Browser.',
+      walletConnect: 'Connect Wallet',
+      walletInstallTitle: 'Install Metalet',
+      walletInstallBody: 'Please install Metalet wallet first.',
+      walletInstallAction: 'Install',
+      walletInstallUrl: 'https://metalet.space',
+      walletUnlockError: 'Please unlock Metalet first.',
+      walletInitializeError: 'Please initialize Metalet first.',
+      walletAddressMissingError: 'Metalet did not return a wallet address.',
+      walletFallbackName: 'Metalet Wallet',
+      walletProviderId: 'metalet',
+    },
+    ...overrides,
+  });
+}
+
 function createBrowserContext(options = {}) {
   const elements = createElements();
   const fetchCalls = [];
+  const openCalls = [];
   const runtimeResponse = options.runtimeResponse ?? runtimePayload();
   const resolveResponse = options.resolveResponse ?? ((uri) => resolvedBot(uri));
   const settingsData = options.settingsData ?? {
@@ -260,6 +301,11 @@ function createBrowserContext(options = {}) {
     window: {
       location: { pathname: options.pathname || '/ui/browser', search: options.search || '' },
       history: { replaceState() {} },
+      open: (url, target, features) => {
+        openCalls.push([url, target, features]);
+        return null;
+      },
+      metaidwallet: options.metaidwallet,
     },
     document: {
       readyState: 'complete',
@@ -308,11 +354,18 @@ function createBrowserContext(options = {}) {
           }),
         };
       }
+      if (options.walletProfileResponse && String(url).includes('/api/v1/users/address/')) {
+        return {
+          ok: true,
+          json: async () => JSON.parse(JSON.stringify(options.walletProfileResponse)),
+        };
+      }
       throw new Error(`Unexpected fetch ${url}`);
     },
   };
+  context.globalThis = context;
   vm.runInNewContext(buildBrowserPageDefinition().script, context);
-  return { context, elements, fetchCalls };
+  return { context, elements, fetchCalls, openCalls };
 }
 
 test('Browser query URI is decoded into the address bar and resolved', async () => {
@@ -409,6 +462,65 @@ test('Browser address input displays the resolver-normalized URI for a bare Glob
   await waitFor(() => elements['[data-browser-uri-input]'].value === canonicalUri, 'bare Global MetaID canonical URI');
 
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=${encodeURIComponent(globalMetaId)}&actorId=worker`);
+  assert.equal(elements['[data-browser-uri-input]'].value, canonicalUri);
+  assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
+});
+
+test('Browser address input displays the resolver-normalized URI for a bare domain alias', async () => {
+  const alias = 'sunnyfung.eth';
+  const canonicalUri = `metaid://${alias}`;
+  const { context, elements, fetchCalls } = createBrowserContext({
+    runtimeResponse: runtimePayload({ defaultUri: null }),
+    resolveResponse: (uri) => ({
+      ...resolvedBot(canonicalUri, 'Alias Bot'),
+      data: {
+        ...resolvedBot(canonicalUri, 'Alias Bot').data,
+        uri,
+        normalizedUri: canonicalUri,
+      },
+    }),
+  });
+
+  await waitFor(() => context.state.actorId === 'worker', 'runtime actor load');
+
+  elements['[data-browser-uri-input]'].value = alias;
+  elements['[data-browser-address-form]'].submit();
+  await waitFor(() => elements['[data-browser-uri-input]'].value === canonicalUri, 'bare alias canonical URI');
+
+  assert.equal(fetchCalls[1], `/api/browser/resolve?uri=${encodeURIComponent(alias)}&actorId=worker`);
+  assert.equal(elements['[data-browser-uri-input]'].value, canonicalUri);
+  assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
+});
+
+test('Browser address input displays the resolver-normalized URI for a bare pin id', async () => {
+  const pinId = '7edcf7775a2054c87c46c0a964d10dd6c32408506d60b0b91a90c30423d8edbei0';
+  const canonicalUri = `pin://${pinId}`;
+  const { context, elements, fetchCalls } = createBrowserContext({
+    runtimeResponse: runtimePayload({ defaultUri: null }),
+    resolveResponse: (uri) => ({
+      ok: true,
+      data: {
+        uri,
+        normalizedUri: canonicalUri,
+        resourceType: 'pin',
+        title: 'Fixture Pin',
+        owner: { kind: 'pin-author', globalMetaId: 'idq1alice', name: 'Alice', verificationState: 'partial' },
+        renderer: { type: 'unsupported', contentType: 'application/json', error: 'Unsupported pin content.' },
+        status: { state: 'resolved', verificationState: 'partial', message: '' },
+        proof: { pinId, verificationState: 'partial' },
+        source: { resolver: 'test' },
+        actions: [],
+      },
+    }),
+  });
+
+  await waitFor(() => context.state.actorId === 'worker', 'runtime actor load');
+
+  elements['[data-browser-uri-input]'].value = pinId;
+  elements['[data-browser-address-form]'].submit();
+  await waitFor(() => elements['[data-browser-uri-input]'].value === canonicalUri, 'bare pin canonical URI');
+
+  assert.equal(fetchCalls[1], `/api/browser/resolve?uri=${encodeURIComponent(pinId)}&actorId=worker`);
   assert.equal(elements['[data-browser-uri-input]'].value, canonicalUri);
   assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
 });
@@ -902,6 +1014,100 @@ test('Browser safeUrl keeps data and blob avatar URLs', async () => {
   assert.equal(context.safeUrl('data:image/png;base64,avatar-data'), 'data:image/png;base64,avatar-data');
   assert.equal(context.safeUrl('blob:https://example.test/avatar-data'), 'blob:https://example.test/avatar-data');
   assert.equal(context.safeUrl('javascript:alert(1)'), '');
+});
+
+test('standalone wallet chip opens Metalet install modal when extension is missing', async () => {
+  const { context, elements } = createBrowserContext({
+    runtimeResponse: standaloneWalletRuntimePayload(),
+  });
+
+  await waitFor(() => context.state.runtime, 'standalone runtime load');
+
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Connect Wallet/);
+
+  elements['[data-browser-using-selector]'].click();
+
+  assert.equal(elements['[data-browser-modal-root]'].hidden, false);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /Install Metalet/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /data-browser-wallet-install/);
+  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, /data-browser-actor-id/);
+});
+
+test('standalone Metalet install action opens the wallet site in a new window', async () => {
+  const { context, elements, openCalls } = createBrowserContext({
+    runtimeResponse: standaloneWalletRuntimePayload(),
+  });
+
+  await waitFor(() => context.state.runtime, 'standalone runtime load');
+
+  elements['[data-browser-using-selector]'].click();
+  const modalClick = elements['[data-browser-modal-root]'].listeners.get('click');
+  assert.equal(typeof modalClick, 'function');
+  modalClick({
+    target: {
+      parentElement: null,
+      getAttribute(name) {
+        return name === 'data-browser-wallet-install' ? '' : null;
+      },
+      hasAttribute(name) {
+        return name === 'data-browser-wallet-install';
+      },
+    },
+  });
+
+  assert.deepEqual(openCalls, [
+    ['https://metalet.space', '_blank', 'noopener'],
+  ]);
+});
+
+test('standalone Metalet connect updates the single wallet actor and keeps chip inert', async () => {
+  let connectCalls = 0;
+  const metaidwallet = {
+    isConnected: async () => ({ status: connectCalls ? 'connected' : 'not-connected' }),
+    connect: async () => {
+      connectCalls += 1;
+      return { status: 'connected' };
+    },
+    getNetwork: async () => ({ network: 'livenet' }),
+    getAddress: async () => 'mvc-address-1234567890',
+    getPublicKey: async () => 'mvc-public-key',
+    btc: {
+      getAddress: async () => 'btc-address-1234567890',
+      getPublicKey: async () => 'btc-public-key',
+    },
+  };
+  const { context, elements, fetchCalls } = createBrowserContext({
+    runtimeResponse: standaloneWalletRuntimePayload(),
+    metaidwallet,
+    walletProfileResponse: {
+      code: 0,
+      data: {
+        name: 'Sunny Fung',
+        globalMetaId: 'idq1walletuser',
+        avatar: '/avatar.png',
+      },
+    },
+  });
+
+  await waitFor(() => context.state.runtime, 'standalone runtime load');
+
+  elements['[data-browser-using-selector]'].click();
+  await waitFor(() => context.state.actorId === 'wallet:mvc-address-1234567890', 'wallet actor selection');
+
+  assert.equal(connectCalls, 1);
+  assert.equal(context.state.runtime.defaultActor.id, 'wallet:mvc-address-1234567890');
+  assert.equal(context.state.runtime.actors.length, 1);
+  assert.equal(context.state.runtime.actors[0].globalMetaId, 'idq1walletuser');
+  assert.equal(context.state.runtime.actors[0].wallet.btcAddress, 'btc-address-1234567890');
+  assert.ok(fetchCalls.includes('https://file.metaid.io/metafile-indexer/api/v1/users/address/mvc-address-1234567890'));
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Wallet: Sunny Fung/);
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /idq1walletuser/);
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /https:\/\/file\.metaid\.io\/metafile-indexer\/avatar\.png/);
+
+  elements['[data-browser-modal-root]'].innerHTML = 'unchanged';
+  elements['[data-browser-using-selector]'].click();
+  assert.equal(elements['[data-browser-modal-root]'].innerHTML, 'unchanged');
+  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, /data-browser-actor-id/);
 });
 
 test('Browser menu is data-driven and opens cache management settings', async () => {

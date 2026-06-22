@@ -43,6 +43,7 @@ test('standalone Browser server serves Browser shell and health route', async (t
   const runtime = await json(await fetch(`${baseUrl}/api/browser/runtime`));
   assert.equal(runtime.ok, true);
   assert.equal(runtime.data.host.kind, 'standalone');
+  assert.equal(runtime.data.features.walletLogin, true);
   assert.deepEqual(runtime.data.defaultActor, {
     id: 'standalone-wallet',
     label: 'Standalone Wallet',
@@ -55,6 +56,16 @@ test('standalone Browser server serves Browser shell and health route', async (t
     actorChip: 'Wallet',
     noActorTitle: 'No Wallet',
     noActorBody: 'Standalone Browser is running with a development wallet actor.',
+    walletConnect: 'Connect Wallet',
+    walletInstallTitle: 'Install Metalet',
+    walletInstallBody: 'Please install Metalet wallet first.',
+    walletInstallAction: 'Install',
+    walletInstallUrl: 'https://metalet.space',
+    walletUnlockError: 'Please unlock Metalet first.',
+    walletInitializeError: 'Please initialize Metalet first.',
+    walletAddressMissingError: 'Metalet did not return a wallet address.',
+    walletFallbackName: 'Metalet Wallet',
+    walletProviderId: 'metalet',
   });
 });
 

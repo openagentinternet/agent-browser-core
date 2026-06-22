@@ -152,6 +152,10 @@ var browserLaunchCopy = {
     'share.localUrl': '复制本地 Browser URL',
     'share.publicUrl': '复制公开 Browser URL',
     'share.close': '关闭',
+    'wallet.connect': '连接钱包',
+    'wallet.installTitle': '安装钱包',
+    'wallet.installBody': '请先安装钱包扩展。',
+    'wallet.installAction': '安装',
     'bookmark.starLabel': '收藏当前页面',
     'bookmark.starLabelActive': '已收藏，点击移除书签',
     'bookmark.added': '已添加书签',
@@ -326,6 +330,11 @@ function shortId(value) {
   return text.slice(0, 10) + '...' + text.slice(-6);
 }
 
+function shortAddress(address) {
+  var value = textValue(address);
+  return value.length > 14 ? value.slice(0, 8) + '...' + value.slice(-6) : value;
+}
+
 function txidFromPinId(value) {
   var text = textValue(value);
   var match = text.match(/^([0-9a-f]{64})i[0-9]+$/i);
@@ -400,6 +409,7 @@ function iconHtml(name) {
     close: '<path d="M6 6l12 12M18 6L6 18"></path>',
     copy: '<rect x="8" y="8" width="10" height="10" rx="2"></rect><path d="M6 14H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1"></path>',
     external: '<path d="M14 5h5v5"></path><path d="M10 14L19 5"></path><path d="M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4"></path>',
+    follow: '<path d="M16 20v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1"></path><circle cx="10" cy="8" r="4"></circle><path d="M19 8v6"></path><path d="M16 11h6"></path>',
     history: '<path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5M12 7v5l3 2"></path>',
     layout: '<rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="M4 10h16M9 10v9"></path>',
     info: '<circle cx="12" cy="12" r="9"></circle><path d="M12 11v6"></path><circle class="browser-info-dot" cx="12" cy="7.5" r="1.1"></circle>',
@@ -442,6 +452,19 @@ function actionIconName(kind) {
   if (kind === 'copy') return 'copy';
   if (kind === 'proof' || kind === 'creator') return 'shield';
   return 'chevronRight';
+}
+
+function renderBotPageFollowButton() {
+  return '<button type="button" data-browser-follow>' +
+    iconHtml('follow') + '<span>Follow</span></button>';
+}
+
+function isBotPageHeaderAction(action) {
+  var kind = textValue(action && action.kind);
+  return kind !== 'open-conversation' &&
+    kind !== 'service-list' &&
+    kind !== 'service-call' &&
+    kind !== 'copy';
 }
 
 function closestWithAttribute(target, attributeName) {
@@ -681,6 +704,11 @@ function settingValue(key) {
   if (Object.prototype.hasOwnProperty.call(effectiveBrowser, key)) return effectiveBrowser[key];
   if (Object.prototype.hasOwnProperty.call(defaults, key)) return defaults[key];
   return '';
+}
+
+function browserEffectiveSettings() {
+  var data = state.settingsData || {};
+  return objectValue(data.effectiveBrowser || data.browser || {});
 }
 
 function customBotPagesEnabled() {
@@ -1019,6 +1047,12 @@ function runtimeActors() {
   return state.runtime && Array.isArray(state.runtime.actors) ? state.runtime.actors : [];
 }
 
+function runtimeFeatures() {
+  return state.runtime && state.runtime.features && typeof state.runtime.features === 'object'
+    ? state.runtime.features
+    : {};
+}
+
 function runtimeLabels() {
   return state.runtime && state.runtime.labels && typeof state.runtime.labels === 'object'
     ? state.runtime.labels
@@ -1028,6 +1062,10 @@ function runtimeLabels() {
 function runtimeLabel(key, fallback) {
   var raw = textValue(runtimeLabels()[key]) || fallback;
   return browserText('runtime.' + key, raw);
+}
+
+function runtimeLabelValue(key, fallback) {
+  return textValue(runtimeLabels()[key]) || fallback;
 }
 
 function effectiveActor(actor) {
@@ -1057,6 +1095,57 @@ function selectedActor() {
     }
   }
   return effectiveActor(state.runtime && state.runtime.defaultActor ? state.runtime.defaultActor : null);
+}
+
+function isStandaloneWalletRuntime() {
+  return !!(state.runtime &&
+    state.runtime.host &&
+    state.runtime.host.kind === 'standalone' &&
+    runtimeFeatures().walletLogin === true);
+}
+
+function isConnectedWalletActor(actor) {
+  return !!(actor && actor.wallet && textValue(actor && actor.id).indexOf('wallet:') === 0);
+}
+
+function selectedStandaloneWalletActor() {
+  var actor = selectedActor();
+  return isStandaloneWalletRuntime() && isConnectedWalletActor(actor) ? actor : null;
+}
+
+function normalizeProfileAvatar(value) {
+  var raw = textValue(value);
+  if (!raw) return '';
+  if (/^https?:\\/\\//i.test(raw)) return raw;
+  var base = textValue(browserEffectiveSettings().metafileContentBaseUrl).replace(/\\/+$/, '');
+  if (!base) return raw;
+  return base + (raw.charAt(0) === '/' ? raw : '/' + raw);
+}
+
+function normalizeWalletProfile(raw) {
+  var data = objectValue(raw && raw.data ? raw.data : raw);
+  return {
+    name: textValue(data.name || data.displayName || data.nickname),
+    globalMetaId: textValue(data.globalMetaId || data.globalMetaID || data.metaId || data.metaid),
+    avatar: normalizeProfileAvatar(data.avatar || data.avatarUrl || data.avatarUri || data.avatar_uri || data.avatarPinId)
+  };
+}
+
+async function resolveWalletProfile(address) {
+  var walletAddress = textValue(address);
+  var settings = state.settingsData || await api(browserSettingsEndpoint());
+  state.settingsData = settings;
+  var effective = browserEffectiveSettings();
+  var base = textValue(effective.metafileContentBaseUrl).replace(/\\/+$/, '');
+  if (!base || !walletAddress) return {};
+  try {
+    var response = await fetch(base + '/api/v1/users/address/' + encodeURIComponent(walletAddress));
+    if (!response || !response.ok) return {};
+    var payload = await response.json();
+    return normalizeWalletProfile(payload);
+  } catch (error) {
+    return {};
+  }
 }
 
 function actorDefaultUri(actor) {
@@ -1123,6 +1212,33 @@ function findLocalOwnerActor() {
 function renderUsingIdentity() {
   var actor = selectedActor();
   if (elements.usingChip) {
+    var standaloneWalletActor = selectedStandaloneWalletActor();
+    if (standaloneWalletActor) {
+      var walletName = textValue(standaloneWalletActor.label) || shortAddress(standaloneWalletActor.address) || runtimeLabelValue('walletFallbackName', 'Wallet');
+      var walletMetaId = textValue(standaloneWalletActor.globalMetaId);
+      elements.usingChip.innerHTML = avatarHtml(standaloneWalletActor.avatar, walletName, 'browser-chip-avatar') +
+        '<span class="browser-chip-copy"><span class="browser-chip-title">' +
+        escapeHtml(runtimeLabel('actorChip', 'Wallet')) + ': ' + escapeHtml(walletName) + '</span>' +
+        (walletMetaId ? '<span class="browser-chip-subtitle">' + escapeHtml(walletMetaId) + '</span>' : '') +
+        '</span>';
+      if (typeof elements.usingChip.setAttribute === 'function') {
+        elements.usingChip.setAttribute('aria-expanded', 'false');
+      }
+      elements.usingChip.disabled = false;
+      return;
+    }
+    if (isStandaloneWalletRuntime()) {
+      var connectLabel = runtimeLabelValue('walletConnect', browserText('wallet.connect', 'Connect Wallet'));
+      elements.usingChip.innerHTML = avatarHtml('', connectLabel, 'browser-chip-avatar') +
+        '<span class="browser-chip-copy"><span class="browser-chip-title">' +
+        escapeHtml(runtimeLabel('actorChip', 'Wallet')) + ': ' + escapeHtml(connectLabel) +
+        '</span></span>';
+      if (typeof elements.usingChip.setAttribute === 'function') {
+        elements.usingChip.setAttribute('aria-expanded', 'false');
+      }
+      elements.usingChip.disabled = false;
+      return;
+    }
     var name = textValue(actor && actor.label) || runtimeLabel('noActorTitle', 'No actor');
     var chipLabel = runtimeLabel('actorChip', 'Using');
     elements.usingChip.innerHTML = avatarHtml(actor && actor.avatar, name, 'browser-chip-avatar') +
@@ -1677,16 +1793,25 @@ function closeInspector() {
   syncPanelState();
 }
 
-function renderActionButtons(actions) {
-  if (!Array.isArray(actions) || actions.length === 0) return '';
-  return '<div class="browser-action-row">' + actions.map(function (action) {
+function renderActionButtons(actions, options) {
+  var buttons = Array.isArray(actions) ? actions.map(function (action) {
     var kind = textValue(action && action.kind);
     var label = textValue(action && action.label) || kind || 'Action';
     var disabled = action && action.enabled === false ? ' disabled' : '';
     return '<button type="button" data-browser-action="' + escapeHtml(kind) + '" data-browser-action-id="' + escapeHtml(textValue(action && action.id)) + '"' +
       actionPayloadAttribute(action) + disabled + '>' +
       iconHtml(actionIconName(kind)) + '<span>' + escapeHtml(label) + '</span></button>';
-  }).join('') + '</div>';
+  }) : [];
+  if (options && options.includeFollow) {
+    buttons.push(renderBotPageFollowButton());
+  }
+  if (buttons.length === 0) return '';
+  return '<div class="browser-action-row">' + buttons.join('') + '</div>';
+}
+
+function renderBotPageActionButtons(actions) {
+  var visibleActions = Array.isArray(actions) ? actions.filter(isBotPageHeaderAction) : [];
+  return renderActionButtons(visibleActions, { includeFollow: true });
 }
 
 function objectValue(value) {
@@ -2029,7 +2154,7 @@ function renderBotHomepageDocumentTemplate(payload, current) {
     '<div class="browser-bot-identity"><div class="browser-bot-title-line"><h2>' + escapeHtml(identity.name) + '</h2>' + proofIconHtml(identity.proofState) + '</div>' +
     (identity.globalMetaId ? '<p class="browser-globalmetaid">' + escapeHtml(identity.globalMetaId) + '</p>' : '') +
     (payload.summary.text ? '<p class="browser-bot-summary">' + escapeHtml(payload.summary.text) + '</p>' : '') + '</div>' +
-    renderActionButtons(current.actions) + '</header>' +
+    renderBotPageActionButtons(current.actions) + '</header>' +
     '<section class="browser-document-section"><h3>Overview</h3><p>' + escapeHtml(payload.summary.overview) + '</p></section>' +
     '<section class="browser-document-section browser-bot-services"><h3>Services</h3>' + renderServiceRows(payload.services) + '</section>' +
     '<section class="browser-document-section browser-bot-metaapps"><h3>MetaApps</h3>' + renderMetaAppRows(payload.metaapps, 'No public MetaApps.') + '</section>' +
@@ -2058,7 +2183,7 @@ function renderBotHomepageCompactListTemplate(payload, current) {
     '<div class="browser-bot-identity"><div class="browser-bot-title-line"><h2>' + escapeHtml(identity.name) + '</h2>' + proofIconHtml(identity.proofState) + '</div>' +
     (identity.globalMetaId ? '<p class="browser-globalmetaid">' + escapeHtml(identity.globalMetaId) + '</p>' : '') +
     (payload.summary.text ? '<p class="browser-bot-summary">' + escapeHtml(payload.summary.text) + '</p>' : '') + '</div>' +
-    renderActionButtons(current.actions) + '</header>' +
+    renderBotPageActionButtons(current.actions) + '</header>' +
     '<section class="browser-compact-overview"><p>' + escapeHtml(payload.summary.overview) + '</p></section>' +
     '<div class="browser-compact-grid">' + extraPanels.join('') + '</div>' +
     '</article>';
@@ -2106,8 +2231,11 @@ function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
   elements.modalRoot.innerHTML = '<section class="browser-modal-panel" role="dialog" aria-modal="true">' +
     '<header><h2>' + escapeHtml(title) + '</h2><button type="button" data-browser-modal-close aria-label="' + escapeHtml(browserText('modal.close', 'Close')) + '">' + escapeHtml(browserText('modal.close', 'Close')) + '</button></header>' +
     '<div class="browser-modal-body">' + bodyHtml + '</div>' +
-    '<footer><button type="button" data-browser-modal-close>' + escapeHtml(browserText('modal.cancel', 'Cancel')) + '</button>' +
-    '<button type="button" data-browser-modal-confirm data-browser-modal-action="' + escapeHtml(confirmAction) + '">' + escapeHtml(confirmLabel) + '</button></footer></section>';
+    '<footer class="browser-modal-footer">' +
+      '<div class="browser-modal-footer-start">' + (arguments[4] && arguments[4].secondaryButtonHtml ? arguments[4].secondaryButtonHtml : '') + '</div>' +
+      '<div class="browser-modal-footer-end"><button type="button" data-browser-modal-close>' + escapeHtml(browserText('modal.cancel', 'Cancel')) + '</button>' +
+      '<button type="button" data-browser-modal-confirm data-browser-modal-action="' + escapeHtml(confirmAction) + '">' + escapeHtml(confirmLabel) + '</button></div>' +
+    '</footer></section>';
 }
 
 function closeModal() {
@@ -2120,6 +2248,103 @@ function closeModal() {
     elements.modalRoot.hidden = true;
     elements.modalRoot.innerHTML = '';
   }
+}
+
+function openWalletInstallModal() {
+  if (!elements.modalRoot) return;
+  if (elements.usingChip && typeof elements.usingChip.setAttribute === 'function') {
+    elements.usingChip.setAttribute('aria-expanded', 'true');
+  }
+  elements.modalRoot.hidden = false;
+  elements.modalRoot.innerHTML = '<section class="browser-modal-panel" role="dialog" aria-modal="true">' +
+    '<header><h2>' + escapeHtml(runtimeLabelValue('walletInstallTitle', browserText('wallet.installTitle', 'Install Wallet'))) + '</h2><button type="button" data-browser-modal-close aria-label="' + escapeHtml(browserText('modal.close', 'Close')) + '">' + escapeHtml(browserText('modal.close', 'Close')) + '</button></header>' +
+    '<div class="browser-modal-body"><p>' + escapeHtml(runtimeLabelValue('walletInstallBody', browserText('wallet.installBody', 'Please install a wallet extension first.'))) + '</p></div>' +
+    '<footer class="browser-modal-footer"><div class="browser-modal-footer-start"></div><div class="browser-modal-footer-end">' +
+      '<button type="button" data-browser-modal-close>' + escapeHtml(browserText('modal.cancel', 'Cancel')) + '</button>' +
+      '<button type="button" data-browser-wallet-install>' + escapeHtml(runtimeLabelValue('walletInstallAction', browserText('wallet.installAction', 'Install'))) + '</button>' +
+    '</div></footer></section>';
+}
+
+function installWalletProvider() {
+  var installUrl = runtimeLabelValue('walletInstallUrl', '');
+  if (installUrl && typeof window !== 'undefined' && typeof window.open === 'function') {
+    window.open(installUrl, '_blank', 'noopener');
+  }
+}
+
+async function connectStandaloneWalletActor() {
+  if (!isStandaloneWalletRuntime()) {
+    openUsingIdentitySelector();
+    return null;
+  }
+  if (typeof window === 'undefined' || !window.metaidwallet) {
+    openWalletInstallModal();
+    return null;
+  }
+  var wallet = window.metaidwallet;
+  try {
+    var connected = typeof wallet.isConnected === 'function' ? await wallet.isConnected() : null;
+    var status = typeof connected === 'boolean' ? (connected ? 'connected' : 'not-connected') : textValue(connected && connected.status);
+    if (status === 'locked') throw new Error(runtimeLabelValue('walletUnlockError', 'Please unlock wallet first.'));
+    if (status === 'no-wallets') throw new Error(runtimeLabelValue('walletInitializeError', 'Please initialize wallet first.'));
+    if (!connected || status === 'not-connected') {
+      var result = typeof wallet.connect === 'function' ? await wallet.connect() : null;
+      if (textValue(result && result.status) === 'canceled') {
+        setStatus('wallet canceled', '');
+        return null;
+      }
+    }
+
+    var network = typeof wallet.getNetwork === 'function' ? await wallet.getNetwork() : null;
+    var mvcAddress = typeof wallet.getAddress === 'function' ? await wallet.getAddress() : '';
+    var mvcPublicKey = typeof wallet.getPublicKey === 'function' ? await wallet.getPublicKey() : '';
+    var btcAddress = wallet.btc && typeof wallet.btc.getAddress === 'function' ? await wallet.btc.getAddress() : '';
+    var btcPublicKey = wallet.btc && typeof wallet.btc.getPublicKey === 'function' ? await wallet.btc.getPublicKey() : '';
+    var address = textValue(mvcAddress) || textValue(btcAddress);
+    if (!address) throw new Error(runtimeLabelValue('walletAddressMissingError', 'Wallet extension did not return an address.'));
+
+    var profile = await resolveWalletProfile(address);
+    var label = textValue(profile.name) || shortAddress(address) || runtimeLabelValue('walletFallbackName', 'Wallet');
+    var actor = {
+      id: 'wallet:' + address,
+      label: label,
+      kind: 'wallet',
+      isDefault: true,
+      address: address,
+      globalMetaId: textValue(profile.globalMetaId),
+      avatar: textValue(profile.avatar),
+      capabilities: ['template-settings'],
+      wallet: {
+        provider: runtimeLabelValue('walletProviderId', 'wallet-extension'),
+        network: textValue(network && network.network),
+        mvcAddress: textValue(mvcAddress),
+        mvcPublicKey: textValue(mvcPublicKey),
+        btcAddress: textValue(btcAddress),
+        btcPublicKey: textValue(btcPublicKey)
+      }
+    };
+    if (!state.runtime) state.runtime = {};
+    state.runtime.actors = [actor];
+    state.runtime.defaultActor = actor;
+    state.actorId = actor.id;
+    renderUsingIdentity();
+    setStatus('wallet connected', '');
+    return actor;
+  } catch (error) {
+    setStatus('error', error && error.message ? error.message : 'Wallet connection failed.');
+    return null;
+  }
+}
+
+function handleUsingIdentityClick() {
+  if (isStandaloneWalletRuntime()) {
+    if (selectedStandaloneWalletActor()) return;
+    connectStandaloneWalletActor().catch(function (error) {
+      setStatus('error', error && error.message ? error.message : 'Wallet connection failed.');
+    });
+    return;
+  }
+  openUsingIdentitySelector();
 }
 
 function openUsingIdentitySelector() {
@@ -2286,16 +2511,33 @@ function openPrivateChatModal() {
     setStatus('error', 'Target Bot is missing.');
     return;
   }
+  var conversationAction = Array.isArray(state.current.actions)
+    ? state.current.actions.find(function (action) { return textValue(action && action.kind) === 'open-conversation'; })
+    : null;
+  var conversationPayload = objectValue(conversationAction && conversationAction.payload);
+  if (!Object.keys(conversationPayload).length) {
+    conversationPayload = {
+      conversationUri: 'map://simplemsg/conversation?peer=' + encodeURIComponent(state.current.owner.globalMetaId),
+      peerGlobalMetaId: state.current.owner.globalMetaId
+    };
+    if (textValue(state.current.owner.name)) {
+      conversationPayload.peerName = textValue(state.current.owner.name);
+    }
+  }
   state.pendingPrivateChat = {
     to: state.current.owner.globalMetaId,
-    targetName: textValue(state.current.owner.name) || textValue(state.current.title) || state.current.owner.globalMetaId
+    targetName: textValue(state.current.owner.name) || textValue(state.current.title) || state.current.owner.globalMetaId,
+    conversationPayload: conversationPayload
   };
   renderModal(
     'Private Chat',
     '<dl>' + keyValue('using', usingLabel()) + keyValue('target', state.pendingPrivateChat.targetName) + '</dl>' +
       '<textarea data-browser-private-chat-message rows="5" placeholder="Message"></textarea>',
     'Send',
-    'private-chat'
+    'private-chat',
+    {
+      secondaryButtonHtml: '<button type="button" data-browser-modal-action="view-conversation">View Conversation</button>'
+    }
   );
 }
 
@@ -2320,6 +2562,27 @@ async function confirmPrivateChat(messageText) {
   });
   closeModal();
   setStatus('sent', '');
+  openTrustedActionHref(result);
+  return result;
+}
+
+async function openPendingConversation() {
+  var pending = state.pendingPrivateChat;
+  var payload = objectValue(pending && pending.conversationPayload);
+  if (!payload.conversationUri && !payload.peerGlobalMetaId) {
+    setStatus('error', 'Conversation target is missing.');
+    return null;
+  }
+  var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      resourceUri: currentResourceUri(),
+      kind: 'open-conversation',
+      payload: payload
+    })
+  });
+  closeModal();
   openTrustedActionHref(result);
   return result;
 }
@@ -3289,6 +3552,10 @@ async function initialize() {
         copyUri({ uri: shareCopy.getAttribute('data-browser-share-copy') || '' });
         return;
       }
+      if (closestWithAttribute(event && event.target, 'data-browser-wallet-install')) {
+        installWalletProvider();
+        return;
+      }
       var target = closestWithAttribute(event && event.target, 'data-browser-modal-action') ||
         closestWithAttribute(event && event.target, 'data-browser-actor-id');
       if (!target) return;
@@ -3305,10 +3572,16 @@ async function initialize() {
       if (action === 'private-chat') {
         var input = elements.modalRoot.querySelector('[data-browser-private-chat-message]');
         confirmPrivateChat(input ? input.value : '');
+        return;
+      }
+      if (action === 'view-conversation') {
+        openPendingConversation();
+        return;
       }
       if (action === 'service-call') {
         var task = elements.modalRoot.querySelector('[data-browser-service-task]');
         confirmServiceCall(task ? task.value : '');
+        return;
       }
       if (action === 'delete-bookmark') {
         var removalUri = state.pendingBookmarkRemoval;
@@ -3390,7 +3663,7 @@ async function initialize() {
   if (elements.reload) elements.reload.addEventListener('click', reloadCurrent);
   if (elements.drawerToggle) elements.drawerToggle.addEventListener('click', toggleDrawer);
   if (elements.bookmarkStar) elements.bookmarkStar.addEventListener('click', toggleBookmark);
-  if (elements.usingChip) elements.usingChip.addEventListener('click', openUsingIdentitySelector);
+  if (elements.usingChip) elements.usingChip.addEventListener('click', handleUsingIdentityClick);
   if (elements.resourceChip) elements.resourceChip.addEventListener('click', openCreatorFromChip);
   if (elements.statusProof) elements.statusProof.addEventListener('click', openInspector);
   if (elements.statusTxid) elements.statusTxid.addEventListener('click', openInspector);
@@ -3441,6 +3714,10 @@ globalThis.closeInspector = closeInspector;
 globalThis.renderInspector = renderInspector;
 globalThis.openUsingIdentitySelector = openUsingIdentitySelector;
 globalThis.selectUsingIdentity = selectUsingIdentity;
+globalThis.openWalletInstallModal = openWalletInstallModal;
+globalThis.installWalletProvider = installWalletProvider;
+globalThis.connectStandaloneWalletActor = connectStandaloneWalletActor;
+globalThis.handleUsingIdentityClick = handleUsingIdentityClick;
 globalThis.openBrowserMenu = openBrowserMenu;
 globalThis.closeBrowserMenu = closeBrowserMenu;
 globalThis.toggleBrowserMenu = toggleBrowserMenu;

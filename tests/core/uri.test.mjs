@@ -52,9 +52,30 @@ test('parseBrowserUri treats a bare valid Global MetaID as a metaid URI', () => 
   });
 });
 
+test('parseBrowserUri treats a bare domain-like alias as a metaid URI', () => {
+  assert.deepEqual(core.parseBrowserUri('  SUNNYFUNG.ETH  '), {
+    originalUri: 'SUNNYFUNG.ETH',
+    normalizedUri: 'metaid://sunnyfung.eth',
+    scheme: 'metaid',
+    id: 'sunnyfung.eth',
+  });
+});
+
+test('parseBrowserUri treats a bare pin id as a pin URI', () => {
+  const pinId = '7edcf7775a2054c87c46c0a964d10dd6c32408506d60b0b91a90c30423d8edbei0';
+  assert.deepEqual(core.parseBrowserUri(`  ${pinId.toUpperCase()}  `), {
+    originalUri: pinId.toUpperCase(),
+    normalizedUri: `pin://${pinId}`,
+    scheme: 'pin',
+    id: pinId,
+  });
+});
+
 test('parseBrowserUri rejects missing, empty, and unsupported schemes', () => {
   assert.throws(() => core.parseBrowserUri('idqABC'), /complete Agent Internet URI/i);
   assert.throws(() => core.parseBrowserUri('idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8p'), /valid Global MetaID/i);
+  assert.throws(() => core.parseBrowserUri('sunny_fung.eth'), /complete Agent Internet URI/i);
+  assert.throws(() => core.parseBrowserUri('sunnyfung.eth/path'), /complete Agent Internet URI/i);
   assert.throws(() => core.parseBrowserUri('metaid://'), /empty resource id/i);
   assert.throws(() => core.parseBrowserUri('https://example.com'), /unsupported URI scheme/i);
 });

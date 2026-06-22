@@ -115,6 +115,16 @@ export interface BrowserRuntimeLabels {
   actorChip: string;
   noActorTitle: string;
   noActorBody: string;
+  walletConnect?: string;
+  walletInstallTitle?: string;
+  walletInstallBody?: string;
+  walletInstallAction?: string;
+  walletInstallUrl?: string;
+  walletUnlockError?: string;
+  walletInitializeError?: string;
+  walletAddressMissingError?: string;
+  walletFallbackName?: string;
+  walletProviderId?: string;
   noActorAction?: {
     label: string;
     href?: string;

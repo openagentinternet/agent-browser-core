@@ -324,6 +324,57 @@ test('private-chat sends only after modal confirmation with Browser action contr
   assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body.payload, 'message'), false);
 });
 
+test('private-chat modal view conversation button posts open-conversation and follows returned href', async () => {
+  const { context, nodes, requests } = createContext({
+    actionResponse: {
+      ok: true,
+      data: {
+        kind: 'open-conversation',
+        handled: true,
+        data: { href: '/ui/conversations?local=idq1worker&peer=idq1target' },
+      },
+    },
+  });
+  await context.initialize();
+  context.state.current.actions = [{
+    id: 'conversation',
+    label: 'Conversation',
+    kind: 'open-conversation',
+    enabled: true,
+    payload: {
+      conversationUri: 'map://simplemsg/conversation?peer=idq1target',
+      peerGlobalMetaId: 'idq1target',
+      peerName: 'Target Bot',
+    },
+  }];
+
+  await context.handleTrustedAction({ id: 'message', kind: 'private-chat' });
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /View Conversation/);
+
+  nodes['[data-browser-modal-root]'].listeners.get('click')({
+    preventDefault() {},
+    target: browserActionTarget({
+      'data-browser-modal-action': 'view-conversation',
+    }),
+  });
+
+  await waitFor(() => requests.length === 1, 'view conversation action post');
+  await waitFor(
+    () => context.window.location.href === '/ui/conversations?local=idq1worker&peer=idq1target',
+    'view conversation href navigation',
+  );
+
+  assert.deepEqual(requests[0].body, {
+    resourceUri: 'metaid://idq1target',
+    kind: 'open-conversation',
+    payload: {
+      conversationUri: 'map://simplemsg/conversation?peer=idq1target',
+      peerGlobalMetaId: 'idq1target',
+      peerName: 'Target Bot',
+    },
+  });
+});
+
 test('viewport open-conversation action posts payload and follows returned href', async () => {
   const { context, nodes, requests } = createContext({
     actionResponse: {
