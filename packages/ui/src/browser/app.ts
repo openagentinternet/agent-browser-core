@@ -3014,7 +3014,7 @@ var PIN_INSPECTOR_PAGE_STYLE = '<style>' +
   '.browser-protocol-proof dd { margin: 0; overflow-wrap: anywhere; }' +
   '.browser-protocol-proof dd button { margin-left: 8px; border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; padding: 4px 8px; }' +
   '.browser-pin-media-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }' +
-  '.browser-pin-media-card { display: grid; gap: 8px; min-width: 0; padding: 10px; border: 1px solid #dce4ef; border-radius: 8px; background: #f8fafc; }' +
+  '.browser-pin-media-card { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; gap: 8px; min-width: 0; padding: 10px; border: 1px solid #dce4ef; border-radius: 8px; background: #f8fafc; }' +
   '.browser-pin-media-preview { display: grid; place-items: center; min-height: 110px; border-radius: 7px; background: #e8eef6; color: #62718a; font-size: 12px; font-weight: 700; text-align: center; overflow: hidden; }' +
   '.browser-pin-media-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }' +
   '.browser-pin-media-preview-video { min-height: 200px; background: #141c29; color: #b7c4d6; }' +
