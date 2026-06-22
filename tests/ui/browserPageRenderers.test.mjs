@@ -501,6 +501,80 @@ test('bot-page renderer keeps MetaApp intro scoped to each item and uses metaapp
   assert.match(html, /aria-label="Download MetaApp code zip"/);
 });
 
+test('bot-page renderer links each Recent Activity and MetaApp item to its pin:// detail via a [PIN] badge', async () => {
+  const buzzPin = '4'.repeat(64) + 'i0';
+  const chatPin = '1'.repeat(64) + 'i0';
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1pinbadgebot' },
+    profile: { name: 'Badge Bot', bio: 'Exercises [PIN] badges.' },
+    sections: [
+      { id: 'services', protocolPath: '/protocols/skill-service', items: [] },
+      {
+        id: 'chats',
+        protocolPath: '/protocols/simplemsg',
+        items: [
+          {
+            pinId: chatPin,
+            protocolPath: '/protocols/simplemsg',
+            timestamp: Math.floor(Date.UTC(2026, 5, 19) / 1000),
+            data: { interactWith: { globalMetaId: chatPeerSunny, name: 'AI_Sunny' } },
+          },
+        ],
+      },
+      {
+        id: 'buzzes',
+        protocolPath: '/protocols/simplebuzz',
+        items: [
+          {
+            pinId: buzzPin,
+            protocolPath: '/protocols/simplebuzz',
+            timestamp: Math.floor(Date.UTC(2026, 5, 20) / 1000),
+            data: { payload: { content: 'Published new build.' } },
+          },
+        ],
+      },
+      {
+        id: 'metaapps',
+        protocolPath: '/protocols/metaapp',
+        items: [
+          {
+            pinId: metaAppPinId,
+            protocolPath: '/protocols/metaapp',
+            timestamp: 1780760004,
+            data: { payload: { appName: 'badge-app', title: 'Badge App', version: '1.0.0' } },
+          },
+        ],
+      },
+    ],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    uri: 'metaid://idq1pinbadgebot',
+    normalizedUri: 'metaid://idq1pinbadgebot',
+    resourceType: 'bot',
+    title: 'Badge Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1pinbadgebot', name: 'Badge Bot', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Recent Activity'), 'pin badge render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+
+  // Buzz row: [PIN] badge links to pin://<buzzPin> via internal nav.
+  const buzzBadge = new RegExp(`class="browser-pin-badge" href="pin://${buzzPin}" data-browser-map-link[^>]*>\\[PIN\\]`);
+  assert.match(html, buzzBadge);
+  // Chat row: [PIN] badge links to the chat interaction pin.
+  const chatBadge = new RegExp(`class="browser-pin-badge" href="pin://${chatPin}" data-browser-map-link[^>]*>\\[PIN\\]`);
+  assert.match(html, chatBadge);
+  // MetaApps: [PIN] badge links to the metaapp pin detail.
+  const metaAppBadge = new RegExp(`class="browser-pin-badge" href="pin://${metaAppPinId}" data-browser-map-link[^>]*>\\[PIN\\]`);
+  assert.match(html, metaAppBadge);
+});
+
 test('bot-page renderer uses compact-list template with normalized future lists', async () => {
   const homepage = {
     globalMetaId: 'idq1compactbot',
