@@ -226,6 +226,34 @@ export async function fetchBotProfileInfo(input: {
   }
 }
 
+async function enrichOwnerProfile(input: {
+  result: BrowserResolveResult;
+  request: ResolveBrowserResourceInput;
+}): Promise<BrowserResolveResult> {
+  const ownerMetaId = text(input.result.owner.globalMetaId);
+  if (!ownerMetaId || !input.request.fetch || !input.request.config.metasoP2PBaseUrl.trim()) {
+    return input.result;
+  }
+  const ownerProfile = await fetchBotProfileInfo({
+    baseUrl: input.request.config.metasoP2PBaseUrl,
+    globalMetaId: ownerMetaId,
+    fetch: input.request.fetch,
+    metafileContentBaseUrl: input.request.config.metafileContentBaseUrl,
+  });
+  if (!ownerProfile) {
+    return input.result;
+  }
+  return {
+    ...input.result,
+    owner: {
+      ...input.result.owner,
+      globalMetaId: text(ownerProfile.globalMetaId) || input.result.owner.globalMetaId,
+      name: text(ownerProfile.name) || input.result.owner.name,
+      avatar: text(ownerProfile.avatar) || input.result.owner.avatar,
+    },
+  };
+}
+
 async function resolveMetaAppResource(input: {
   parsed: ParsedBrowserUri;
   request: ResolveBrowserResourceInput;
@@ -252,27 +280,7 @@ async function resolveMetaAppResource(input: {
     record,
     fetchedAt: Date.now(),
   });
-  const ownerProfile = input.request.fetch && input.request.config.metasoP2PBaseUrl.trim()
-    ? await fetchBotProfileInfo({
-      baseUrl: input.request.config.metasoP2PBaseUrl,
-      globalMetaId: result.owner.globalMetaId,
-      fetch: input.request.fetch,
-      metafileContentBaseUrl: input.request.config.metafileContentBaseUrl,
-    })
-    : null;
-  if (!ownerProfile) {
-    return browserCommandSuccess(result);
-  }
-
-  return browserCommandSuccess({
-    ...result,
-    owner: {
-      ...result.owner,
-      globalMetaId: text(ownerProfile.globalMetaId) || result.owner.globalMetaId,
-      name: text(ownerProfile.name) || result.owner.name,
-      avatar: text(ownerProfile.avatar) || result.owner.avatar,
-    },
-  });
+  return browserCommandSuccess(await enrichOwnerProfile({ result, request: input.request }));
 }
 
 export async function resolveBrowserResource(input: ResolveBrowserResourceInput): Promise<BrowserCommandResult<BrowserResolveResult>> {
@@ -379,21 +387,29 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
   }
 
   if (parsed.scheme === 'metafile') {
-    return resolveMetafilePinToResource({
+    const result = await resolveMetafilePinToResource({
       uri: parsed.originalUri,
       id: parsed.id,
       fetch: input.fetch,
       manApiBaseUrl: input.config.manApiBaseUrl,
       metafileContentBaseUrl: input.config.metafileContentBaseUrl,
     });
+    if (!result.ok) {
+      return result;
+    }
+    return browserCommandSuccess(await enrichOwnerProfile({ result: result.data, request: input }));
   }
 
   if (parsed.scheme === 'pin') {
-    return resolvePinUriToResource({
+    const result = await resolvePinUriToResource({
       uri: parsed.normalizedUri,
       fetch: input.fetch,
       manApiBaseUrl: input.config.manApiBaseUrl,
     });
+    if (!result.ok) {
+      return result;
+    }
+    return browserCommandSuccess(await enrichOwnerProfile({ result: result.data, request: input }));
   }
 
   if (parsed.scheme === 'map') {

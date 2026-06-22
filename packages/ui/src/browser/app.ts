@@ -259,6 +259,12 @@ function pinHref(pinId) {
   return isBrowserPinId(id) ? 'pin://' + encodeURIComponent(id.toLowerCase()) : '';
 }
 
+function pinBadgeHtml(pinId) {
+  var href = pinHref(pinId);
+  if (!href) return '';
+  return '<a class="browser-pin-badge" href="' + escapeHtml(href) + '" data-browser-map-link title="View PIN detail">[PIN]</a>';
+}
+
 var DEFAULT_METAFILE_CONTENT_BASE_URL = 'https://file.metaid.io/metafile-indexer';
 
 function metaAppHref(pinId) {
@@ -2097,9 +2103,11 @@ function normalizeBotHomepageChats(items, identity) {
     var partnerGlobalMetaId = textValue(peer.globalMetaId || peer.globalMetaID || peer.globalmetaid || (chat && chat.interactWith));
     var partnerName = textValue(peer.name) || shortId(partnerGlobalMetaId) || ('Chat ' + (index + 1));
     var partnerAvatarId = textValue(peer.avatarId || peer.avatarID || peer.avatarid);
+    var chatPinId = isBrowserPinId(textValue(chat && chat.pinId)) ? textValue(chat && chat.pinId) : '';
     return {
       id: textValue(chat && chat.pinId) || ('chat-' + index),
       activityType: 'chat',
+      pinId: chatPinId,
       protocolPath: textValue(chat && chat.protocolPath) || '/protocols/simplemsg',
       timestamp: typeof chat.timestamp === 'number' && Number.isFinite(chat.timestamp)
         ? chat.timestamp
@@ -2234,8 +2242,9 @@ function renderMetaAppRows(items, emptyText) {
       var downloadHtml = item.downloadHref
         ? '<a class="browser-metaapp-download" href="' + escapeHtml(item.downloadHref) + '" target="_blank" rel="noopener" download aria-label="Download MetaApp code zip" title="Download MetaApp code zip">' + iconHtml('download') + '</a>'
         : '';
+      var pinBadge = pinBadgeHtml(item.pinId);
       return '<article class="browser-activity-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('layout') + '</span>' +
-        '<div><strong class="browser-metaapp-heading">' + titleHtml + downloadHtml + '</strong>' +
+        '<div><strong class="browser-metaapp-heading">' + titleHtml + downloadHtml + pinBadge + '</strong>' +
         (item.detail ? '<p>' + escapeHtml(item.detail) + '</p>' : '') + '</div></article>';
     }).join('')
     : '<p class="browser-muted-row">' + escapeHtml(emptyText) + '</p>';
@@ -2267,8 +2276,9 @@ function renderChatActivityRow(item) {
     '<span style="color:#667085;">发生了互动</span>' +
     '</div>';
   var peerAttr = item.partnerGlobalMetaId ? ' data-chat-peer="' + escapeHtml(item.partnerGlobalMetaId) + '"' : '';
+  var pinBadge = pinBadgeHtml(item.pinId);
   return '<article class="browser-activity-row"' + peerAttr + '><span class="browser-row-icon" aria-hidden="true">' + iconHtml('message') + '</span>' +
-    '<div>' + contentHtml + '</div></article>';
+    '<div>' + contentHtml + pinBadge + '</div></article>';
 }
 
 function renderActivityRows(payload) {
@@ -2288,8 +2298,9 @@ function renderActivityRows(payload) {
       var contentHtml = duplicateBuzzText
         ? '<p>' + (detail || title) + '</p>'
         : '<strong>' + titleHtml + '</strong>' + (detail ? '<p>' + detail + '</p>' : '');
+      var pinBadge = pinBadgeHtml(item.pinId);
       return '<article class="browser-activity-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('activity') + '</span>' +
-        '<div>' + contentHtml + '</div></article>';
+        '<div>' + contentHtml + pinBadge + '</div></article>';
     }).join('')
     : '<p class="browser-muted-row">No recent activity.</p>';
 }
@@ -2949,7 +2960,7 @@ function pinInspectorSection(title, bodyHtml, intro) {
 function pinInspectorInfoList(items) {
   return '<dl class="browser-protocol-proof">' + items.map(function(item) {
     var copyButton = item.copyValue
-      ? ' <button type="button" data-browser-copy-value="' + escapeHtml(item.copyValue) + '">Copy</button>'
+      ? ' <button type="button" class="browser-pin-copy-btn" title="Copy" aria-label="Copy" data-browser-copy-value="' + escapeHtml(item.copyValue) + '">' + iconHtml('copy') + '</button>'
       : '';
     return '<dt>' + escapeHtml(item.key) + '</dt><dd>' + pinInspectorFieldValueHtml(item.value) + copyButton + '</dd>';
   }).join('') + '</dl>';
@@ -3547,7 +3558,7 @@ function openPinRawRecord(trigger) {
   if (!elements.modalRoot) return false;
   elements.modalRoot.hidden = false;
   elements.modalRoot.innerHTML = '<div class="browser-modal-backdrop" data-browser-modal-close></div>' +
-    '<section class="browser-modal-panel" role="document">' +
+    '<section class="browser-modal-panel browser-pin-raw-modal" role="document">' +
       '<header class="browser-modal-header"><h2>Raw PIN record</h2><button type="button" class="browser-modal-close" data-browser-modal-close aria-label="Close">x</button></header>' +
       '<div class="browser-modal-body"><pre class="browser-protocol-json">' + escapeHtml(JSON.stringify(rawRecord, null, 2)) + '</pre></div>' +
     '</section>';
@@ -3586,8 +3597,7 @@ function renderPinInspectorPage(current) {
         (metaPills ? '<div class="browser-pin-meta-pills">' + metaPills + '</div>' : '') +
       '</div>' +
       '<div class="browser-pin-page-actions">' +
-        (txid ? '<button type="button" data-browser-copy-value="' + escapeHtml(txid) + '">Copy TxID</button>' : '') +
-        '<button type="button" data-browser-open-raw-record>View Raw Record</button>' +
+        '<button type="button" class="browser-pin-primary-action" data-browser-open-raw-record>View Raw Record</button>' +
       '</div>' +
     '</header>' +
     '<div class="browser-pin-page-grid">' +
@@ -3747,7 +3757,9 @@ async function initialize() {
       var copyTarget = closestWithAttribute(event && event.target, 'data-browser-copy-value');
       if (copyTarget) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
-        copyUri({ uri: copyTarget.getAttribute('data-browser-copy-value') || '' }).catch(function (error) {
+        copyUri({ uri: copyTarget.getAttribute('data-browser-copy-value') || '' }).then(function () {
+          showToast(browserText('ownerPanel.copied', 'copied'));
+        }).catch(function (error) {
           setStatus('error', error && error.message ? error.message : 'Copy failed.');
         });
         return;
