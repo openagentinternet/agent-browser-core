@@ -49,6 +49,7 @@ function elements() {
     '[data-browser-reload]': new FakeElement(),
     '[data-browser-drawer-toggle]': new FakeElement(),
     '[data-browser-resource-chip]': new FakeElement(),
+    '[data-browser-owner-panel]': new FakeElement(),
     '[data-browser-using-selector]': new FakeElement(),
     '[data-browser-menu-trigger]': new FakeElement(),
     '[data-browser-menu]': new FakeElement(),
@@ -189,6 +190,8 @@ test('resource chip opens creator Bot Page while proof and TXID controls still o
   await context.navigateTo('metaapp://pin');
 
   nodes['[data-browser-resource-chip]'].click();
+  await waitFor(() => !nodes['[data-browser-owner-panel]'].hidden, 'owner panel open');
+  context.handleOwnerPanelAction('visit-home');
   await waitFor(() => context.state.current && context.state.current.normalizedUri === 'metaid://idq1publisher', 'creator Bot Page navigation');
   assert.equal(nodes['[data-browser-inspector]'].hidden, true);
   assert.equal(nodes['[data-browser-inspector]'].innerHTML, '');
@@ -290,7 +293,7 @@ test('Inspector renders ENS alias metadata from source raw nameAlias', async () 
   await waitFor(() => context.state.current, 'initial resource');
   await context.navigateTo(aliasUri);
   await waitFor(() => context.state.current && context.state.current.uri === aliasUri, 'alias resource');
-  nodes['[data-browser-resource-chip]'].click();
+  nodes['[data-browser-status-proof]'].click();
   const html = nodes['[data-browser-inspector]'].innerHTML;
 
   assert.match(html, /<h3>Name Alias<\/h3>/);
@@ -407,7 +410,7 @@ test('Inspector refreshes from ENS alias error to successful alias evidence', as
   });
 
   await waitFor(() => context.state.current, 'initial resource');
-  nodes['[data-browser-resource-chip]'].click();
+  nodes['[data-browser-status-proof]'].click();
 
   await context.navigateTo(badAliasUri);
   await waitFor(() => context.state.lastResolveError, 'bad alias failure');

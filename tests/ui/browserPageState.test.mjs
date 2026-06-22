@@ -113,6 +113,7 @@ function createElements() {
     '[data-browser-reload]': new FakeElement(),
     '[data-browser-drawer-toggle]': new FakeElement(),
     '[data-browser-resource-chip]': new FakeElement(),
+    '[data-browser-owner-panel]': new FakeElement(),
     '[data-browser-using-selector]': new FakeElement(),
     '[data-browser-menu-trigger]': new FakeElement(),
     '[data-browser-menu]': new FakeElement(),
@@ -542,8 +543,12 @@ test('Browser renders current resource identity separately from using identity',
 
   await waitFor(() => fetchCalls.length === 2, 'resource render');
 
-  assert.match(elements['[data-browser-resource-chip]'].innerHTML, /Alice Resource/);
-  assert.match(elements['[data-browser-resource-chip]'].innerHTML, /idq1alice/);
+  assert.match(elements['[data-browser-resource-chip]'].innerHTML, /browser-chip-avatar/);
+  assert.doesNotMatch(elements['[data-browser-resource-chip]'].innerHTML, /Alice Resource/);
+  elements['[data-browser-resource-chip]'].click();
+  const ownerPanel = elements['[data-browser-owner-panel]'];
+  assert.match(ownerPanel.innerHTML, /Alice Resource/);
+  assert.match(ownerPanel.innerHTML, /idq1alice/);
   assert.match(elements['[data-browser-using-selector]'].innerHTML, /Using: Worker Bot/);
 });
 
@@ -806,9 +811,8 @@ test('Browser resource chip uses publisher identity for MetaApp resources', asyn
   await waitFor(() => fetchCalls.length === 2, 'MetaApp resource render');
 
   const resourceChip = elements['[data-browser-resource-chip]'].innerHTML;
-  assert.match(resourceChip, /Publisher Bot/);
-  assert.match(resourceChip, /idq1publisher/);
   assert.match(resourceChip, /https:\/\/so\.example\.test\/content\/publisher-avatar/);
+  assert.doesNotMatch(resourceChip, /Publisher Bot/);
   assert.doesNotMatch(resourceChip, /Fixture MetaApp/);
 });
 
