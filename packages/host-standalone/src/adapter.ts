@@ -45,6 +45,7 @@ import {
 } from './metaapp/artifactCache.js';
 
 const STANDALONE_ACTOR_ID = 'standalone-wallet';
+const STANDALONE_WALLET_ACTOR_PREFIX = 'wallet:';
 const STANDALONE_METAFILE_CONTENT_BASE_URL = 'https://file.metaid.io/metafile-indexer';
 const WALLET_PROVIDER_NAME = 'Meta' + 'let';
 const WALLET_PROVIDER_ID = WALLET_PROVIDER_NAME.toLowerCase();
@@ -280,7 +281,11 @@ function toHostSettingsSnapshot(snapshot: CoreBrowserSettingsSnapshot): BrowserS
 
 function resolveActor(input?: BrowserActorInput): BrowserCommandResult<never> | null {
   const requestedActor = normalizeText(input?.actorId);
-  if (requestedActor && requestedActor !== STANDALONE_ACTOR_ID) {
+  if (
+    requestedActor &&
+    requestedActor !== STANDALONE_ACTOR_ID &&
+    !requestedActor.startsWith(STANDALONE_WALLET_ACTOR_PREFIX)
+  ) {
     return browserFailure('actor_not_found', `Standalone Browser actor not found: ${requestedActor}`);
   }
   return null;

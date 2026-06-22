@@ -263,6 +263,22 @@ test('memory standalone Browser host keeps settings global while cache remains a
   assert.equal(missingActorCache.code, 'actor_not_found');
 });
 
+test('memory standalone Browser host accepts connected wallet actor aliases', async () => {
+  const host = standalone.createMemoryStandaloneBrowserHost();
+  const actorId = 'wallet:12ghVWG1yAgNjzXj4mr3qK9DgyornMUikZ';
+  const pinId = '6d3cc874b5f09b0eed5efe283530fbf22b9e27769a34ceadfd150cdb9e1dc753i0';
+
+  const runtime = await host.getRuntime({ actorId });
+  assert.equal(runtime.ok, true);
+
+  const resolved = await host.resolveResource({
+    actorId,
+    uri: `metaapp://${pinId}`,
+  });
+  assert.equal(resolved.ok, true);
+  assert.equal(resolved.data.normalizedUri, `metaapp://${pinId}`);
+});
+
 test('standalone CLI rejects listen errors', async (t) => {
   const server = standalone.createStandaloneBrowserServer();
   t.after(() => new Promise((resolve) => server.close(resolve)));

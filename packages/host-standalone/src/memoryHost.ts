@@ -18,6 +18,7 @@ import {
 } from '@openagentinternet/agent-browser-host-contract';
 
 const STANDALONE_ACTOR_ID = 'standalone-wallet';
+const STANDALONE_WALLET_ACTOR_PREFIX = 'wallet:';
 const WALLET_PROVIDER_NAME = 'Meta' + 'let';
 const WALLET_PROVIDER_ID = WALLET_PROVIDER_NAME.toLowerCase();
 
@@ -82,7 +83,11 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
   let cacheClearedAt: number | null = null;
 
   function ensureActor(actorId?: string) {
-    if (actorId && actorId !== STANDALONE_ACTOR_ID) {
+    if (
+      actorId &&
+      actorId !== STANDALONE_ACTOR_ID &&
+      !actorId.startsWith(STANDALONE_WALLET_ACTOR_PREFIX)
+    ) {
       return browserFailure('actor_not_found', `Standalone Browser actor not found: ${actorId}`);
     }
     return null;

@@ -118,6 +118,36 @@ test('standalone Browser serves pin deep links', async (t) => {
   assert.match(html, /data-browser-shell/);
 });
 
+test('standalone Browser resolve accepts connected wallet actor aliases', async (t) => {
+  const pinId = '6d3cc874b5f09b0eed5efe283530fbf22b9e27769a34ceadfd150cdb9e1dc753i0';
+  const actorId = 'wallet:12ghVWG1yAgNjzXj4mr3qK9DgyornMUikZ';
+  const adapter = createStandaloneBrowserHostAdapter({
+    fetch: async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: {
+          id: pinId,
+          path: '/protocols/simplebuzz',
+          contentType: 'application/json',
+          content: JSON.stringify({ content: 'Standalone wallet pin detail' }),
+        },
+      }),
+    }),
+  });
+  const server = createStandaloneBrowserServer({ adapter });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const response = await fetch(
+    `${baseUrl}/api/browser/resolve?actorId=${encodeURIComponent(actorId)}&uri=${encodeURIComponent(`pin://${pinId}`)}`,
+  );
+  const payload = await readJson(response);
+  assert.equal(response.status, 200);
+  assert.equal(payload.ok, true);
+  assert.equal(payload.data.normalizedUri, `pin://${pinId}`);
+});
+
 test('standalone server resolves metaid ENS alias through injected provider', async (t) => {
   const canonicalGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
   const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
