@@ -35,7 +35,7 @@ export const BROWSER_PAGE_STYLES = `
     .browser-bot-hero { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
     .browser-bot-avatar { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: #e5e7eb; }
     .browser-action-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-    .browser-action-row button { border: 1px solid #d1d5db; background: #fff; padding: 6px 10px; }
+    .browser-action-row button { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #d1d5db; background: #fff; padding: 6px 10px; }
     .browser-resource-sections { display: grid; gap: 12px; }
     .browser-resource-section { background: #fff; border: 1px solid #d1d5db; padding: 12px; }
     .browser-resource-list { display: grid; gap: 8px; }
@@ -122,6 +122,8 @@ export const BROWSER_PAGE_STYLES = `
     .browser-modal-header h2 { margin: 0; font-size: 16px; }
     .browser-modal-close { width: 30px; height: 30px; border: 1px solid #d1d5db; background: #fff; }
     .browser-modal-body { min-height: 0; overflow: auto; padding: 16px; }
+    .browser-modal-panel > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-top: 1px solid #d1d5db; background: #f9fafb; }
+    .browser-modal-footer-start, .browser-modal-footer-end { display: inline-flex; align-items: center; gap: 8px; }
     .browser-loading, .browser-settings-error { padding: 12px; border: 1px solid #d1d5db; background: #f9fafb; }
     .browser-settings-error { border-color: #fca5a5; color: #991b1b; }
     .browser-settings-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }

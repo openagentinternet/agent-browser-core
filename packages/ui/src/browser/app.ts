@@ -398,6 +398,7 @@ function iconHtml(name) {
     close: '<path d="M6 6l12 12M18 6L6 18"></path>',
     copy: '<rect x="8" y="8" width="10" height="10" rx="2"></rect><path d="M6 14H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1"></path>',
     external: '<path d="M14 5h5v5"></path><path d="M10 14L19 5"></path><path d="M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4"></path>',
+    follow: '<path d="M16 20v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1"></path><circle cx="10" cy="8" r="4"></circle><path d="M19 8v6"></path><path d="M16 11h6"></path>',
     history: '<path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5M12 7v5l3 2"></path>',
     layout: '<rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="M4 10h16M9 10v9"></path>',
     info: '<circle cx="12" cy="12" r="9"></circle><path d="M12 11v6"></path><circle class="browser-info-dot" cx="12" cy="7.5" r="1.1"></circle>',
@@ -440,6 +441,19 @@ function actionIconName(kind) {
   if (kind === 'copy') return 'copy';
   if (kind === 'proof' || kind === 'creator') return 'shield';
   return 'chevronRight';
+}
+
+function renderBotPageFollowButton() {
+  return '<button type="button" data-browser-follow>' +
+    iconHtml('follow') + '<span>Follow</span></button>';
+}
+
+function isBotPageHeaderAction(action) {
+  var kind = textValue(action && action.kind);
+  return kind !== 'open-conversation' &&
+    kind !== 'service-list' &&
+    kind !== 'service-call' &&
+    kind !== 'copy';
 }
 
 function closestWithAttribute(target, attributeName) {
@@ -1675,16 +1689,25 @@ function closeInspector() {
   syncPanelState();
 }
 
-function renderActionButtons(actions) {
-  if (!Array.isArray(actions) || actions.length === 0) return '';
-  return '<div class="browser-action-row">' + actions.map(function (action) {
+function renderActionButtons(actions, options) {
+  var buttons = Array.isArray(actions) ? actions.map(function (action) {
     var kind = textValue(action && action.kind);
     var label = textValue(action && action.label) || kind || 'Action';
     var disabled = action && action.enabled === false ? ' disabled' : '';
     return '<button type="button" data-browser-action="' + escapeHtml(kind) + '" data-browser-action-id="' + escapeHtml(textValue(action && action.id)) + '"' +
       actionPayloadAttribute(action) + disabled + '>' +
       iconHtml(actionIconName(kind)) + '<span>' + escapeHtml(label) + '</span></button>';
-  }).join('') + '</div>';
+  }) : [];
+  if (options && options.includeFollow) {
+    buttons.push(renderBotPageFollowButton());
+  }
+  if (buttons.length === 0) return '';
+  return '<div class="browser-action-row">' + buttons.join('') + '</div>';
+}
+
+function renderBotPageActionButtons(actions) {
+  var visibleActions = Array.isArray(actions) ? actions.filter(isBotPageHeaderAction) : [];
+  return renderActionButtons(visibleActions, { includeFollow: true });
 }
 
 function objectValue(value) {
@@ -2027,7 +2050,7 @@ function renderBotHomepageDocumentTemplate(payload, current) {
     '<div class="browser-bot-identity"><div class="browser-bot-title-line"><h2>' + escapeHtml(identity.name) + '</h2>' + proofIconHtml(identity.proofState) + '</div>' +
     (identity.globalMetaId ? '<p class="browser-globalmetaid">' + escapeHtml(identity.globalMetaId) + '</p>' : '') +
     (payload.summary.text ? '<p class="browser-bot-summary">' + escapeHtml(payload.summary.text) + '</p>' : '') + '</div>' +
-    renderActionButtons(current.actions) + '</header>' +
+    renderBotPageActionButtons(current.actions) + '</header>' +
     '<section class="browser-document-section"><h3>Overview</h3><p>' + escapeHtml(payload.summary.overview) + '</p></section>' +
     '<section class="browser-document-section browser-bot-services"><h3>Services</h3>' + renderServiceRows(payload.services) + '</section>' +
     '<section class="browser-document-section browser-bot-metaapps"><h3>MetaApps</h3>' + renderMetaAppRows(payload.metaapps, 'No public MetaApps.') + '</section>' +
@@ -2056,7 +2079,7 @@ function renderBotHomepageCompactListTemplate(payload, current) {
     '<div class="browser-bot-identity"><div class="browser-bot-title-line"><h2>' + escapeHtml(identity.name) + '</h2>' + proofIconHtml(identity.proofState) + '</div>' +
     (identity.globalMetaId ? '<p class="browser-globalmetaid">' + escapeHtml(identity.globalMetaId) + '</p>' : '') +
     (payload.summary.text ? '<p class="browser-bot-summary">' + escapeHtml(payload.summary.text) + '</p>' : '') + '</div>' +
-    renderActionButtons(current.actions) + '</header>' +
+    renderBotPageActionButtons(current.actions) + '</header>' +
     '<section class="browser-compact-overview"><p>' + escapeHtml(payload.summary.overview) + '</p></section>' +
     '<div class="browser-compact-grid">' + extraPanels.join('') + '</div>' +
     '</article>';
@@ -2104,8 +2127,11 @@ function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
   elements.modalRoot.innerHTML = '<section class="browser-modal-panel" role="dialog" aria-modal="true">' +
     '<header><h2>' + escapeHtml(title) + '</h2><button type="button" data-browser-modal-close aria-label="' + escapeHtml(browserText('modal.close', 'Close')) + '">' + escapeHtml(browserText('modal.close', 'Close')) + '</button></header>' +
     '<div class="browser-modal-body">' + bodyHtml + '</div>' +
-    '<footer><button type="button" data-browser-modal-close>' + escapeHtml(browserText('modal.cancel', 'Cancel')) + '</button>' +
-    '<button type="button" data-browser-modal-confirm data-browser-modal-action="' + escapeHtml(confirmAction) + '">' + escapeHtml(confirmLabel) + '</button></footer></section>';
+    '<footer class="browser-modal-footer">' +
+      '<div class="browser-modal-footer-start">' + (arguments[4] && arguments[4].secondaryButtonHtml ? arguments[4].secondaryButtonHtml : '') + '</div>' +
+      '<div class="browser-modal-footer-end"><button type="button" data-browser-modal-close>' + escapeHtml(browserText('modal.cancel', 'Cancel')) + '</button>' +
+      '<button type="button" data-browser-modal-confirm data-browser-modal-action="' + escapeHtml(confirmAction) + '">' + escapeHtml(confirmLabel) + '</button></div>' +
+    '</footer></section>';
 }
 
 function closeModal() {
@@ -2284,16 +2310,33 @@ function openPrivateChatModal() {
     setStatus('error', 'Target Bot is missing.');
     return;
   }
+  var conversationAction = Array.isArray(state.current.actions)
+    ? state.current.actions.find(function (action) { return textValue(action && action.kind) === 'open-conversation'; })
+    : null;
+  var conversationPayload = objectValue(conversationAction && conversationAction.payload);
+  if (!Object.keys(conversationPayload).length) {
+    conversationPayload = {
+      conversationUri: 'map://simplemsg/conversation?peer=' + encodeURIComponent(state.current.owner.globalMetaId),
+      peerGlobalMetaId: state.current.owner.globalMetaId
+    };
+    if (textValue(state.current.owner.name)) {
+      conversationPayload.peerName = textValue(state.current.owner.name);
+    }
+  }
   state.pendingPrivateChat = {
     to: state.current.owner.globalMetaId,
-    targetName: textValue(state.current.owner.name) || textValue(state.current.title) || state.current.owner.globalMetaId
+    targetName: textValue(state.current.owner.name) || textValue(state.current.title) || state.current.owner.globalMetaId,
+    conversationPayload: conversationPayload
   };
   renderModal(
     'Private Chat',
     '<dl>' + keyValue('using', usingLabel()) + keyValue('target', state.pendingPrivateChat.targetName) + '</dl>' +
       '<textarea data-browser-private-chat-message rows="5" placeholder="Message"></textarea>',
     'Send',
-    'private-chat'
+    'private-chat',
+    {
+      secondaryButtonHtml: '<button type="button" data-browser-modal-action="view-conversation">View Conversation</button>'
+    }
   );
 }
 
@@ -2318,6 +2361,27 @@ async function confirmPrivateChat(messageText) {
   });
   closeModal();
   setStatus('sent', '');
+  openTrustedActionHref(result);
+  return result;
+}
+
+async function openPendingConversation() {
+  var pending = state.pendingPrivateChat;
+  var payload = objectValue(pending && pending.conversationPayload);
+  if (!payload.conversationUri && !payload.peerGlobalMetaId) {
+    setStatus('error', 'Conversation target is missing.');
+    return null;
+  }
+  var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      resourceUri: currentResourceUri(),
+      kind: 'open-conversation',
+      payload: payload
+    })
+  });
+  closeModal();
   openTrustedActionHref(result);
   return result;
 }
@@ -3303,10 +3367,16 @@ async function initialize() {
       if (action === 'private-chat') {
         var input = elements.modalRoot.querySelector('[data-browser-private-chat-message]');
         confirmPrivateChat(input ? input.value : '');
+        return;
+      }
+      if (action === 'view-conversation') {
+        openPendingConversation();
+        return;
       }
       if (action === 'service-call') {
         var task = elements.modalRoot.querySelector('[data-browser-service-task]');
         confirmServiceCall(task ? task.value : '');
+        return;
       }
       if (action === 'delete-bookmark') {
         var removalUri = state.pendingBookmarkRemoval;

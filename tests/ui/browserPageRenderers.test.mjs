@@ -144,7 +144,18 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
     owner: { kind: 'bot', globalMetaId: 'idq1fixturebot', name: 'Fixture Bot', avatar: avatarUrl, verificationState: 'partial' },
     actions: [
       { id: 'message', label: 'Message', kind: 'private-chat', enabled: true },
+      {
+        id: 'conversation',
+        label: 'Conversation',
+        kind: 'open-conversation',
+        enabled: true,
+        payload: {
+          conversationUri: 'map://simplemsg/conversation?peer=idq1fixturebot',
+          peerGlobalMetaId: 'idq1fixturebot',
+        },
+      },
       { id: 'services', label: 'Services', kind: 'service-list', enabled: true },
+      { id: 'copy-uri', label: 'Copy URI', kind: 'copy', enabled: true, uri: 'metaid://idq1fixturebot' },
     ],
   }));
 
@@ -162,7 +173,11 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.match(html, /Published a v3 homepage fixture/);
   assert.equal((html.match(/Published a v3 homepage fixture\./g) || []).length, 1);
   assert.match(html, /data-browser-action="private-chat"/);
-  assert.match(html, /data-browser-action="service-list"/);
+  assert.doesNotMatch(html, /data-browser-action="service-list"/);
+  assert.doesNotMatch(html, /data-browser-action="open-conversation"/);
+  assert.doesNotMatch(html, /data-browser-action="copy"/);
+  assert.match(html, /data-browser-follow/);
+  assert.match(html, /<span>Follow<\/span>/);
   assert.match(html, new RegExp(`href="pin://${servicePinId}"`));
   assert.doesNotMatch(html, new RegExp(`href="map://simplebuzz/pin/${buzzPinId}"`));
   assert.match(html, /https:\/\/file\.metaid\.io\/metafile-indexer\/content\/avatar-pin/);
