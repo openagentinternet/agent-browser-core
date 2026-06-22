@@ -98,6 +98,11 @@ test('mature shell exposes generic copy and download helpers for pin pages', () 
   assert.match(definition.script, /function resolveDownloadHref\(/);
   assert.match(definition.script, /data-browser-copy-value/);
   assert.match(definition.script, /data-browser-download-ref/);
+  assert.match(definition.script, /browser-pin-json-text-block/);
+  assert.match(definition.script, /browser-pin-json-token-boolean/);
+  assert.match(definition.script, /browser-pin-json-token-link/);
+  assert.match(definition.script, /browser-pin-json-subblock/);
+  assert.match(definition.script, /browser-pin-download/);
   assert.match(definition.script, /globalThis\.copyValue = function \(value\) \{ return copyUri\(\{ uri: value \}\); \}/);
   assert.match(definition.script, /globalThis\.resolveDownloadHref = resolveDownloadHref/);
 });
@@ -151,6 +156,9 @@ test('mobile topbar reserves space for nav address and menu trigger', () => {
 });
 
 test('pin file rows keep download actions reachable on narrow widths', () => {
-  assert.match(ui.BROWSER_PAGE_STYLES, /\.browser-pin-file-row span \{ min-width: 0; \}/);
-  assert.match(ui.BROWSER_PAGE_STYLES, /\.browser-pin-file-row a \{ color: #2e6fed; text-decoration: none; overflow-wrap: anywhere; \}/);
+  assert.match(ui.BROWSER_PAGE_STYLES, /\.browser-pin-file-row span \{ min-width: 0; overflow-wrap: anywhere; \}/);
+  assert.match(ui.BROWSER_PAGE_STYLES, /\.browser-pin-json-value a, \.browser-pin-link-pill, \.browser-pin-file-row a \{ color: #2563d8; text-decoration: none; \}/);
+  assert.match(ui.BROWSER_PAGE_STYLES, /\.browser-pin-json-text-block \{ line-height: 1\.7; white-space: pre-wrap; \}/);
+  assert.match(ui.BROWSER_PAGE_STYLES, /\.browser-pin-download \{ display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 10px;/);
+  assert.match(ui.BROWSER_PAGE_STYLES, /\.browser-pin-file-meta \{ display: grid; gap: 4px; min-width: 0; \}/);
 });

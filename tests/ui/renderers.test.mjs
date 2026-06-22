@@ -4,6 +4,8 @@ import { test } from 'node:test';
 
 const core = await import('../../packages/core/dist/index.js');
 const ui = await import('../../packages/ui/dist/index.js');
+const legacyTxid = 'a'.repeat(64);
+const genesisTxid = 'b'.repeat(64);
 
 async function botEnvelope(templateId = 'document') {
   const homepage = JSON.parse(await readFile(new URL('../fixtures/botHomepage.v3.json', import.meta.url), 'utf8'));
@@ -120,10 +122,14 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
           chainName: 'btc',
           encryption: 'public',
           version: '1',
+          txid: legacyTxid,
+          genesisTransaction: genesisTxid,
         },
         payload: {
           title: 'Readable Pin',
-          content: 'Rendered via generic pin inspector',
+          content: 'Rendered via generic pin inspector. '.repeat(6).trim(),
+          featured: true,
+          score: 42,
           images: ['metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0'],
           attachments: [
             { uri: 'metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0.zip', name: 'fixture.zip' },
@@ -131,11 +137,17 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
           ],
           files: [{ url: 'https://files.example/guide.pdf', title: 'guide.pdf' }],
           image: 'metaid://idq1fixturebot',
+          tags: ['agent-browser', 'pin-renderer'],
+          extra: {
+            publishedAt: '2026-06-20T13:42:00Z',
+            lang: 'en',
+          },
         },
         rawPayload: '{"title":"Readable Pin"}',
         rawPinRecord: {
           path: '/protocols/simplebuzz',
-          txid: 'a'.repeat(64),
+          txid: legacyTxid,
+          genesisTransaction: genesisTxid,
         },
       },
     },
@@ -145,21 +157,95 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
 
   assert.match(html, /browser-pin-page/);
   assert.match(html, /Readable Pin/);
-  assert.match(html, /<h3>Payload<\/h3>/);
+  assert.match(html, /browser-pin-meta-pills/);
+  assert.match(html, /<h3>Payload Render<\/h3>/);
+  assert.match(html, /JSON is rendered as a structured payload document/);
+  assert.match(html, /browser-pin-json-doc/);
+  assert.match(html, /browser-pin-json-key">content</);
+  assert.match(html, /browser-pin-json-row browser-pin-json-row-longtext/);
+  assert.match(html, /browser-pin-json-text-block/);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-boolean/);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-number/);
+  assert.match(html, /browser-pin-json-token-list/);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-link/);
+  assert.match(html, /browser-pin-json-subblock/);
   assert.match(html, /<h3>Raw Payload<\/h3>/);
   assert.match(html, /<h3>Related Media<\/h3>/);
+  assert.match(html, /browser-pin-media-grid/);
+  assert.match(html, /data-browser-media-preview-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0"/);
+  assert.match(html, /browser-pin-file-meta/);
+  assert.match(html, /browser-pin-file-name/);
+  assert.match(html, /browser-pin-file-desc/);
+  assert.match(html, /class="browser-pin-download"/);
+  assert.match(html, /<h3>Related Links<\/h3>/);
+  assert.match(html, /browser-pin-link-pill/);
   assert.match(html, /<h3>Verify<\/h3>/);
+  assert.match(html, /View Raw Record/);
+  assert.match(html, /data-browser-copy-value="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"/);
+  assert.match(html, /<dt>txid<\/dt>/);
   assert.match(html, /guide\.pdf/);
   assert.match(html, /fixture\.zip/);
   assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
   assert.match(html, /href="pin:\/\/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0" data-browser-map-link/);
   assert.match(html, /data-browser-download-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0\.zip"/);
   assert.match(html, /data-browser-download-ref="https:\/\/files\.example\/guide\.pdf"/);
-  assert.match(html, /data-browser-copy-value="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/);
+  assert.doesNotMatch(html, /requestedPinId/);
+  assert.doesNotMatch(html, /resolvedPinId/);
+  assert.doesNotMatch(html, /Raw MAN pin record/);
+  assert.doesNotMatch(html, /data-browser-pin-raw-record/);
   assert.doesNotMatch(html, /<h3>Identity<\/h3>/);
   assert.doesNotMatch(html, /<h3>Overview<\/h3>/);
-  assert.doesNotMatch(html, /<h3>Media<\/h3>/);
-  assert.doesNotMatch(html, /<h3>Related Links<\/h3>/);
+  assert.doesNotMatch(html, /Content-type routing model/);
+  assert.doesNotMatch(html, /why-this-direction/);
+});
+
+test('UI renders JSON strings from plain text payloads as structured pin documents', () => {
+  const rawPayload = '{"content":"7\\n#美食工厂","contentType":"application/json;utf-8","attachments":["metafile://50d939b24815df1afd4c37137eebe15f65dbd71ae2ea505b465558a3f170c342i0.jpg"]}';
+  const html = ui.renderResourceHtml({
+    uri: 'pin://06a1ecf0944fd0a86eaac7afa67dff03d913e5c76cc7a098cbed56b476d6af3ci0?version=0',
+    normalizedUri: 'pin://06a1ecf0944fd0a86eaac7afa67dff03d913e5c76cc7a098cbed56b476d6af3ci0?version=0',
+    resourceType: 'pin',
+    title: 'Pin 06a1ecf094...af3ci0',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+    renderer: {
+      type: 'pin-inspector',
+      contentType: 'text/plain;utf-8',
+      data: {
+        rendererId: 'generic.pin-inspector',
+        version: {
+          requestedPinId: '06a1ecf0944fd0a86eaac7afa67dff03d913e5c76cc7a098cbed56b476d6af3ci0',
+          resolvedPinId: '06a1ecf0944fd0a86eaac7afa67dff03d913e5c76cc7a098cbed56b476d6af3ci0',
+          versionSelector: 'latest',
+        },
+        pin: {
+          pinId: '06a1ecf0944fd0a86eaac7afa67dff03d913e5c76cc7a098cbed56b476d6af3ci0',
+          path: '/protocols/simplebuzz',
+          contentType: 'text/plain;utf-8',
+          operation: 'create',
+          chainName: 'mvc',
+          encryption: '0',
+          version: '1',
+        },
+        payload: rawPayload,
+        rawPayload,
+        rawPinRecord: {
+          path: '/protocols/simplebuzz',
+          txid: 'a'.repeat(64),
+          contentType: 'text/plain;utf-8',
+          contentBody: 'eyJjb250ZW50IjoiN1xuI+e+jumjn+W3peWOgiIsImNvbnRlbnRUeXBlIjoiYXBwbGljYXRpb24vanNvbjt1dGYtOCIsImF0dGFjaG1lbnRzIjpbIm1ldGFmaWxlOi8vNTBkOTM5YjI0ODE1ZGYxYWZkNGMzNzEzN2VlYmUxNWY2NWRiZDcxYWUyZWE1MDViNDY1NTU4YTNmMTcwYzM0MmkwLmpwZyJdfQ==',
+        },
+      },
+    },
+    actions: [],
+    sections: [],
+  });
+
+  assert.match(html, /JSON is rendered as a structured payload document/);
+  assert.match(html, /browser-pin-json-doc/);
+  assert.match(html, /browser-pin-json-key">content</);
+  assert.match(html, /browser-pin-json-row browser-pin-json-row-longtext/);
+  assert.match(html, /browser-pin-json-subblock/);
+  assert.match(html, /browser-protocol-raw">\{\n  &quot;content&quot;: &quot;7\\n#美食工厂&quot;/);
 });
 
 test('UI renders host-action resources as trusted action panels', () => {

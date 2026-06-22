@@ -99,6 +99,13 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       ? baseUrl + '/api/v1/files/accelerate/content/' + encodeURIComponent(pinId.toLowerCase())
       : baseUrl + '/' + encodeURIComponent(pinId.toLowerCase());
   }
+  function resolveMediaPreviewHref(reference) {
+    const value = textValue(reference);
+    if (!value) return '';
+    if (new RegExp('^https?:\\/\\/', 'i').test(value)) return safeUrl(value);
+    if (new RegExp('^metafile:\\/\\/', 'i').test(value)) return resolveDownloadHref(value);
+    return '';
+  }
   function endpointWithActor(endpoint, params) {
     const query = new URLSearchParams(params || {});
     if (state.selectedActorId) query.set('actorId', state.selectedActorId);
@@ -479,22 +486,41 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     const data = pinInspectorData(resource);
     return objectValue(data.rawPinRecord || data.pin);
   }
+  function pinInspectorTxid(resource) {
+    const pin = pinInspectorPin(resource);
+    const record = pinInspectorRawPinRecord(resource);
+    return textValue(pin.genesisTransaction || record.genesisTransaction || pin.txid || record.txid);
+  }
   function pinInspectorVersion(resource) {
     return objectValue(pinInspectorData(resource).version);
   }
+  const PIN_INSPECTOR_MEDIA_KEYS = ['images', 'image', 'imageUrls', 'attachments', 'files', 'media'];
+  const PIN_INSPECTOR_IMAGE_MEDIA_KEYS = new Set(['images', 'image', 'imageUrls']);
   function pinInspectorJsonBlock(value, className) {
     return '<pre class="' + escapeHtml(className) + '">' + escapeHtml(JSON.stringify(value, null, 2)) + '</pre>';
   }
-  function pinInspectorReferenceHtml(value, label, title, extraAttributes) {
+  function pinInspectorShortReference(value) {
+    const normalized = textValue(value);
+    if (normalized.length <= 42) return normalized;
+    const separator = normalized.indexOf('://');
+    if (separator > 0) {
+      const prefix = normalized.slice(0, separator + 3);
+      const body = normalized.slice(separator + 3);
+      if (body.length > 28) return prefix + body.slice(0, 10) + '...' + body.slice(-10);
+    }
+    return normalized.slice(0, 18) + '...' + normalized.slice(-14);
+  }
+  function pinInspectorReferenceHtml(value, label, title, extraAttributes, className) {
     const href = textValue(value);
     if (!href) return '';
     const content = label || escapeHtml(href);
     const titleAttribute = title ? ' title="' + escapeHtml(title) + '"' : '';
+    const classAttribute = className ? ' class="' + escapeHtml(className) + '"' : '';
     if (isBrowserInternalHref(href)) {
-      return '<a href="' + escapeHtml(href) + '" data-browser-map-link' + titleAttribute + (extraAttributes || '') + '>' + content + '</a>';
+      return '<a' + classAttribute + ' href="' + escapeHtml(href) + '" data-browser-map-link' + titleAttribute + (extraAttributes || '') + '>' + content + '</a>';
     }
     if (/^https?:\\/\\//i.test(href)) {
-      return '<a href="' + escapeHtml(href) + '" target="_blank" rel="noopener"' + titleAttribute + (extraAttributes || '') + '>' + content + '</a>';
+      return '<a' + classAttribute + ' href="' + escapeHtml(href) + '" target="_blank" rel="noopener"' + titleAttribute + (extraAttributes || '') + '>' + content + '</a>';
     }
     return content;
   }
@@ -511,7 +537,7 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     return escapeHtml(JSON.stringify(value));
   }
   function pinInspectorSection(title, bodyHtml, intro) {
-    return '<section class="browser-pin-section">' + (intro ? '<p class="browser-pin-intro">' + escapeHtml(intro) + '</p>' : '') + '<h3>' + escapeHtml(title) + '</h3>' + bodyHtml + '</section>';
+    return '<section class="browser-pin-section"><div class="browser-pin-section-head"><h3>' + escapeHtml(title) + '</h3>' + (intro ? '<p class="browser-pin-intro">' + escapeHtml(intro) + '</p>' : '') + '</div>' + bodyHtml + '</section>';
   }
   function pinInspectorInfoList(items) {
     return '<dl class="browser-protocol-proof">' + items.map((item) => {
@@ -523,40 +549,70 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   }
 
   const PIN_INSPECTOR_PAGE_STYLE = '<style>' +
-    'body:has(.browser-pin-page) { background: radial-gradient(circle at top left, rgba(46, 111, 237, 0.08), transparent 28%), radial-gradient(circle at top right, rgba(17, 138, 105, 0.07), transparent 22%), #eef3f9; }' +
+    'body:has(.browser-pin-page) { background: #eef3f9; }' +
     'body:has(.browser-pin-page) .browser-viewport { padding: 18px 14px 36px; }' +
     '.browser-pin-page { width: min(1380px, calc(100vw - 28px)); max-width: none; margin: 18px auto 36px; display: grid; gap: 18px; }' +
-    '.browser-pin-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 4px 2px 0; flex-wrap: wrap; }' +
-    '.browser-pin-page-copy { display: grid; gap: 6px; min-width: 0; }' +
-    '.browser-pin-page-eyebrow { margin: 0; color: #6a778b; font-size: 12px; font-weight: 700; letter-spacing: .01em; }' +
-    '.browser-pin-page-head h2 { margin: 0; font-size: 30px; line-height: 1.08; }' +
-    '.browser-pin-page-subtitle { margin: 0; color: #6a778b; font-size: 14px; }' +
+    '.browser-pin-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 4px 2px 0; flex-wrap: wrap; }' +
+    '.browser-pin-page-copy { display: grid; gap: 10px; min-width: 0; }' +
+    '.browser-pin-page-eyebrow { margin: 0; color: #6a778b; font-size: 12px; font-weight: 700; }' +
+    '.browser-pin-page-head h2 { margin: 0; color: #121923; font-size: 30px; line-height: 1.08; letter-spacing: 0; }' +
+    '.browser-pin-meta-pills { display: flex; flex-wrap: wrap; gap: 8px; }' +
+    '.browser-pin-meta-pill { display: inline-flex; align-items: center; min-height: 26px; max-width: 100%; padding: 4px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #fff; color: #4c5b6f; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }' +
     '.browser-pin-page-actions { display: flex; align-items: flex-start; flex-shrink: 0; gap: 8px; }' +
-    '.browser-pin-page-actions button { min-height: 34px; border: 1px solid #d9e1ed; border-radius: 10px; background: #fff; color: #162132; padding: 7px 12px; font-size: 12px; font-weight: 700; }' +
+    '.browser-pin-page-actions button { min-height: 34px; border: 1px solid #cfd9e6; border-radius: 8px; background: #fff; color: #162132; padding: 7px 12px; font-size: 12px; font-weight: 700; }' +
+    '.browser-pin-page-actions button:first-child { background: #eaf1ff; border-color: #cfe0ff; color: #2e6fed; }' +
     '.browser-pin-page-grid { display: grid; grid-template-columns: minmax(0, 1.58fr) minmax(300px, 320px); gap: 16px; align-items: start; }' +
     '.browser-pin-stack, .browser-pin-aside { display: grid; gap: 18px; align-content: start; }' +
-    '.browser-pin-section { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid #d9e1ed; border-radius: 14px; background: rgba(255, 255, 255, .92); box-shadow: 0 18px 46px rgba(19, 35, 67, .08), 0 3px 12px rgba(19, 35, 67, .04); }' +
-    '.browser-pin-aside .browser-pin-section { background: rgba(255, 255, 255, .82); }' +
-    '.browser-pin-section h3 { margin: 0; font-size: 15px; }' +
+    '.browser-pin-section { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid #d9e1ed; border-radius: 14px; background: #fff; }' +
+    '.browser-pin-section-head { display: grid; gap: 5px; }' +
+    '.browser-pin-section h3 { margin: 0; color: #141c29; font-size: 15px; }' +
+    '.browser-pin-section:first-child h3 { font-size: 18px; }' +
     '.browser-pin-intro { margin: 0; color: #6a778b; font-size: 13px; line-height: 1.45; }' +
     '.browser-protocol-json, .browser-protocol-raw, .browser-pin-text { margin: 0; overflow: auto; padding: 16px; border-radius: 12px; background: #182235; color: #d7e3f0; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }' +
+    '.browser-pin-json-doc { display: grid; gap: 12px; }' +
+    '.browser-pin-json-row { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 14px; align-items: start; }' +
+    '.browser-pin-json-key { color: #8b95a5; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }' +
+    '.browser-pin-json-value { min-width: 0; color: #162132; line-height: 1.55; overflow-wrap: anywhere; word-break: break-word; }' +
+    '.browser-pin-json-text-block { line-height: 1.7; white-space: pre-wrap; }' +
+    '.browser-pin-json-token-list { display: flex; flex-wrap: wrap; gap: 8px; }' +
+    '.browser-pin-json-token { display: inline-flex; align-items: center; max-width: 100%; padding: 7px 10px; border: 1px solid #d9e1ed; border-radius: 999px; background: #f7f9fc; color: #3d4c60; font-size: 12px; overflow-wrap: anywhere; }' +
+    '.browser-pin-json-token-link { color: #2e6fed; background: #eaf1ff; border-color: #cfe0ff; }' +
+    '.browser-pin-json-token-boolean, .browser-pin-json-token-number, .browser-pin-json-token-null { color: #334155; background: #eef3f9; }' +
+    '.browser-pin-json-list, .browser-pin-json-nested { display: grid; gap: 8px; min-width: 0; }' +
+    '.browser-pin-json-list-item, .browser-pin-json-subblock { padding: 12px 14px; border: 1px solid #d9e1ed; border-radius: 12px; background: #f7f9fc; }' +
+    '.browser-pin-json-subblock .browser-pin-json-row { grid-template-columns: minmax(120px, 0.32fr) minmax(0, 1fr); }' +
+    '.browser-pin-json-value a, .browser-pin-link-pill, .browser-pin-file-row a { color: #2563d8; text-decoration: none; }' +
+    '.browser-pin-json-value a:hover, .browser-pin-link-pill:hover, .browser-pin-file-row a:hover { text-decoration: underline; }' +
     '.browser-pin-markdown { display: grid; gap: 10px; line-height: 1.7; color: #162132; }' +
     '.browser-pin-markdown h1, .browser-pin-markdown h2, .browser-pin-markdown h3, .browser-pin-markdown p { margin: 0; }' +
     '.browser-pin-markdown a { color: #2e6fed; text-decoration: none; }' +
     '.browser-pin-markdown a:hover { text-decoration: underline; }' +
-    '.browser-pin-binary-notice { margin: 0; color: #6a778b; }' +
-    '.browser-protocol-proof { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 10px 14px; margin: 0; }' +
+    '.browser-pin-binary-card { display: grid; gap: 8px; place-items: center; min-height: 132px; padding: 18px; border: 1px solid #d9e1ed; border-radius: 12px; background: #f7f9fc; text-align: center; color: #6a778b; }' +
+    '.browser-pin-binary-card p { margin: 0; }' +
+    '.browser-pin-binary-badge { display: inline-flex; padding: 8px 12px; border: 1px solid #d9e1ed; border-radius: 999px; background: #fff; color: #162132; font-weight: 700; }' +
+    '.browser-pin-binary-type { font-size: 12px; overflow-wrap: anywhere; }' +
+    '.browser-protocol-proof { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px 14px; margin: 0; }' +
     '.browser-protocol-proof dt { color: #6a778b; font-size: 12px; font-weight: 700; }' +
     '.browser-protocol-proof dd { margin: 0; overflow-wrap: anywhere; }' +
     '.browser-protocol-proof dd button { margin-left: 8px; border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; padding: 4px 8px; }' +
-    '.browser-pin-file-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-top: 1px solid #e6ebf2; }' +
-    '.browser-pin-file-row:first-of-type { border-top: 0; padding-top: 0; }' +
-    '.browser-pin-file-row span { min-width: 0; }' +
-    '.browser-pin-file-row a { color: #2e6fed; text-decoration: none; overflow-wrap: anywhere; }' +
-    '.browser-pin-file-row a:hover { text-decoration: underline; }' +
-    '.browser-pin-file-row button { border: 1px solid #d9e1ed; border-radius: 9px; background: #fff; padding: 6px 10px; white-space: nowrap; }' +
+    '.browser-pin-media-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }' +
+    '.browser-pin-media-card { display: grid; gap: 8px; min-width: 0; padding: 10px; border: 1px solid #dce4ef; border-radius: 8px; background: #f8fafc; }' +
+    '.browser-pin-media-preview { display: grid; place-items: center; min-height: 110px; border-radius: 7px; background: #e8eef6; color: #62718a; font-size: 12px; font-weight: 700; text-align: center; overflow: hidden; }' +
+    '.browser-pin-media-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }' +
+    '.browser-pin-media-label { min-width: 0; font-size: 12px; overflow-wrap: anywhere; }' +
+    '.browser-pin-file-list { display: grid; gap: 10px; }' +
+    '.browser-pin-file-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px 14px; border: 1px solid #d9e1ed; border-radius: 12px; background: #f7f9fc; }' +
+    '.browser-pin-file-meta { display: grid; gap: 4px; min-width: 0; }' +
+    '.browser-pin-file-name { font-weight: 700; color: #162132; word-break: break-word; }' +
+    '.browser-pin-file-desc { color: #6a778b; font-size: 12px; word-break: break-word; }' +
+    '.browser-pin-file-row span { min-width: 0; overflow-wrap: anywhere; }' +
+    '.browser-pin-download { display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 10px; border: 1px solid #cfe0ff; background: #eaf1ff; color: #2e6fed; font-size: 12px; font-weight: 700; white-space: nowrap; }' +
+    '.browser-pin-link-list { display: flex; flex-wrap: wrap; gap: 8px; }' +
+    '.browser-pin-link-pill { display: inline-flex; max-width: 100%; padding: 6px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #f8fafc; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }' +
+    '.browser-pin-raw-record { display: grid; gap: 10px; }' +
+    '.browser-pin-raw-record summary { cursor: pointer; color: #334155; font-size: 13px; font-weight: 700; }' +
     '@media (max-width: 1100px) { .browser-pin-page-grid { grid-template-columns: minmax(0, 1fr); } }' +
-    '@media (max-width: 720px) { .browser-pin-page { width: calc(100vw - 16px); margin: 12px auto 24px; gap: 14px; } .browser-pin-page-head { flex-direction: column; } .browser-pin-page-actions { width: 100%; } .browser-pin-page-actions button { width: 100%; } .browser-protocol-proof { grid-template-columns: 1fr; } .browser-pin-file-row { flex-direction: column; align-items: flex-start; } }' +
+    '@media (max-width: 720px) { .browser-pin-page { width: calc(100vw - 16px); margin: 12px auto 24px; gap: 14px; } .browser-pin-page-head { flex-direction: column; } .browser-pin-page-actions { width: 100%; } .browser-pin-page-actions button { width: 100%; } .browser-pin-json-row, .browser-pin-json-subblock .browser-pin-json-row { grid-template-columns: 1fr; gap: 5px; } .browser-protocol-proof { grid-template-columns: 1fr; } .browser-pin-file-row { grid-template-columns: 1fr; align-items: stretch; } }' +
     '</style>';
   function pinInspectorParseJsonPayload(payload, rawPayload) {
     if (payload && typeof payload === 'object') return payload;
@@ -611,18 +667,95 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       return '<p>' + lines.map((line) => pinInspectorInlineMarkdown(line)).join('<br>') + '</p>';
     }).join('');
   }
+  function pinInspectorIsLongJsonString(value) {
+    return value.length > 120 || value.indexOf('\\n') !== -1;
+  }
   function pinInspectorContentType(resource) {
     const renderer = objectValue(resource && resource.renderer);
     const pin = pinInspectorPin(resource);
     const record = pinInspectorRawPinRecord(resource);
     return textValue(renderer.contentType || pin.contentType || record.contentType).toLowerCase();
   }
+  function pinInspectorPayloadIntro(resource) {
+    const contentType = pinInspectorContentType(resource);
+    const payload = pinInspectorPayload(resource);
+    const rawPayload = pinInspectorData(resource).rawPayload;
+    const jsonPayload = pinInspectorParseJsonPayload(payload, rawPayload);
+    const renderAsJson = contentType.includes('json') || (payload && typeof payload === 'object') || (jsonPayload && typeof jsonPayload === 'object');
+    if (renderAsJson) return 'JSON is rendered as a structured payload document. Original keys and order are preserved.';
+    if (contentType.indexOf('text/markdown') === 0) return 'Markdown payload rendered as document content.';
+    if (contentType.indexOf('text/plain') === 0) return 'Plain text payload with line breaks preserved.';
+    return 'Binary PIN. No inline payload preview is available.';
+  }
+  function pinInspectorJsonToken(value) {
+    if (typeof value === 'string') {
+      if (isBrowserInternalHref(value) || /^https?:\\/\\//i.test(value)) {
+        return '<span class="browser-pin-json-token browser-pin-json-token-link">' + pinInspectorReferenceHtml(value, escapeHtml(pinInspectorShortReference(value))) + '</span>';
+      }
+      return '<span class="browser-pin-json-token browser-pin-json-token-string">' + escapeHtml(value) + '</span>';
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return '<span class="browser-pin-json-token browser-pin-json-token-' + typeof value + '">' + escapeHtml(String(value)) + '</span>';
+    }
+    if (value === null) {
+      return '<span class="browser-pin-json-token browser-pin-json-token-null">null</span>';
+    }
+    return '<span class="browser-pin-json-token">' + escapeHtml(String(value)) + '</span>';
+  }
+  function pinInspectorRenderJsonValue(value) {
+    if (typeof value === 'string') {
+      if (isBrowserInternalHref(value) || /^https?:\\/\\//i.test(value)) {
+        return pinInspectorReferenceHtml(value, escapeHtml(pinInspectorShortReference(value)));
+      }
+      if (pinInspectorIsLongJsonString(value)) {
+        return '<div class="browser-pin-json-text-block">' + escapeHtml(value) + '</div>';
+      }
+      return escapeHtml(value);
+    }
+    if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
+      return pinInspectorJsonToken(value);
+    }
+    if (Array.isArray(value)) {
+      if (!value.length) return '<span class="browser-pin-json-token browser-pin-json-token-null">[]</span>';
+      const primitiveList = value.every((item) => item === null || ['string', 'number', 'boolean'].includes(typeof item));
+      if (primitiveList) {
+        return '<div class="browser-pin-json-token-list">' + value.map(pinInspectorJsonToken).join('') + '</div>';
+      }
+      return '<div class="browser-pin-json-list">' + value.map((item) => '<div class="browser-pin-json-list-item">' + pinInspectorRenderJsonValue(item) + '</div>').join('') + '</div>';
+    }
+    const nested = objectValue(value);
+    if (Object.keys(nested).length) {
+      return '<div class="browser-pin-json-subblock browser-pin-json-nested">' + pinInspectorRenderJsonRows(nested) + '</div>';
+    }
+    return '<span class="browser-pin-json-token browser-pin-json-token-null">{}</span>';
+  }
+  function pinInspectorJsonValueClass(value) {
+    return 'browser-pin-json-value';
+  }
+  function pinInspectorRenderJsonRows(value) {
+    return Object.entries(value).map(([key, item]) => {
+      const rowClass = 'browser-pin-json-row' + (typeof item === 'string' && pinInspectorIsLongJsonString(item) ? ' browser-pin-json-row-longtext' : '');
+      return '<div class="' + rowClass + '"><div class="browser-pin-json-key">' + escapeHtml(key) + '</div><div class="' + pinInspectorJsonValueClass(item) + '">' + pinInspectorRenderJsonValue(item) + '</div></div>';
+    }).join('');
+  }
+  function pinInspectorRenderJsonDocument(value) {
+    if (Array.isArray(value)) {
+      return '<div class="browser-pin-json-doc">' + pinInspectorRenderJsonValue(value) + '</div>';
+    }
+    const body = objectValue(value);
+    if (!Object.keys(body).length) {
+      return pinInspectorJsonBlock(value, 'browser-protocol-json');
+    }
+    return '<div class="browser-pin-json-doc">' + pinInspectorRenderJsonRows(body) + '</div>';
+  }
   function pinInspectorRenderPayload(resource) {
     const contentType = pinInspectorContentType(resource);
     const payload = pinInspectorPayload(resource);
     const rawPayload = pinInspectorData(resource).rawPayload;
-    if (contentType.includes('json')) {
-      return pinInspectorJsonBlock(pinInspectorParseJsonPayload(payload, rawPayload), 'browser-protocol-json');
+    const jsonPayload = pinInspectorParseJsonPayload(payload, rawPayload);
+    const renderAsJson = contentType.includes('json') || (payload && typeof payload === 'object') || (jsonPayload && typeof jsonPayload === 'object');
+    if (renderAsJson) {
+      return pinInspectorRenderJsonDocument(jsonPayload);
     }
     if (contentType.indexOf('text/markdown') === 0) {
       return '<div class="browser-pin-markdown">' + pinInspectorRenderMarkdown(typeof payload === 'string' ? payload : textValue(rawPayload)) + '</div>';
@@ -631,29 +764,44 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       const plain = typeof payload === 'string' ? payload : textValue(rawPayload);
       return '<pre class="browser-pin-text">' + escapeHtml(plain) + '</pre>';
     }
-    return '<p class="browser-pin-binary-notice">Binary payload preview is not available for this pin.</p>';
+    return '<div class="browser-pin-binary-card"><span class="browser-pin-binary-badge">Binary PIN</span><p>No inline parse is available in the generic renderer.</p>' + (contentType ? '<p class="browser-pin-binary-type">' + escapeHtml(contentType) + '</p>' : '') + '</div>';
   }
   function pinInspectorRenderRawPayload(resource) {
     const data = pinInspectorData(resource);
     const rawPayload = data.rawPayload;
     const payload = pinInspectorPayload(resource);
+    const jsonPayload = pinInspectorParseJsonPayload(payload, rawPayload);
+    const renderAsJson = pinInspectorContentType(resource).includes('json') || (payload && typeof payload === 'object') || (jsonPayload && typeof jsonPayload === 'object');
+    if (renderAsJson) {
+      return pinInspectorJsonBlock(jsonPayload, 'browser-protocol-raw');
+    }
     const source = typeof rawPayload === 'string'
       ? rawPayload
       : (typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2));
     return '<pre class="browser-protocol-raw">' + escapeHtml(source || '') + '</pre>';
   }
-  function pinInspectorMediaReference(value) {
+  function pinInspectorIsImageReference(uri, sourceKey) {
+    if (PIN_INSPECTOR_IMAGE_MEDIA_KEYS.has(sourceKey || '')) return true;
+    return new RegExp('\\\\.(png|jpe?g|gif|webp|avif|svg)(?:[?#].*)?$', 'i').test(uri);
+  }
+  function pinInspectorIsMediaReferenceUri(uri) {
+    return /^https?:\\/\\//i.test(uri) || uri.indexOf('metafile://') === 0;
+  }
+  function pinInspectorMediaReference(value, sourceKey) {
     if (typeof value === 'string') {
       const uri = textValue(value);
-      return uri ? { uri, label: uri } : null;
+      if (!uri || !pinInspectorIsMediaReferenceUri(uri)) return null;
+      return { uri: uri, label: pinInspectorShortReference(uri), kind: pinInspectorIsImageReference(uri, sourceKey) ? 'image' : 'file' };
     }
     if (value && typeof value === 'object' && !Array.isArray(value)) {
       const entry = value;
       const reference = textValue(entry.uri || entry.url || entry.href || entry.src || entry.pinId);
-      if (!reference) return null;
+      if (!reference || !pinInspectorIsMediaReferenceUri(reference)) return null;
       return {
         uri: reference,
         label: textValue(entry.label || entry.name || entry.title || entry.filename) || reference,
+        kind: pinInspectorIsImageReference(reference, sourceKey) ? 'image' : 'file',
+        description: textValue(entry.description || entry.summary || entry.type || entry.mimeType),
       };
     }
     return null;
@@ -662,10 +810,14 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     const code = char ? char.charCodeAt(0) : 0;
     return code === 32 || code === 9 || code === 10 || code === 13 || char === '"' || char === "'" || char === '<' || char === '>' || char === '(' || char === ')' || char === '[' || char === ']' || char === '{' || char === '}';
   }
-  function pinInspectorCollectBrowserUris(value, output, seen) {
+  function pinInspectorCollectBrowserUris(value, output, seen, includeExternal) {
     seen = seen || new WeakSet();
     if (typeof value === 'string') {
       const prefixes = ['metaid://', 'metaapp://', 'metafile://', 'map://', 'pin://'];
+      if (includeExternal) {
+        prefixes.push('http://');
+        prefixes.push('https://');
+      }
       prefixes.forEach((prefix) => {
         let start = 0;
         while ((start = value.indexOf(prefix, start)) !== -1) {
@@ -685,7 +837,7 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     }
     if (Array.isArray(value)) {
       value.forEach((item) => {
-        pinInspectorCollectBrowserUris(item, output, seen);
+        pinInspectorCollectBrowserUris(item, output, seen, includeExternal);
       });
       return;
     }
@@ -693,7 +845,7 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     if (seen.has(value)) return;
     seen.add(value);
     Object.keys(value).forEach((key) => {
-      pinInspectorCollectBrowserUris(value[key], output, seen);
+      pinInspectorCollectBrowserUris(value[key], output, seen, includeExternal);
     });
   }
   function pinInspectorIsDownloadableMediaReference(reference) {
@@ -706,25 +858,24 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   }
   function pinInspectorCollectMediaItems(payload) {
     const body = objectValue(payload);
-    const keys = ['images', 'image', 'imageUrls', 'attachments', 'files', 'media'];
     const items = [];
-    keys.forEach((key) => {
+    PIN_INSPECTOR_MEDIA_KEYS.forEach((key) => {
       const candidate = body[key];
       if (Array.isArray(candidate)) {
         candidate.forEach((item) => {
-          const normalized = pinInspectorMediaReference(item);
+          const normalized = pinInspectorMediaReference(item, key);
           if (normalized) items.push(normalized);
         });
         return;
       }
-      const normalized = pinInspectorMediaReference(candidate);
+      const normalized = pinInspectorMediaReference(candidate, key);
       if (normalized) items.push(normalized);
     });
     const discoveredUris = new Set();
-    pinInspectorCollectBrowserUris(payload, discoveredUris);
+    pinInspectorCollectBrowserUris(payload, discoveredUris, new WeakSet(), true);
     discoveredUris.forEach((uri) => {
-      if (!new RegExp('^https?:\\/\\/', 'i').test(uri)) {
-        items.push({ uri, label: uri });
+      if (pinInspectorIsMediaReferenceUri(uri)) {
+        items.push({ uri: uri, label: pinInspectorShortReference(uri), kind: pinInspectorIsImageReference(uri) ? 'image' : 'file' });
       }
     });
     const seen = {};
@@ -735,59 +886,128 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       return true;
     });
   }
+  function pinInspectorRenderMediaPreview(item) {
+    const download = pinInspectorIsDownloadableMediaReference(item.uri)
+      ? '<button class="browser-pin-download" type="button" data-browser-download-ref="' + escapeHtml(item.uri) + '">Download</button>'
+      : '';
+    return '<article class="browser-pin-media-card" data-browser-media-preview-ref="' + escapeHtml(item.uri) + '">' +
+      '<div class="browser-pin-media-preview" data-browser-media-preview-slot>Image preview</div>' +
+      '<div class="browser-pin-media-label">' + pinInspectorReferenceHtml(item.uri, escapeHtml(item.label)) + '</div>' +
+      download +
+      '</article>';
+  }
+  function pinInspectorRenderFileRow(item) {
+    const link = pinInspectorReferenceHtml(item.uri, escapeHtml(item.label));
+    const description = [item.uri, item.description].filter(Boolean).join(' · ');
+    const download = pinInspectorIsDownloadableMediaReference(item.uri)
+      ? '<button class="browser-pin-download" type="button" data-browser-download-ref="' + escapeHtml(item.uri) + '">Download</button>'
+      : '';
+    return '<div class="browser-pin-file-row"><div class="browser-pin-file-meta"><div class="browser-pin-file-name">' + link + '</div>' + (description ? '<div class="browser-pin-file-desc">' + escapeHtml(description) + '</div>' : '') + '</div>' + download + '</div>';
+  }
   function pinInspectorRenderMediaItems(resource) {
     const contentType = pinInspectorContentType(resource);
     const payload = pinInspectorPayload(resource);
     const rawPayload = pinInspectorData(resource).rawPayload;
-    const mediaSource = contentType.includes('json')
-      ? pinInspectorParseJsonPayload(payload, rawPayload)
+    const jsonPayload = pinInspectorParseJsonPayload(payload, rawPayload);
+    const mediaSource = contentType.includes('json') || (payload && typeof payload === 'object') || (jsonPayload && typeof jsonPayload === 'object')
+      ? jsonPayload
       : payload;
     const items = pinInspectorCollectMediaItems(mediaSource);
     if (!items.length) {
       return '<p>No related media or file references found.</p>';
     }
-    return items.map((item) => {
-      const link = pinInspectorReferenceHtml(item.uri, escapeHtml(item.label));
-      const download = pinInspectorIsDownloadableMediaReference(item.uri)
-        ? '<button type="button" data-browser-download-ref="' + escapeHtml(item.uri) + '">Download</button>'
-        : '';
-      return '<div class="browser-pin-file-row"><span>' + link + '</span>' + download + '</div>';
-    }).join('');
+    const previews = items.filter((item) => item.kind === 'image');
+    const files = items.filter((item) => item.kind !== 'image');
+    return (previews.length ? '<div class="browser-pin-media-grid">' + previews.map(pinInspectorRenderMediaPreview).join('') + '</div>' : '') +
+      (files.length ? '<div class="browser-pin-file-list">' + files.map(pinInspectorRenderFileRow).join('') + '</div>' : '');
   }
+  function pinInspectorRenderRelatedLinks(resource) {
+    const contentType = pinInspectorContentType(resource);
+    const payload = pinInspectorPayload(resource);
+    const rawPayload = pinInspectorData(resource).rawPayload;
+    const jsonPayload = pinInspectorParseJsonPayload(payload, rawPayload);
+    const source = contentType.includes('json') || (payload && typeof payload === 'object') || (jsonPayload && typeof jsonPayload === 'object')
+      ? jsonPayload
+      : payload;
+    const uris = new Set();
+    pinInspectorCollectBrowserUris(source, uris);
+    if (!uris.size) {
+      return '<p>No related Browser links found.</p>';
+    }
+    return '<div class="browser-pin-link-list">' + Array.from(uris).map((uri) => pinInspectorReferenceHtml(uri, escapeHtml(pinInspectorShortReference(uri)), '', '', 'browser-pin-link-pill')).join('') + '</div>';
+  }
+  function pinInspectorMetaPill(value) {
+    const normalized = textValue(value);
+    return normalized ? '<span class="browser-pin-meta-pill">' + escapeHtml(normalized) + '</span>' : '';
+  }
+  function pinInspectorVersionLabel(version, pin) {
+    const selector = textValue(version.versionSelector);
+    if (selector === 'latest') return 'latest effective version';
+    if (selector === 'history-index') return 'history version ' + (textValue(version.historyIndex) || '0');
+    return textValue(pin.version) ? 'version ' + textValue(pin.version) : selector;
+  }
+  function enhancePinMediaPreviews(root) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll('[data-browser-media-preview-ref]').forEach((card) => {
+      const reference = card.getAttribute('data-browser-media-preview-ref') || '';
+      const href = resolveMediaPreviewHref(reference);
+      const slot = card.querySelector ? card.querySelector('[data-browser-media-preview-slot]') : null;
+      if (!href || !slot) return;
+      slot.innerHTML = '<img src="' + escapeHtml(href) + '" alt="">';
+    });
+  }
+function openPinRawRecord(trigger) {
+  const page = trigger && trigger.closest ? trigger.closest('.browser-pin-page') : null;
+  if (!page) return false;
+  const resource = state.resource;
+  const rawRecord = resource ? pinInspectorRawPinRecord(resource) : null;
+  if (!rawRecord) return false;
+  openBrowserModal('Raw PIN record', '<pre class="browser-protocol-json">' + escapeHtml(JSON.stringify(rawRecord, null, 2)) + '</pre>');
+  return true;
+}
   function renderPinInspectorPage(resource) {
     const pin = pinInspectorPin(resource);
     const version = pinInspectorVersion(resource);
     const record = pinInspectorRawPinRecord(resource);
     const heading = textValue(resource && resource.title) || 'Pin';
-    const txid = textValue(pin.txid || record.txid);
+    const txid = pinInspectorTxid(resource);
     const contentType = pinInspectorContentType(resource);
+    const path = textValue(pin.path || record.path);
+    const chain = textValue(pin.chainName || record.chainName || record.chain);
+    const pinVersion = textValue(pin.version || record.version);
+    const metaPills = [
+      pinInspectorMetaPill(path),
+      pinInspectorMetaPill(textValue(pin.contentType || record.contentType || objectValue(resource.renderer).contentType)),
+      pinInspectorMetaPill(pinInspectorVersionLabel(version, pin)),
+    ].filter(Boolean).join('');
     const facts = [
       { key: 'txid', value: txid, copyValue: txid || undefined },
-      { key: 'path', value: textValue(pin.path || record.path) },
-      { key: 'requestedPinId', value: textValue(version.requestedPinId) },
-      { key: 'resolvedPinId', value: textValue(version.resolvedPinId || pin.pinId || record.pinId || record.id) },
-      { key: 'versionSelector', value: textValue(version.versionSelector) },
-      { key: 'contentType', value: textValue(pin.contentType || record.contentType || objectValue(resource.renderer).contentType) },
+      { key: 'chain', value: chain },
+      { key: 'content-type', value: textValue(pin.contentType || record.contentType || objectValue(resource.renderer).contentType) },
+      { key: 'path', value: path },
+      { key: 'version', value: pinVersion || textValue(version.versionSelector) },
     ].filter((item) => textValue(item.value) !== '');
     return PIN_INSPECTOR_PAGE_STYLE + '<article class="browser-protocol-detail browser-pin-inspector browser-pin-page">' +
       '<header class="browser-pin-page-head">' +
         '<div class="browser-pin-page-copy">' +
-          '<p class="browser-pin-page-eyebrow">' + escapeHtml(textValue(pin.path || record.path) || contentType || 'Pin detail') + '</p>' +
+          '<p class="browser-pin-page-eyebrow">' + escapeHtml(path || contentType || 'Pin detail') + '</p>' +
           '<h2>' + escapeHtml(heading) + '</h2>' +
+          (metaPills ? '<div class="browser-pin-meta-pills">' + metaPills + '</div>' : '') +
         '</div>' +
         '<div class="browser-pin-page-actions">' +
           (txid ? '<button type="button" data-browser-copy-value="' + escapeHtml(txid) + '">Copy TxID</button>' : '') +
+          '<button type="button" data-browser-open-raw-record>View Raw Record</button>' +
         '</div>' +
       '</header>' +
       '<div class="browser-pin-page-grid">' +
         '<div class="browser-pin-stack">' +
-          pinInspectorSection('Payload', pinInspectorRenderPayload(resource)) +
+          pinInspectorSection('Payload Render', pinInspectorRenderPayload(resource), pinInspectorPayloadIntro(resource)) +
           pinInspectorSection('Raw Payload', pinInspectorRenderRawPayload(resource)) +
           pinInspectorSection('Related Media', pinInspectorRenderMediaItems(resource)) +
         '</div>' +
         '<aside class="browser-pin-aside">' +
-          pinInspectorSection('Verify', (facts.length ? pinInspectorInfoList(facts) : '<p>No pin facts available.</p>') +
-            '<details><summary>Raw MAN pin record</summary>' + pinInspectorJsonBlock(record, 'browser-protocol-json') + '</details>') +
+          pinInspectorSection('Related Links', pinInspectorRenderRelatedLinks(resource)) +
+          pinInspectorSection('Verify', facts.length ? pinInspectorInfoList(facts) : '<p>No pin facts available.</p>') +
         '</aside>' +
       '</div>' +
       '</article>';
@@ -1067,6 +1287,7 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       }
       state.resource = payload.data;
       viewport.innerHTML = resourceHtml(payload.data);
+      enhancePinMediaPreviews(viewport);
       if (resourceChip) resourceChip.querySelector('.browser-chip-title').textContent = payload.data.title || 'Resource';
       renderOwnerToolbar(payload.data);
       updateResourceStatus(payload.data);
@@ -1214,6 +1435,12 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       copyShareValue(copyValueButton.getAttribute('data-browser-copy-value') || '').catch((error) => {
         setStatus('error', error && error.message ? error.message : 'Copy failed.');
       });
+      return;
+    }
+    const rawRecordButton = closestWithAttribute(target, 'data-browser-open-raw-record');
+    if (rawRecordButton) {
+      event.preventDefault();
+      openPinRawRecord(rawRecordButton);
       return;
     }
     const downloadButton = closestWithAttribute(target, 'data-browser-download-ref');

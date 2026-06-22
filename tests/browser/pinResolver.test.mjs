@@ -9,6 +9,8 @@ const {
 
 const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
 const resolvedPinId = '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+const legacyTxid = 'a'.repeat(64);
+const genesisTxid = 'b'.repeat(64);
 
 function manPin(overrides = {}) {
   return {
@@ -25,7 +27,8 @@ function manPin(overrides = {}) {
       content: 'Full generic pin text',
       images: ['metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0'],
     }),
-    txid: resolvedPinId.slice(0, 64),
+    txid: legacyTxid,
+    genesisTransaction: genesisTxid,
     chain: 'mvc',
     ownerAddress: '1FixtureAddress',
     ownerGlobalMetaId: 'idq1publisher',
@@ -59,7 +62,10 @@ test('resolvePinUriToResource resolves latest effective pin through MAN', async 
   assert.equal(result.data.renderer.data.version.resolvedPinId, resolvedPinId);
   assert.equal(result.data.renderer.data.version.versionSelector, 'latest');
   assert.equal(result.data.renderer.data.pin.path, '/protocols/simplebuzz');
+  assert.equal(result.data.renderer.data.pin.txid, genesisTxid);
+  assert.equal(result.data.renderer.data.pin.genesisTransaction, genesisTxid);
   assert.equal(result.data.proof.pinId, resolvedPinId);
+  assert.equal(result.data.proof.txid, genesisTxid);
 });
 
 test('resolvePinUriToResource forwards history index to MAN and preserves payload objects', async () => {

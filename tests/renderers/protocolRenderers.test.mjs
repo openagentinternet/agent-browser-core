@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 const renderers = await import('../../packages/renderers/dist/index.js');
+const legacyTxid = 'a'.repeat(64);
+const genesisTxid = 'b'.repeat(64);
 
 function protocolResource(rendererId, payload, overrides = {}) {
   return {
@@ -61,13 +63,13 @@ test('Generic renderer escapes raw payload and displays version identity', () =>
     protocolPath: '/protocols/unknown',
   }));
 
-  assert.match(html, /<h3>Payload<\/h3>/);
+  assert.match(html, /<h3>Payload Render<\/h3>/);
   assert.match(html, /<h3>Raw Payload<\/h3>/);
   assert.match(html, /<h3>Verify<\/h3>/);
   assert.doesNotMatch(html, /<h3>Identity<\/h3>/);
   assert.doesNotMatch(html, /<h3>Overview<\/h3>/);
-  assert.doesNotMatch(html, /<h3>Media<\/h3>/);
-  assert.doesNotMatch(html, /<h3>Related Links<\/h3>/);
+  assert.match(html, /<h3>Related Media<\/h3>/);
+  assert.match(html, /<h3>Related Links<\/h3>/);
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
 });
 
@@ -98,12 +100,15 @@ function pinInspectorResource(contentType, payload, overrides = {}) {
           chainName: 'btc',
           encryption: 'public',
           version: '1',
+          txid: legacyTxid,
+          genesisTransaction: genesisTxid,
         },
         payload,
         rawPayload: typeof payload === 'string' ? payload : '{"title":"Inspectable pin"}',
         rawPinRecord: {
           path: '/protocols/simplebuzz',
-          txid: 'a'.repeat(64),
+          txid: legacyTxid,
+          genesisTransaction: genesisTxid,
           contentType,
         },
         ...overrides,
@@ -114,12 +119,21 @@ function pinInspectorResource(contentType, payload, overrides = {}) {
   };
 }
 
-test('Pin inspector renders JSON payload first with related files and pin facts only', () => {
+test('Pin inspector renders prototype-style JSON payload with media, links, and verification actions', () => {
+  const longContent = 'The page should answer the human question first. '.repeat(6).trim();
   const html = renderers.renderPinInspectorHtml(pinInspectorResource('application/vnd.metaid+json; charset=utf-8', {
     title: 'Inspectable pin',
-    content: 'Full readable content',
+    content: longContent,
+    topic: 'generic pin detail',
+    featured: true,
+    score: 42,
     images: ['metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0'],
     image: 'metaid://idq1fixturebot',
+    tags: ['agent-browser', 'pin-renderer'],
+    extra: {
+      publishedAt: '2026-06-20T13:42:00Z',
+      lang: 'en',
+    },
     attachments: [
       { uri: 'https://files.example/archive.zip', name: 'archive.zip' },
       { uri: 'metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0.zip', name: 'fixture.zip' },
@@ -132,31 +146,70 @@ test('Pin inspector renders JSON payload first with related files and pin facts 
 
   assert.match(html, /browser-pin-page/);
   assert.match(html, /Inspectable pin/);
-  assert.match(html, /<h3>Payload<\/h3>/);
-  assert.match(html, /browser-protocol-json/);
+  assert.match(html, /browser-pin-meta-pills/);
+  assert.match(html, /\/protocols\/simplebuzz/);
+  assert.match(html, /application\/vnd\.metaid\+json; charset=utf-8/);
+  assert.match(html, /latest effective version/);
+  assert.match(html, /<h3>Payload Render<\/h3>/);
+  assert.match(html, /JSON is rendered as a structured payload document/);
+  assert.match(html, /browser-pin-json-doc/);
+  assert.match(html, /browser-pin-json-key">content</);
+  assert.match(html, /browser-pin-json-row browser-pin-json-row-longtext/);
+  assert.match(html, /browser-pin-json-text-block/);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-boolean/);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-number/);
+  assert.match(html, /browser-pin-json-token-list/);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-link/);
+  assert.match(html, /browser-pin-json-subblock/);
+  assert.ok(html.indexOf('browser-pin-json-key">title') < html.indexOf('browser-pin-json-key">content'), 'JSON key order should be preserved');
   assert.match(html, /<h3>Raw Payload<\/h3>/);
   assert.match(html, /<h3>Related Media<\/h3>/);
+  assert.match(html, /browser-pin-media-grid/);
+  assert.match(html, /data-browser-media-preview-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0"/);
+  assert.match(html, /browser-pin-file-meta/);
+  assert.match(html, /browser-pin-file-name/);
+  assert.match(html, /browser-pin-file-desc/);
+  assert.match(html, /class="browser-pin-download"/);
   assert.match(html, /archive\.zip/);
   assert.match(html, /fixture\.zip/);
   assert.match(html, /guide\.pdf/);
   assert.match(html, /data-browser-download-ref="https:\/\/files\.example\/archive\.zip"/);
   assert.match(html, /data-browser-download-ref="metafile:\/\/f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0\.zip"/);
   assert.match(html, /data-browser-download-ref="https:\/\/files\.example\/guide\.pdf"/);
+  assert.match(html, /<h3>Related Links<\/h3>/);
+  assert.match(html, /browser-pin-link-pill/);
   assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
   assert.match(html, /href="pin:\/\/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0" data-browser-map-link/);
   assert.match(html, /<h3>Verify<\/h3>/);
-  assert.match(html, /data-browser-copy-value="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"/);
-  assert.match(html, /requestedPinId/);
-  assert.match(html, /resolvedPinId/);
+  assert.match(html, /View Raw Record/);
+  assert.match(html, /data-browser-copy-value="bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"/);
+  assert.match(html, /<dt>txid<\/dt>/);
+  assert.match(html, /chain/);
+  assert.match(html, /content-type/);
+  assert.doesNotMatch(html, /requestedPinId/);
+  assert.doesNotMatch(html, /resolvedPinId/);
   assert.doesNotMatch(html, /rootPinId/);
   assert.doesNotMatch(html, /historyIndex/);
-  assert.match(html, /versionSelector/);
-  assert.match(html, /contentType/);
-  assert.match(html, /Raw MAN pin record/);
+  assert.doesNotMatch(html, /Raw MAN pin record/);
+  assert.doesNotMatch(html, /data-browser-pin-raw-record/);
   assert.doesNotMatch(html, /<h3>Identity<\/h3>/);
   assert.doesNotMatch(html, /<h3>Overview<\/h3>/);
-  assert.doesNotMatch(html, /<h3>Media<\/h3>/);
-  assert.doesNotMatch(html, /<h3>Related Links<\/h3>/);
+  assert.doesNotMatch(html, /Content-type routing model/);
+  assert.doesNotMatch(html, /why-this-direction/);
+});
+
+test('Pin inspector renders JSON strings from plain text payloads as structured documents', () => {
+  const rawPayload = '{"content":"7\\n#美食工厂","contentType":"application/json;utf-8","attachments":["metafile://50d939b24815df1afd4c37137eebe15f65dbd71ae2ea505b465558a3f170c342i0.jpg"]}';
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource('text/plain;utf-8', rawPayload, {
+    rawPayload,
+  }));
+
+  assert.match(html, /JSON is rendered as a structured payload document/);
+  assert.match(html, /browser-pin-json-doc/);
+  assert.match(html, /browser-pin-json-key">content</);
+  assert.match(html, /browser-pin-json-token browser-pin-json-token-link/);
+  assert.match(html, /browser-pin-file-meta/);
+  assert.match(html, /browser-protocol-raw">\{\n  &quot;content&quot;: &quot;7\\n#美食工厂&quot;,\n  &quot;contentType&quot;: &quot;application\/json;utf-8&quot;/);
 });
 
 test('Pin inspector discovers related files from JSON-string payload sources', () => {
@@ -260,5 +313,7 @@ test('Pin inspector shows compact notice for binary payloads', () => {
     { rawPayload: '' },
   ));
 
-  assert.match(html, /Binary payload preview is not available for this pin\./);
+  assert.match(html, /browser-pin-binary-card/);
+  assert.match(html, /Binary PIN/);
+  assert.match(html, /application\/octet-stream/);
 });

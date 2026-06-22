@@ -141,6 +141,7 @@ export interface PinResolvedVersion {
 export interface PinInspectorPinSummary {
   pinId: string;
   txid?: string;
+  genesisTransaction?: string;
   path?: string;
   operation?: string;
   version?: string;

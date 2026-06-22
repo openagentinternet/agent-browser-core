@@ -102,6 +102,10 @@ function shortId(value: string): string {
   return value.length <= 18 ? value : `${value.slice(0, 10)}...${value.slice(-6)}`;
 }
 
+function pinTxid(pinRecord: Record<string, unknown>): string {
+  return text(pinRecord.genesisTransaction ?? pinRecord.genesis_transaction ?? pinRecord.txid);
+}
+
 export interface ResolvePinUriToResourceInput {
   uri: string;
   manApiBaseUrl?: string;
@@ -150,12 +154,14 @@ export async function resolvePinUriToResource(input: ResolvePinUriToResourceInpu
       ?? payloadRecord.displayName
       ?? payloadRecord.serviceName,
   ) || `Pin ${shortId(resolvedPinId)}`;
+  const txid = pinTxid(pinRecord) || undefined;
   const rendererData = {
     rendererId: 'generic.pin-inspector',
     version,
     pin: {
       pinId: resolvedPinId,
-      txid: text(pinRecord.txid) || undefined,
+      txid,
+      genesisTransaction: txid,
       path: protocolPath,
       operation: text(pinRecord.operation) || undefined,
       version: text(pinRecord.version) || undefined,
@@ -189,7 +195,7 @@ export async function resolvePinUriToResource(input: ResolvePinUriToResourceInpu
     },
     status: { state: 'resolved', verificationState: 'partial', message: 'Pin resolved.' },
     proof: {
-      txid: text(pinRecord.txid) || undefined,
+      txid,
       pinId: resolvedPinId,
       protocolPath,
       publisherGlobalMetaId: ownerGlobalMetaId || undefined,
