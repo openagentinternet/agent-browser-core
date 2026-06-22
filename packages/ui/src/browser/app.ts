@@ -153,8 +153,8 @@ var browserLaunchCopy = {
     'share.publicUrl': '复制公开 Browser URL',
     'share.close': '关闭',
     'wallet.connect': '连接钱包',
-    'wallet.installTitle': '安装 Metalet',
-    'wallet.installBody': '请先安装 Metalet 钱包。',
+    'wallet.installTitle': '安装钱包',
+    'wallet.installBody': '请先安装钱包扩展。',
     'wallet.installAction': '安装',
     'bookmark.starLabel': '收藏当前页面',
     'bookmark.starLabelActive': '已收藏，点击移除书签',
@@ -1062,6 +1062,10 @@ function runtimeLabel(key, fallback) {
   return browserText('runtime.' + key, raw);
 }
 
+function runtimeLabelValue(key, fallback) {
+  return textValue(runtimeLabels()[key]) || fallback;
+}
+
 function effectiveActor(actor) {
   if (!actor || typeof actor !== 'object') return actor || null;
   var runtime = state.runtime || {};
@@ -1098,13 +1102,13 @@ function isStandaloneWalletRuntime() {
     runtimeFeatures().walletLogin === true);
 }
 
-function isMetaletActor(actor) {
-  return textValue(actor && actor.id).indexOf('metalet:') === 0;
+function isConnectedWalletActor(actor) {
+  return !!(actor && actor.wallet && textValue(actor && actor.id).indexOf('wallet:') === 0);
 }
 
 function selectedStandaloneWalletActor() {
   var actor = selectedActor();
-  return isStandaloneWalletRuntime() && isMetaletActor(actor) ? actor : null;
+  return isStandaloneWalletRuntime() && isConnectedWalletActor(actor) ? actor : null;
 }
 
 function normalizeProfileAvatar(value) {
@@ -1125,7 +1129,7 @@ function normalizeWalletProfile(raw) {
   };
 }
 
-async function resolveMetaletWalletProfile(address) {
+async function resolveWalletProfile(address) {
   var walletAddress = textValue(address);
   var settings = state.settingsData || await api(browserSettingsEndpoint());
   state.settingsData = settings;
@@ -1208,7 +1212,7 @@ function renderUsingIdentity() {
   if (elements.usingChip) {
     var standaloneWalletActor = selectedStandaloneWalletActor();
     if (standaloneWalletActor) {
-      var walletName = textValue(standaloneWalletActor.label) || shortAddress(standaloneWalletActor.address) || 'Metalet Wallet';
+      var walletName = textValue(standaloneWalletActor.label) || shortAddress(standaloneWalletActor.address) || runtimeLabelValue('walletFallbackName', 'Wallet');
       var walletMetaId = textValue(standaloneWalletActor.globalMetaId);
       elements.usingChip.innerHTML = avatarHtml(standaloneWalletActor.avatar, walletName, 'browser-chip-avatar') +
         '<span class="browser-chip-copy"><span class="browser-chip-title">' +
@@ -1222,7 +1226,7 @@ function renderUsingIdentity() {
       return;
     }
     if (isStandaloneWalletRuntime()) {
-      var connectLabel = browserText('wallet.connect', 'Connect Wallet');
+      var connectLabel = runtimeLabelValue('walletConnect', browserText('wallet.connect', 'Connect Wallet'));
       elements.usingChip.innerHTML = avatarHtml('', connectLabel, 'browser-chip-avatar') +
         '<span class="browser-chip-copy"><span class="browser-chip-title">' +
         escapeHtml(runtimeLabel('actorChip', 'Wallet')) + ': ' + escapeHtml(connectLabel) +
@@ -2244,24 +2248,25 @@ function closeModal() {
   }
 }
 
-function openMetaletInstallModal() {
+function openWalletInstallModal() {
   if (!elements.modalRoot) return;
   if (elements.usingChip && typeof elements.usingChip.setAttribute === 'function') {
     elements.usingChip.setAttribute('aria-expanded', 'true');
   }
   elements.modalRoot.hidden = false;
   elements.modalRoot.innerHTML = '<section class="browser-modal-panel" role="dialog" aria-modal="true">' +
-    '<header><h2>' + escapeHtml(browserText('wallet.installTitle', 'Install Metalet')) + '</h2><button type="button" data-browser-modal-close aria-label="' + escapeHtml(browserText('modal.close', 'Close')) + '">' + escapeHtml(browserText('modal.close', 'Close')) + '</button></header>' +
-    '<div class="browser-modal-body"><p>' + escapeHtml(browserText('wallet.installBody', 'Please install Metalet wallet first.')) + '</p></div>' +
+    '<header><h2>' + escapeHtml(runtimeLabelValue('walletInstallTitle', browserText('wallet.installTitle', 'Install Wallet'))) + '</h2><button type="button" data-browser-modal-close aria-label="' + escapeHtml(browserText('modal.close', 'Close')) + '">' + escapeHtml(browserText('modal.close', 'Close')) + '</button></header>' +
+    '<div class="browser-modal-body"><p>' + escapeHtml(runtimeLabelValue('walletInstallBody', browserText('wallet.installBody', 'Please install a wallet extension first.'))) + '</p></div>' +
     '<footer class="browser-modal-footer"><div class="browser-modal-footer-start"></div><div class="browser-modal-footer-end">' +
       '<button type="button" data-browser-modal-close>' + escapeHtml(browserText('modal.cancel', 'Cancel')) + '</button>' +
-      '<button type="button" data-browser-wallet-install>' + escapeHtml(browserText('wallet.installAction', 'Install')) + '</button>' +
+      '<button type="button" data-browser-wallet-install>' + escapeHtml(runtimeLabelValue('walletInstallAction', browserText('wallet.installAction', 'Install'))) + '</button>' +
     '</div></footer></section>';
 }
 
-function installMetaletWallet() {
-  if (typeof window !== 'undefined' && typeof window.open === 'function') {
-    window.open('https://metalet.space', '_blank', 'noopener');
+function installWalletProvider() {
+  var installUrl = runtimeLabelValue('walletInstallUrl', '');
+  if (installUrl && typeof window !== 'undefined' && typeof window.open === 'function') {
+    window.open(installUrl, '_blank', 'noopener');
   }
 }
 
@@ -2271,15 +2276,15 @@ async function connectStandaloneWalletActor() {
     return null;
   }
   if (typeof window === 'undefined' || !window.metaidwallet) {
-    openMetaletInstallModal();
+    openWalletInstallModal();
     return null;
   }
   var wallet = window.metaidwallet;
   try {
     var connected = typeof wallet.isConnected === 'function' ? await wallet.isConnected() : null;
     var status = typeof connected === 'boolean' ? (connected ? 'connected' : 'not-connected') : textValue(connected && connected.status);
-    if (status === 'locked') throw new Error('Please unlock Metalet first.');
-    if (status === 'no-wallets') throw new Error('Please initialize Metalet first.');
+    if (status === 'locked') throw new Error(runtimeLabelValue('walletUnlockError', 'Please unlock wallet first.'));
+    if (status === 'no-wallets') throw new Error(runtimeLabelValue('walletInitializeError', 'Please initialize wallet first.'));
     if (!connected || status === 'not-connected') {
       var result = typeof wallet.connect === 'function' ? await wallet.connect() : null;
       if (textValue(result && result.status) === 'canceled') {
@@ -2294,12 +2299,12 @@ async function connectStandaloneWalletActor() {
     var btcAddress = wallet.btc && typeof wallet.btc.getAddress === 'function' ? await wallet.btc.getAddress() : '';
     var btcPublicKey = wallet.btc && typeof wallet.btc.getPublicKey === 'function' ? await wallet.btc.getPublicKey() : '';
     var address = textValue(mvcAddress) || textValue(btcAddress);
-    if (!address) throw new Error('Metalet did not return a wallet address.');
+    if (!address) throw new Error(runtimeLabelValue('walletAddressMissingError', 'Wallet extension did not return an address.'));
 
-    var profile = await resolveMetaletWalletProfile(address);
-    var label = textValue(profile.name) || shortAddress(address) || 'Metalet Wallet';
+    var profile = await resolveWalletProfile(address);
+    var label = textValue(profile.name) || shortAddress(address) || runtimeLabelValue('walletFallbackName', 'Wallet');
     var actor = {
-      id: 'metalet:' + address,
+      id: 'wallet:' + address,
       label: label,
       kind: 'wallet',
       isDefault: true,
@@ -2308,7 +2313,7 @@ async function connectStandaloneWalletActor() {
       avatar: textValue(profile.avatar),
       capabilities: ['template-settings'],
       wallet: {
-        provider: 'metalet',
+        provider: runtimeLabelValue('walletProviderId', 'wallet-extension'),
         network: textValue(network && network.network),
         mvcAddress: textValue(mvcAddress),
         mvcPublicKey: textValue(mvcPublicKey),
@@ -3546,7 +3551,7 @@ async function initialize() {
         return;
       }
       if (closestWithAttribute(event && event.target, 'data-browser-wallet-install')) {
-        installMetaletWallet();
+        installWalletProvider();
         return;
       }
       var target = closestWithAttribute(event && event.target, 'data-browser-modal-action') ||
@@ -3707,8 +3712,8 @@ globalThis.closeInspector = closeInspector;
 globalThis.renderInspector = renderInspector;
 globalThis.openUsingIdentitySelector = openUsingIdentitySelector;
 globalThis.selectUsingIdentity = selectUsingIdentity;
-globalThis.openMetaletInstallModal = openMetaletInstallModal;
-globalThis.installMetaletWallet = installMetaletWallet;
+globalThis.openWalletInstallModal = openWalletInstallModal;
+globalThis.installWalletProvider = installWalletProvider;
 globalThis.connectStandaloneWalletActor = connectStandaloneWalletActor;
 globalThis.handleUsingIdentityClick = handleUsingIdentityClick;
 globalThis.openBrowserMenu = openBrowserMenu;

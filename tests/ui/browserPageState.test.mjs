@@ -207,6 +207,16 @@ function standaloneWalletRuntimePayload(overrides = {}) {
       actorChip: 'Wallet',
       noActorTitle: 'No Wallet',
       noActorBody: 'Connect Metalet to use standalone Browser.',
+      walletConnect: 'Connect Wallet',
+      walletInstallTitle: 'Install Metalet',
+      walletInstallBody: 'Please install Metalet wallet first.',
+      walletInstallAction: 'Install',
+      walletInstallUrl: 'https://metalet.space',
+      walletUnlockError: 'Please unlock Metalet first.',
+      walletInitializeError: 'Please initialize Metalet first.',
+      walletAddressMissingError: 'Metalet did not return a wallet address.',
+      walletFallbackName: 'Metalet Wallet',
+      walletProviderId: 'metalet',
     },
     ...overrides,
   });
@@ -1074,10 +1084,10 @@ test('standalone Metalet connect updates the single wallet actor and keeps chip 
   await waitFor(() => context.state.runtime, 'standalone runtime load');
 
   elements['[data-browser-using-selector]'].click();
-  await waitFor(() => context.state.actorId === 'metalet:mvc-address-1234567890', 'wallet actor selection');
+  await waitFor(() => context.state.actorId === 'wallet:mvc-address-1234567890', 'wallet actor selection');
 
   assert.equal(connectCalls, 1);
-  assert.equal(context.state.runtime.defaultActor.id, 'metalet:mvc-address-1234567890');
+  assert.equal(context.state.runtime.defaultActor.id, 'wallet:mvc-address-1234567890');
   assert.equal(context.state.runtime.actors.length, 1);
   assert.equal(context.state.runtime.actors[0].globalMetaId, 'idq1walletuser');
   assert.equal(context.state.runtime.actors[0].wallet.btcAddress, 'btc-address-1234567890');

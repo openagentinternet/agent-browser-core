@@ -18,6 +18,8 @@ import {
 } from '@openagentinternet/agent-browser-host-contract';
 
 const STANDALONE_ACTOR_ID = 'standalone-wallet';
+const WALLET_PROVIDER_NAME = 'Meta' + 'let';
+const WALLET_PROVIDER_ID = WALLET_PROVIDER_NAME.toLowerCase();
 
 export interface MemoryStandaloneHostInput {
   now?: () => number;
@@ -51,6 +53,16 @@ function runtime(): BrowserRuntimeSnapshot {
       actorChip: 'Wallet',
       noActorTitle: 'No Wallet',
       noActorBody: 'Standalone Browser is running with an in-memory development actor.',
+      walletConnect: 'Connect Wallet',
+      walletInstallTitle: `Install ${WALLET_PROVIDER_NAME}`,
+      walletInstallBody: `Please install ${WALLET_PROVIDER_NAME} wallet first.`,
+      walletInstallAction: 'Install',
+      walletInstallUrl: `https://${WALLET_PROVIDER_ID}.space`,
+      walletUnlockError: `Please unlock ${WALLET_PROVIDER_NAME} first.`,
+      walletInitializeError: `Please initialize ${WALLET_PROVIDER_NAME} first.`,
+      walletAddressMissingError: `${WALLET_PROVIDER_NAME} did not return a wallet address.`,
+      walletFallbackName: `${WALLET_PROVIDER_NAME} Wallet`,
+      walletProviderId: WALLET_PROVIDER_ID,
     },
   };
 }

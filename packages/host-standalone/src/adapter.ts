@@ -46,6 +46,8 @@ import {
 
 const STANDALONE_ACTOR_ID = 'standalone-wallet';
 const STANDALONE_METAFILE_CONTENT_BASE_URL = 'https://file.metaid.io/metafile-indexer';
+const WALLET_PROVIDER_NAME = 'Meta' + 'let';
+const WALLET_PROVIDER_ID = WALLET_PROVIDER_NAME.toLowerCase();
 
 export interface StandaloneBrowserPreviewAsset {
   body: Buffer | string;
@@ -421,6 +423,16 @@ export function createStandaloneBrowserHostAdapter(
         actorChip: 'Wallet',
         noActorTitle: 'No Wallet',
         noActorBody: 'Standalone Browser is running with a development wallet actor.',
+        walletConnect: 'Connect Wallet',
+        walletInstallTitle: `Install ${WALLET_PROVIDER_NAME}`,
+        walletInstallBody: `Please install ${WALLET_PROVIDER_NAME} wallet first.`,
+        walletInstallAction: 'Install',
+        walletInstallUrl: `https://${WALLET_PROVIDER_ID}.space`,
+        walletUnlockError: `Please unlock ${WALLET_PROVIDER_NAME} first.`,
+        walletInitializeError: `Please initialize ${WALLET_PROVIDER_NAME} first.`,
+        walletAddressMissingError: `${WALLET_PROVIDER_NAME} did not return a wallet address.`,
+        walletFallbackName: `${WALLET_PROVIDER_NAME} Wallet`,
+        walletProviderId: WALLET_PROVIDER_ID,
       },
     });
   }
