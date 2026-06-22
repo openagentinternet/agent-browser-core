@@ -199,6 +199,53 @@ test('UI renders pin-inspector resources through first-party renderer pack', () 
   assert.doesNotMatch(html, /why-this-direction/);
 });
 
+test('UI renders pin-inspector video and audio metafiles as playable previews', () => {
+  const videoPin = 'c20fb7af7b8c2b88a782ae02f6ea7f68f3b280a861838e70ee55950cfe8793bbi0';
+  const audioPin = '5ef0e012707756227d99e481927ab476ab8d74b300fea247b9e027b58bf0e16ai0';
+  const html = ui.renderResourceHtml({
+    uri: 'pin://' + videoPin,
+    normalizedUri: 'pin://' + videoPin,
+    resourceType: 'pin',
+    title: 'Media Pin',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+    renderer: {
+      type: 'pin-inspector',
+      contentType: 'application/vnd.metaid+json; charset=utf-8',
+      data: {
+        rendererId: 'generic.pin-inspector',
+        version: { resolvedPinId: videoPin, versionSelector: 'latest' },
+        pin: { pinId: videoPin, path: '/protocols/simplebuzz', contentType: 'application/json' },
+        payload: {
+          title: 'Media Pin',
+          // Both typed-prefix and extension metafile forms must be detected.
+          videos: ['metafile://video/' + videoPin],
+          audio: ['metafile://audio/' + audioPin],
+          clip: 'metafile://' + videoPin + '.mp4',
+          track: 'metafile://' + audioPin + '.wav',
+        },
+        rawPayload: '{}',
+        rawPinRecord: { path: '/protocols/simplebuzz' },
+      },
+    },
+    actions: [],
+    sections: [],
+  });
+
+  // Video slot (typed-prefix form).
+  assert.match(html, /data-browser-video-preview[^>]*data-browser-media-ref="metafile:\/\/video\/c20fb7af/);
+  // Audio slot (typed-prefix form).
+  assert.match(html, /data-browser-audio-preview[^>]*data-browser-media-ref="metafile:\/\/audio\/5ef0e012/);
+  // Extension forms also classify as playable media, not generic file rows.
+  assert.match(html, /data-browser-video-preview[^>]*data-browser-media-ref="metafile:\/\/c20fb7af[0-9a-f]+i0\.mp4"/);
+  assert.match(html, /data-browser-audio-preview[^>]*data-browser-media-ref="metafile:\/\/5ef0e012[0-9a-f]+i0\.wav"/);
+  // All four playable previews carry a Download button (pinId extraction now
+  // handles the typed-prefix form too).
+  assert.match(html, /data-browser-download-ref="metafile:\/\/video\/c20fb7af/);
+  assert.match(html, /data-browser-download-ref="metafile:\/\/audio\/5ef0e012/);
+  // Video/audio references must NOT be rendered as plain file rows.
+  assert.doesNotMatch(html, /browser-pin-file-name[^<]*metafile:\/\/video\/c20fb7af/);
+});
+
 test('UI renders JSON strings from plain text payloads as structured pin documents', () => {
   const rawPayload = '{"content":"7\\n#美食工厂","contentType":"application/json;utf-8","attachments":["metafile://50d939b24815df1afd4c37137eebe15f65dbd71ae2ea505b465558a3f170c342i0.jpg"]}';
   const html = ui.renderResourceHtml({

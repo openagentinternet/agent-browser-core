@@ -6,6 +6,12 @@ const INTERNAL_BROWSER_URI_PATTERN = /^(metaid|metaapp|metafile|map|pin):\/\//iu
 const EXTERNAL_URL_PATTERN = /^https?:\/\//iu;
 const MEDIA_KEYS = ['images', 'image', 'imageUrls', 'attachments', 'files', 'media'];
 const IMAGE_MEDIA_KEYS = new Set(['images', 'image', 'imageUrls']);
+const VIDEO_MEDIA_KEYS = new Set(['videos', 'video', 'videoUrls']);
+const AUDIO_MEDIA_KEYS = new Set(['audios', 'audio', 'audioUrls', 'audioFiles']);
+const VIDEO_EXTENSION_PATTERN = /\.(mp4|webm|mov|m4v|ogv|avi|mkv|3gp|flv|wmv)(?:[?#].*)?$/iu;
+const AUDIO_EXTENSION_PATTERN = /\.(mp3|aac|wav|flac|ogg|oga|wma|m4a|opus)(?:[?#].*)?$/iu;
+const VIDEO_PATH_PATTERN = /\/video\//iu;
+const AUDIO_PATH_PATTERN = /\/audio\//iu;
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -242,6 +248,13 @@ const PIN_INSPECTOR_PAGE_STYLE = `
     .browser-pin-media-card { display: grid; gap: 8px; min-width: 0; padding: 10px; border: 1px solid #dce4ef; border-radius: 8px; background: #f8fafc; }
     .browser-pin-media-preview { display: grid; place-items: center; min-height: 110px; border-radius: 7px; background: #e8eef6; color: #62718a; font-size: 12px; font-weight: 700; text-align: center; overflow: hidden; }
     .browser-pin-media-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .browser-pin-media-preview-video { min-height: 200px; background: #141c29; color: #b7c4d6; }
+    .browser-pin-media-preview-audio { min-height: 72px; background: #f0f4fa; color: #5a6b82; }
+    .browser-pin-media-preview video { width: 100%; max-height: 420px; height: auto; display: block; background: #000; }
+    .browser-pin-media-preview audio { width: 100%; display: block; padding: 8px; box-sizing: border-box; }
+    .browser-pin-media-preview.is-loading .browser-pin-media-pending { display: inline-flex; align-items: center; gap: 6px; }
+    .browser-pin-media-preview.is-error { background: #fdecec; color: #b3261e; }
+    .browser-pin-media-pending { padding: 6px 10px; }
     .browser-pin-media-label { min-width: 0; font-size: 12px; overflow-wrap: anywhere; }
     .browser-pin-file-list { display: grid; gap: 10px; }
     .browser-pin-file-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px 14px; border: 1px solid #d9e1ed; border-radius: 12px; background: #f7f9fc; }
@@ -375,11 +388,28 @@ function renderRawPayload(resource: BrowserResourceEnvelope): string {
   return `<pre class="browser-protocol-raw">${escapeHtml(source ?? '')}</pre>`;
 }
 
-type PinMediaItem = { uri: string; label: string; kind: 'image' | 'file'; description?: string };
+type PinMediaItem = { uri: string; label: string; kind: 'image' | 'video' | 'audio' | 'file'; description?: string };
 
 function isImageReference(uri: string, sourceKey = ''): boolean {
   if (IMAGE_MEDIA_KEYS.has(sourceKey)) return true;
   return /\.(png|jpe?g|gif|webp|avif|svg)(?:[?#].*)?$/iu.test(uri);
+}
+
+function isVideoReference(uri: string, sourceKey = ''): boolean {
+  if (VIDEO_MEDIA_KEYS.has(sourceKey)) return true;
+  return VIDEO_EXTENSION_PATTERN.test(uri) || VIDEO_PATH_PATTERN.test(uri);
+}
+
+function isAudioReference(uri: string, sourceKey = ''): boolean {
+  if (AUDIO_MEDIA_KEYS.has(sourceKey)) return true;
+  return AUDIO_EXTENSION_PATTERN.test(uri) || AUDIO_PATH_PATTERN.test(uri);
+}
+
+function mediaKind(uri: string, sourceKey = ''): PinMediaItem['kind'] {
+  if (isImageReference(uri, sourceKey)) return 'image';
+  if (isVideoReference(uri, sourceKey)) return 'video';
+  if (isAudioReference(uri, sourceKey)) return 'audio';
+  return 'file';
 }
 
 function isMediaReferenceUri(uri: string): boolean {
@@ -390,7 +420,7 @@ function mediaReference(value: unknown, sourceKey = ''): PinMediaItem | null {
   if (typeof value === 'string') {
     const uri = text(value);
     if (!uri || !isMediaReferenceUri(uri)) return null;
-    return { uri, label: shortReference(uri), kind: isImageReference(uri, sourceKey) ? 'image' : 'file' };
+    return { uri, label: shortReference(uri), kind: mediaKind(uri, sourceKey) };
   }
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     const entry = value as Record<string, unknown>;
@@ -399,7 +429,7 @@ function mediaReference(value: unknown, sourceKey = ''): PinMediaItem | null {
     return {
       uri,
       label: text(entry.label ?? entry.name ?? entry.title ?? entry.filename) || uri,
-      kind: isImageReference(uri, sourceKey) ? 'image' : 'file',
+      kind: mediaKind(uri, sourceKey),
       description: text(entry.description ?? entry.summary ?? entry.type ?? entry.mimeType),
     };
   }
@@ -438,13 +468,25 @@ function collectBrowserUris(value: unknown, output: Set<string>, seen = new Weak
   }
 }
 
+function extractMetafilePinId(reference: string): string {
+  const value = text(reference);
+  if (!value || !value.startsWith('metafile://')) return '';
+  let path = value.slice('metafile://'.length).split(/[?#]/, 1)[0];
+  // Strip a typed-path prefix segment such as "video/", "audio/", "image/".
+  const slash = path.indexOf('/');
+  if (slash > 0 && !/^[0-9a-f]{64}i[0-9]+$/i.test(path.slice(0, slash))) {
+    path = path.slice(slash + 1);
+  }
+  path = path.replace(/\.[A-Za-z0-9]+$/u, '');
+  return /^[0-9a-f]{64}i[0-9]+$/i.test(path) ? path.toLowerCase() : '';
+}
+
 function isDownloadableMediaReference(reference: unknown): boolean {
   const uri = text(reference);
   if (!uri) return false;
   if (EXTERNAL_URL_PATTERN.test(uri)) return true;
   if (!uri.startsWith('metafile://')) return false;
-  const pinId = uri.slice('metafile://'.length).split(/[?#]/, 1)[0].replace(/\.[A-Za-z0-9]+$/u, '');
-  return /^[0-9a-f]{64}i[0-9]+$/i.test(pinId);
+  return !!extractMetafilePinId(uri);
 }
 
 function collectMediaItems(payload: unknown): PinMediaItem[] {
@@ -466,7 +508,7 @@ function collectMediaItems(payload: unknown): PinMediaItem[] {
   collectBrowserUris(payload, discoveredUris, new WeakSet<object>(), true);
   for (const uri of discoveredUris) {
     if (isMediaReferenceUri(uri)) {
-      items.push({ uri, label: shortReference(uri), kind: isImageReference(uri) ? 'image' : 'file' });
+      items.push({ uri, label: shortReference(uri), kind: mediaKind(uri) });
     }
   }
   const seen = new Set<string>();
@@ -478,12 +520,22 @@ function collectMediaItems(payload: unknown): PinMediaItem[] {
   });
 }
 
+function mediaSlotPlaceholder(item: PinMediaItem): string {
+  if (item.kind === 'video') {
+    return `<div class="browser-pin-media-preview browser-pin-media-preview-video" data-browser-video-preview data-browser-media-ref="${escapeHtml(item.uri)}"><span class="browser-pin-media-pending">Loading video…</span></div>`;
+  }
+  if (item.kind === 'audio') {
+    return `<div class="browser-pin-media-preview browser-pin-media-preview-audio" data-browser-audio-preview data-browser-media-ref="${escapeHtml(item.uri)}"><span class="browser-pin-media-pending">Loading audio…</span></div>`;
+  }
+  return `<div class="browser-pin-media-preview" data-browser-media-preview-slot>Image preview</div>`;
+}
+
 function renderMediaPreview(item: PinMediaItem): string {
   const download = isDownloadableMediaReference(item.uri)
     ? `<button class="browser-pin-download" type="button" data-browser-download-ref="${escapeHtml(item.uri)}">Download</button>`
     : '';
   return `<article class="browser-pin-media-card" data-browser-media-preview-ref="${escapeHtml(item.uri)}">
-    <div class="browser-pin-media-preview" data-browser-media-preview-slot>Image preview</div>
+    ${mediaSlotPlaceholder(item)}
     <div class="browser-pin-media-label">${linkHtml(item.uri, item.label)}</div>
     ${download}
   </article>`;
@@ -512,8 +564,8 @@ function renderMediaItems(resource: BrowserResourceEnvelope): string {
   if (!items.length) {
     return '<p>No related media or file references found.</p>';
   }
-  const previews = items.filter((item) => item.kind === 'image');
-  const files = items.filter((item) => item.kind !== 'image');
+  const previews = items.filter((item) => item.kind === 'image' || item.kind === 'video' || item.kind === 'audio');
+  const files = items.filter((item) => item.kind === 'file');
   return `${previews.length ? `<div class="browser-pin-media-grid">${previews.map(renderMediaPreview).join('')}</div>` : ''}${files.length ? `<div class="browser-pin-file-list">${files.map(renderFileRow).join('')}</div>` : ''}`;
 }
 

@@ -281,15 +281,30 @@ function isMetafileIndexerRoot(baseUrl) {
   }
 }
 
+function extractMetafilePinId(reference) {
+  var value = textValue(reference);
+  if (!value) return '';
+  if (/^https?:\\/\\//i.test(value)) return '';
+  if (!/^metafile:\\/\\//i.test(value)) return '';
+  var path = value.slice('metafile://'.length).split(/[?#]/, 1)[0];
+  // Strip a typed-path prefix segment such as "video/", "audio/", "image/".
+  var slash = path.indexOf('/');
+  if (slash > 0 && !isBrowserPinId(path.slice(0, slash))) {
+    path = path.slice(slash + 1);
+  }
+  path = path.replace(/\\.[A-Za-z0-9]+$/u, '');
+  return isBrowserPinId(path) ? path.toLowerCase() : '';
+}
+
 function buildMetafileDownloadHref(reference) {
   var value = textValue(reference);
   if (!value) return '';
   if (/^https?:\\/\\//i.test(value)) return safeUrl(value);
   if (!/^metafile:\\/\\//i.test(value)) return '';
-  var pinId = value.slice('metafile://'.length).split(/[?#]/, 1)[0].replace(/\\.[A-Za-z0-9]+$/u, '');
-  if (!isBrowserPinId(pinId)) return '';
+  var pinId = extractMetafilePinId(value);
+  if (!pinId) return '';
   var baseUrl = normalizeMetafileContentBaseUrl(settingValue('metafileContentBaseUrl') || DEFAULT_METAFILE_CONTENT_BASE_URL);
-  var encodedPinId = encodeURIComponent(pinId.toLowerCase());
+  var encodedPinId = encodeURIComponent(pinId);
   return isMetafileIndexerRoot(baseUrl)
     ? baseUrl + '/api/v1/files/accelerate/content/' + encodedPinId
     : baseUrl + '/' + encodedPinId;
@@ -2875,6 +2890,10 @@ function pinInspectorVersion(current) {
 
 var PIN_INSPECTOR_MEDIA_KEYS = ['images', 'image', 'imageUrls', 'attachments', 'files', 'media'];
 var PIN_INSPECTOR_IMAGE_MEDIA_KEYS = { images: true, image: true, imageUrls: true };
+var PIN_INSPECTOR_VIDEO_MEDIA_KEYS = { videos: true, video: true, videoUrls: true };
+var PIN_INSPECTOR_AUDIO_MEDIA_KEYS = { audios: true, audio: true, audioUrls: true, audioFiles: true };
+var PIN_INSPECTOR_VIDEO_EXTENSION_RE = /\.(mp4|webm|mov|m4v|ogv|avi|mkv|3gp|flv|wmv)(?:[?#].*)?$/i;
+var PIN_INSPECTOR_AUDIO_EXTENSION_RE = /\.(mp3|aac|wav|flac|ogg|oga|wma|m4a|opus)(?:[?#].*)?$/i;
 
 function pinInspectorJsonBlock(value, className) {
   return '<pre class="' + escapeHtml(className) + '">' + escapeHtml(JSON.stringify(value, null, 2)) + '</pre>';
@@ -2987,6 +3006,13 @@ var PIN_INSPECTOR_PAGE_STYLE = '<style>' +
   '.browser-pin-media-card { display: grid; gap: 8px; min-width: 0; padding: 10px; border: 1px solid #dce4ef; border-radius: 8px; background: #f8fafc; }' +
   '.browser-pin-media-preview { display: grid; place-items: center; min-height: 110px; border-radius: 7px; background: #e8eef6; color: #62718a; font-size: 12px; font-weight: 700; text-align: center; overflow: hidden; }' +
   '.browser-pin-media-preview img { width: 100%; height: 100%; object-fit: cover; display: block; }' +
+  '.browser-pin-media-preview-video { min-height: 200px; background: #141c29; color: #b7c4d6; }' +
+  '.browser-pin-media-preview-audio { min-height: 72px; background: #f0f4fa; color: #5a6b82; }' +
+  '.browser-pin-media-preview video { width: 100%; max-height: 420px; height: auto; display: block; background: #000; }' +
+  '.browser-pin-media-preview audio { width: 100%; display: block; padding: 8px; box-sizing: border-box; }' +
+  '.browser-pin-media-preview.is-loading .browser-pin-media-pending { display: inline-flex; align-items: center; gap: 6px; }' +
+  '.browser-pin-media-preview.is-error { background: #fdecec; color: #b3261e; }' +
+  '.browser-pin-media-pending { padding: 6px 10px; }' +
   '.browser-pin-media-label { min-width: 0; font-size: 12px; overflow-wrap: anywhere; }' +
   '.browser-pin-file-list { display: grid; gap: 10px; }' +
   '.browser-pin-file-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 12px 14px; border: 1px solid #d9e1ed; border-radius: 12px; background: #f7f9fc; }' +
@@ -3203,6 +3229,23 @@ function pinInspectorIsImageReference(uri, sourceKey) {
   return /\\.(png|jpe?g|gif|webp|avif|svg)(?:[?#].*)?$/i.test(uri);
 }
 
+function pinInspectorIsVideoReference(uri, sourceKey) {
+  if (PIN_INSPECTOR_VIDEO_MEDIA_KEYS[sourceKey || '']) return true;
+  return PIN_INSPECTOR_VIDEO_EXTENSION_RE.test(uri) || uri.indexOf('/video/') !== -1;
+}
+
+function pinInspectorIsAudioReference(uri, sourceKey) {
+  if (PIN_INSPECTOR_AUDIO_MEDIA_KEYS[sourceKey || '']) return true;
+  return PIN_INSPECTOR_AUDIO_EXTENSION_RE.test(uri) || uri.indexOf('/audio/') !== -1;
+}
+
+function pinInspectorMediaKind(uri, sourceKey) {
+  if (pinInspectorIsImageReference(uri, sourceKey)) return 'image';
+  if (pinInspectorIsVideoReference(uri, sourceKey)) return 'video';
+  if (pinInspectorIsAudioReference(uri, sourceKey)) return 'audio';
+  return 'file';
+}
+
 function pinInspectorIsMediaReferenceUri(uri) {
   return /^https?:\\/\\//i.test(uri) || uri.indexOf('metafile://') === 0;
 }
@@ -3211,7 +3254,7 @@ function pinInspectorMediaReference(value, sourceKey) {
   if (typeof value === 'string') {
     var uri = textValue(value);
     if (!uri || !pinInspectorIsMediaReferenceUri(uri)) return null;
-    return { uri: uri, label: pinInspectorShortReference(uri), kind: pinInspectorIsImageReference(uri, sourceKey) ? 'image' : 'file' };
+    return { uri: uri, label: pinInspectorShortReference(uri), kind: pinInspectorMediaKind(uri, sourceKey) };
   }
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     var entry = value;
@@ -3220,7 +3263,7 @@ function pinInspectorMediaReference(value, sourceKey) {
     return {
       uri: reference,
       label: textValue(entry.label || entry.name || entry.title || entry.filename) || reference,
-      kind: pinInspectorIsImageReference(reference, sourceKey) ? 'image' : 'file',
+      kind: pinInspectorMediaKind(reference, sourceKey),
       description: textValue(entry.description || entry.summary || entry.type || entry.mimeType)
     };
   }
@@ -3276,8 +3319,7 @@ function pinInspectorIsDownloadableMediaReference(reference) {
   if (!uri) return false;
   if (new RegExp('^https?:\\/\\/', 'i').test(uri)) return true;
   if (uri.indexOf('metafile://') !== 0) return false;
-  var pinId = uri.slice('metafile://'.length).split(/[?#]/, 1)[0].replace(new RegExp('\\.[A-Za-z0-9]+$', 'u'), '');
-  return /^[0-9a-f]{64}i[0-9]+$/i.test(pinId);
+  return !!extractMetafilePinId(uri);
 }
 
 function pinInspectorCollectMediaItems(payload) {
@@ -3299,7 +3341,7 @@ function pinInspectorCollectMediaItems(payload) {
     pinInspectorCollectBrowserUris(payload, discoveredUris, new WeakSet(), true);
     discoveredUris.forEach(function(uri) {
       if (pinInspectorIsMediaReferenceUri(uri)) {
-        items.push({ uri: uri, label: pinInspectorShortReference(uri), kind: pinInspectorIsImageReference(uri) ? 'image' : 'file' });
+        items.push({ uri: uri, label: pinInspectorShortReference(uri), kind: pinInspectorMediaKind(uri) });
       }
     });
   var seen = {};
@@ -3311,12 +3353,22 @@ function pinInspectorCollectMediaItems(payload) {
   });
 }
 
+function pinInspectorMediaSlotPlaceholder(item) {
+  if (item.kind === 'video') {
+    return '<div class="browser-pin-media-preview browser-pin-media-preview-video" data-browser-video-preview data-browser-media-ref="' + escapeHtml(item.uri) + '"><span class="browser-pin-media-pending">Loading video…</span></div>';
+  }
+  if (item.kind === 'audio') {
+    return '<div class="browser-pin-media-preview browser-pin-media-preview-audio" data-browser-audio-preview data-browser-media-ref="' + escapeHtml(item.uri) + '"><span class="browser-pin-media-pending">Loading audio…</span></div>';
+  }
+  return '<div class="browser-pin-media-preview" data-browser-media-preview-slot>Image preview</div>';
+}
+
 function pinInspectorRenderMediaPreview(item) {
   var download = pinInspectorIsDownloadableMediaReference(item.uri)
     ? '<button class="browser-pin-download" type="button" data-browser-download-ref="' + escapeHtml(item.uri) + '">Download</button>'
     : '';
   return '<article class="browser-pin-media-card" data-browser-media-preview-ref="' + escapeHtml(item.uri) + '">' +
-    '<div class="browser-pin-media-preview" data-browser-media-preview-slot>Image preview</div>' +
+    pinInspectorMediaSlotPlaceholder(item) +
     '<div class="browser-pin-media-label">' + pinInspectorReferenceHtml(item.uri, escapeHtml(item.label)) + '</div>' +
     download +
     '</article>';
@@ -3344,10 +3396,10 @@ function pinInspectorRenderMediaItems(current) {
     return '<p>No related media or file references found.</p>';
   }
   var previews = items.filter(function(item) {
-    return item.kind === 'image';
+    return item.kind === 'image' || item.kind === 'video' || item.kind === 'audio';
   });
   var files = items.filter(function(item) {
-    return item.kind !== 'image';
+    return item.kind === 'file';
   });
   return (previews.length ? '<div class="browser-pin-media-grid">' + previews.map(pinInspectorRenderMediaPreview).join('') + '</div>' : '') +
     (files.length ? '<div class="browser-pin-file-list">' + files.map(pinInspectorRenderFileRow).join('') + '</div>' : '');
@@ -3383,14 +3435,107 @@ function pinInspectorVersionLabel(version, pin) {
   return textValue(pin.version) ? 'version ' + textValue(pin.version) : selector;
 }
 
+function setMediaSlotPending(slot, message) {
+  if (!slot) return;
+  slot.classList.add('is-loading');
+  slot.innerHTML = '<span class="browser-pin-media-pending">' + escapeHtml(message) + '</span>';
+}
+
+function setMediaSlotError(slot, message) {
+  if (!slot) return;
+  slot.classList.remove('is-loading');
+  slot.classList.add('is-error');
+  slot.innerHTML = '<span class="browser-pin-media-pending">' + escapeHtml(message) + '</span>';
+}
+
+// Resolves a metafile video reference into a playable source URL. Large videos
+// are stored as a JSON manifest of chunk pins on the indexer; in that case the
+// chunks are fetched in parallel and concatenated into an in-memory blob URL.
+async function resolveVideoSource(reference) {
+  var href = resolveMediaPreviewHref(reference);
+  if (!href) return '';
+  try {
+    var response = await fetch(href);
+    var contentType = (response.headers.get('content-type') || '').toLowerCase();
+    // A JSON/text response indicates a chunked-video manifest from the indexer.
+    if (contentType.indexOf('application/json') !== -1 || contentType.indexOf('text/plain') !== -1) {
+      var metafile = await response.json();
+      if (metafile && Array.isArray(metafile.chunkList) && metafile.chunkList.length) {
+        var dataType = textValue(metafile.dataType) || 'video/mp4';
+        var chunkUrls = metafile.chunkList.map(function(chunk) {
+          return resolveMediaPreviewHref('metafile://' + textValue(chunk.pinId));
+        }).filter(Boolean);
+        if (chunkUrls.length) {
+          var buffers = await Promise.all(chunkUrls.map(function(url) { return fetch(url).then(function(res) { return res.arrayBuffer(); }); }));
+          var total = buffers.reduce(function(sum, buf) { return sum + buf.byteLength; }, 0);
+          var combined = new Uint8Array(total);
+          var offset = 0;
+          for (var i = 0; i < buffers.length; i += 1) {
+            combined.set(new Uint8Array(buffers[i]), offset);
+            offset += buffers[i].byteLength;
+          }
+          return URL.createObjectURL(new Blob([combined], { type: dataType }));
+        }
+      }
+      return '';
+    }
+    if (contentType.indexOf('video/') !== -1) {
+      return href;
+    }
+  } catch (error) {
+    return href;
+  }
+  // Unknown content type: fall back to the direct URL so the browser can try.
+  return href;
+}
+
+function enhanceVideoSlot(slot, reference) {
+  if (!slot) return;
+  setMediaSlotPending(slot, 'Loading video…');
+  resolveVideoSource(reference).then(function(src) {
+    if (!src) {
+      setMediaSlotError(slot, 'Video unavailable.');
+      return;
+    }
+    slot.classList.remove('is-loading');
+    slot.innerHTML = '<video controls preload="metadata" src="' + escapeHtml(src) + '"></video>';
+  }).catch(function() {
+    setMediaSlotError(slot, 'Video unavailable.');
+  });
+}
+
+function enhanceAudioSlot(slot, reference) {
+  if (!slot) return;
+  var href = resolveMediaPreviewHref(reference);
+  if (!href) {
+    setMediaSlotError(slot, 'Audio unavailable.');
+    return;
+  }
+  slot.classList.remove('is-loading');
+  slot.innerHTML = '<audio controls preload="metadata" src="' + escapeHtml(href) + '"></audio>';
+}
+
 function enhancePinMediaPreviews(root) {
   if (!root || !root.querySelectorAll) return;
+  // Image previews: inject an <img> into the image slot of each card.
   Array.prototype.forEach.call(root.querySelectorAll('[data-browser-media-preview-ref]'), function(card) {
     var reference = card.getAttribute('data-browser-media-preview-ref') || '';
     var href = resolveMediaPreviewHref(reference);
     var slot = card.querySelector ? card.querySelector('[data-browser-media-preview-slot]') : null;
     if (!href || !slot) return;
     slot.innerHTML = '<img src="' + escapeHtml(href) + '" alt="">';
+  });
+  // Video previews.
+  Array.prototype.forEach.call(root.querySelectorAll('[data-browser-video-preview]'), function(slot) {
+    if (!slot || slot.getAttribute('data-browser-media-enhanced')) return;
+    slot.setAttribute('data-browser-media-enhanced', 'true');
+    enhanceVideoSlot(slot, slot.getAttribute('data-browser-media-ref') || '');
+  });
+  // Audio previews.
+  Array.prototype.forEach.call(root.querySelectorAll('[data-browser-audio-preview]'), function(slot) {
+    if (!slot || slot.getAttribute('data-browser-media-enhanced')) return;
+    slot.setAttribute('data-browser-media-enhanced', 'true');
+    enhanceAudioSlot(slot, slot.getAttribute('data-browser-media-ref') || '');
   });
 }
 
