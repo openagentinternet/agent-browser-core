@@ -11,6 +11,8 @@ export interface ParsedBrowserUri {
 }
 
 const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'metafile', 'map', 'pin']);
+const BARE_PIN_ID_PATTERN = /^[0-9a-f]{64}i[0-9]+$/iu;
+const BARE_DOMAIN_ALIAS_PATTERN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/iu;
 const GLOBAL_META_ID_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 const GLOBAL_META_ID_CHECKSUM_LENGTH = 6;
 const GLOBAL_META_ID_VERSION_CHARS = new Set(['q', 'p', 'z', 'r', 'y', 't']);
@@ -123,6 +125,16 @@ function normalizeBareGlobalMetaId(input: string): string | null {
   return normalized;
 }
 
+function normalizeBarePinId(input: string): string | null {
+  const normalized = input.toLowerCase();
+  return BARE_PIN_ID_PATTERN.test(normalized) ? normalized : null;
+}
+
+function normalizeBareDomainAlias(input: string): string | null {
+  const normalized = input.toLowerCase();
+  return BARE_DOMAIN_ALIAS_PATTERN.test(normalized) ? normalized : null;
+}
+
 export function isValidGlobalMetaId(input: string): boolean {
   return normalizeBareGlobalMetaId(input) !== null;
 }
@@ -138,6 +150,24 @@ export function parseBrowserUri(input: string): ParsedBrowserUri {
         normalizedUri: `metaid://${globalMetaId}`,
         scheme: 'metaid',
         id: globalMetaId,
+      };
+    }
+    const domainAlias = normalizeBareDomainAlias(originalUri);
+    if (domainAlias) {
+      return {
+        originalUri,
+        normalizedUri: `metaid://${domainAlias}`,
+        scheme: 'metaid',
+        id: domainAlias,
+      };
+    }
+    const pinId = normalizeBarePinId(originalUri);
+    if (pinId) {
+      return {
+        originalUri,
+        normalizedUri: `pin://${pinId}`,
+        scheme: 'pin',
+        id: pinId,
       };
     }
     if (looksLikeBareGlobalMetaId(originalUri)) {

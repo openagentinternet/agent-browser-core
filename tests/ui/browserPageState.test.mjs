@@ -413,6 +413,65 @@ test('Browser address input displays the resolver-normalized URI for a bare Glob
   assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
 });
 
+test('Browser address input displays the resolver-normalized URI for a bare domain alias', async () => {
+  const alias = 'sunnyfung.eth';
+  const canonicalUri = `metaid://${alias}`;
+  const { context, elements, fetchCalls } = createBrowserContext({
+    runtimeResponse: runtimePayload({ defaultUri: null }),
+    resolveResponse: (uri) => ({
+      ...resolvedBot(canonicalUri, 'Alias Bot'),
+      data: {
+        ...resolvedBot(canonicalUri, 'Alias Bot').data,
+        uri,
+        normalizedUri: canonicalUri,
+      },
+    }),
+  });
+
+  await waitFor(() => context.state.actorId === 'worker', 'runtime actor load');
+
+  elements['[data-browser-uri-input]'].value = alias;
+  elements['[data-browser-address-form]'].submit();
+  await waitFor(() => elements['[data-browser-uri-input]'].value === canonicalUri, 'bare alias canonical URI');
+
+  assert.equal(fetchCalls[1], `/api/browser/resolve?uri=${encodeURIComponent(alias)}&actorId=worker`);
+  assert.equal(elements['[data-browser-uri-input]'].value, canonicalUri);
+  assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
+});
+
+test('Browser address input displays the resolver-normalized URI for a bare pin id', async () => {
+  const pinId = '7edcf7775a2054c87c46c0a964d10dd6c32408506d60b0b91a90c30423d8edbei0';
+  const canonicalUri = `pin://${pinId}`;
+  const { context, elements, fetchCalls } = createBrowserContext({
+    runtimeResponse: runtimePayload({ defaultUri: null }),
+    resolveResponse: (uri) => ({
+      ok: true,
+      data: {
+        uri,
+        normalizedUri: canonicalUri,
+        resourceType: 'pin',
+        title: 'Fixture Pin',
+        owner: { kind: 'pin-author', globalMetaId: 'idq1alice', name: 'Alice', verificationState: 'partial' },
+        renderer: { type: 'unsupported', contentType: 'application/json', error: 'Unsupported pin content.' },
+        status: { state: 'resolved', verificationState: 'partial', message: '' },
+        proof: { pinId, verificationState: 'partial' },
+        source: { resolver: 'test' },
+        actions: [],
+      },
+    }),
+  });
+
+  await waitFor(() => context.state.actorId === 'worker', 'runtime actor load');
+
+  elements['[data-browser-uri-input]'].value = pinId;
+  elements['[data-browser-address-form]'].submit();
+  await waitFor(() => elements['[data-browser-uri-input]'].value === canonicalUri, 'bare pin canonical URI');
+
+  assert.equal(fetchCalls[1], `/api/browser/resolve?uri=${encodeURIComponent(pinId)}&actorId=worker`);
+  assert.equal(elements['[data-browser-uri-input]'].value, canonicalUri);
+  assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
+});
+
 test('Browser preserves metaid address when resolver returns custom target resource model', async () => {
   const aliasUri = 'metaid://idq1custombot';
   const customHomepageUri = 'metaapp://custom-pin';
