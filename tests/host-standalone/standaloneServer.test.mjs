@@ -43,6 +43,7 @@ test('standalone Browser server serves Browser shell and health route', async (t
   const runtime = await json(await fetch(`${baseUrl}/api/browser/runtime`));
   assert.equal(runtime.ok, true);
   assert.equal(runtime.data.host.kind, 'standalone');
+  assert.equal(runtime.data.features.walletLogin, true);
   assert.deepEqual(runtime.data.defaultActor, {
     id: 'standalone-wallet',
     label: 'Standalone Wallet',

@@ -45,7 +45,7 @@ function runtime(): BrowserRuntimeSnapshot {
       serviceCall: false,
       cacheManagement: true,
       templateSettings: true,
-      walletLogin: false,
+      walletLogin: true,
     },
     labels: {
       actorChip: 'Wallet',
