@@ -262,7 +262,7 @@ function pinHref(pinId) {
 function pinBadgeHtml(pinId) {
   var href = pinHref(pinId);
   if (!href) return '';
-  return '<a class="browser-pin-badge" href="' + escapeHtml(href) + '" data-browser-map-link title="View PIN detail">[PIN]</a>';
+  return '<a class="browser-pin-badge" href="' + escapeHtml(href) + '" data-browser-map-link title="View PIN detail">PIN</a>';
 }
 
 var DEFAULT_METAFILE_CONTENT_BASE_URL = 'https://file.metaid.io/metafile-indexer';
@@ -2278,7 +2278,7 @@ function renderChatActivityRow(item) {
   var peerAttr = item.partnerGlobalMetaId ? ' data-chat-peer="' + escapeHtml(item.partnerGlobalMetaId) + '"' : '';
   var pinBadge = pinBadgeHtml(item.pinId);
   return '<article class="browser-activity-row"' + peerAttr + '><span class="browser-row-icon" aria-hidden="true">' + iconHtml('message') + '</span>' +
-    '<div>' + contentHtml + pinBadge + '</div></article>';
+    '<div>' + contentHtml + '</div>' + pinBadge + '</article>';
 }
 
 function renderActivityRows(payload) {
@@ -2300,7 +2300,7 @@ function renderActivityRows(payload) {
         : '<strong>' + titleHtml + '</strong>' + (detail ? '<p>' + detail + '</p>' : '');
       var pinBadge = pinBadgeHtml(item.pinId);
       return '<article class="browser-activity-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('activity') + '</span>' +
-        '<div>' + contentHtml + pinBadge + '</div></article>';
+        '<div>' + contentHtml + '</div>' + pinBadge + '</article>';
     }).join('')
     : '<p class="browser-muted-row">No recent activity.</p>';
 }
