@@ -3790,6 +3790,18 @@ async function loadContext() {
   return loadRuntime();
 }
 
+function handleCopyValue(event) {
+  var copyTarget = closestWithAttribute(event && event.target, 'data-browser-copy-value');
+  if (!copyTarget) return false;
+  if (event && typeof event.preventDefault === 'function') event.preventDefault();
+  copyUri({ uri: copyTarget.getAttribute('data-browser-copy-value') || '' }).then(function () {
+    showToast(browserText('ownerPanel.copied', 'copied'));
+  }).catch(function (error) {
+    setStatus('error', error && error.message ? error.message : 'Copy failed.');
+  });
+  return true;
+}
+
 async function initialize() {
   bindElements();
   if (elements.drawer) elements.drawer.hidden = true;
@@ -3813,16 +3825,7 @@ async function initialize() {
         navigateTo(mapHref);
         return;
       }
-      var copyTarget = closestWithAttribute(event && event.target, 'data-browser-copy-value');
-      if (copyTarget) {
-        if (event && typeof event.preventDefault === 'function') event.preventDefault();
-        copyUri({ uri: copyTarget.getAttribute('data-browser-copy-value') || '' }).then(function () {
-          showToast(browserText('ownerPanel.copied', 'copied'));
-        }).catch(function (error) {
-          setStatus('error', error && error.message ? error.message : 'Copy failed.');
-        });
-        return;
-      }
+      if (handleCopyValue(event)) return;
       var rawRecordTarget = closestWithAttribute(event && event.target, 'data-browser-open-raw-record');
       if (rawRecordTarget) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
@@ -3849,6 +3852,7 @@ async function initialize() {
   }
   if (elements.modalRoot) {
     elements.modalRoot.addEventListener('click', function (event) {
+      if (handleCopyValue(event)) return;
       var closeTarget = closestWithAttribute(event && event.target, 'data-browser-modal-close');
       if (closeTarget) {
         closeModal();
