@@ -2269,16 +2269,17 @@ function renderActivityPerson(label, avatarUrl, href, dataAttr) {
 
 function renderChatActivityRow(item) {
   var dateText = formatActivityDate(item.timestamp) || '-';
+  var pinBadge = pinBadgeHtml(item.pinId);
   var contentHtml = '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-width:0;line-height:1.5;color:#344054;">' +
     renderActivityPerson(item.actorName, item.actorAvatar, '') +
     '<span style="color:#667085;">' + escapeHtml('在 ' + dateText + ' 和') + '</span>' +
     renderActivityPerson(item.partnerName, item.partnerAvatar, item.partnerHref, 'data-chat-partner') +
     '<span style="color:#667085;">发生了互动</span>' +
+    pinBadge +
     '</div>';
   var peerAttr = item.partnerGlobalMetaId ? ' data-chat-peer="' + escapeHtml(item.partnerGlobalMetaId) + '"' : '';
-  var pinBadge = pinBadgeHtml(item.pinId);
   return '<article class="browser-activity-row"' + peerAttr + '><span class="browser-row-icon" aria-hidden="true">' + iconHtml('message') + '</span>' +
-    '<div><span class="browser-activity-text">' + contentHtml + '</span>' + pinBadge + '</div></article>';
+    '<div>' + contentHtml + '</div></article>';
 }
 
 function renderActivityRows(payload) {
