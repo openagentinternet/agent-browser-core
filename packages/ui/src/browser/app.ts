@@ -2278,7 +2278,7 @@ function renderChatActivityRow(item) {
   var peerAttr = item.partnerGlobalMetaId ? ' data-chat-peer="' + escapeHtml(item.partnerGlobalMetaId) + '"' : '';
   var pinBadge = pinBadgeHtml(item.pinId);
   return '<article class="browser-activity-row"' + peerAttr + '><span class="browser-row-icon" aria-hidden="true">' + iconHtml('message') + '</span>' +
-    '<div>' + contentHtml + '</div>' + pinBadge + '</article>';
+    '<div><span class="browser-activity-text">' + contentHtml + '</span>' + pinBadge + '</div></article>';
 }
 
 function renderActivityRows(payload) {
@@ -2300,7 +2300,7 @@ function renderActivityRows(payload) {
         : '<strong>' + titleHtml + '</strong>' + (detail ? '<p>' + detail + '</p>' : '');
       var pinBadge = pinBadgeHtml(item.pinId);
       return '<article class="browser-activity-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('activity') + '</span>' +
-        '<div>' + contentHtml + '</div>' + pinBadge + '</article>';
+        '<div><span class="browser-activity-text">' + contentHtml + '</span>' + pinBadge + '</div></article>';
     }).join('')
     : '<p class="browser-muted-row">No recent activity.</p>';
 }
