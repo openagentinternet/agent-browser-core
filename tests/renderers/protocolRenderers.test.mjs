@@ -198,6 +198,27 @@ test('Pin inspector renders prototype-style JSON payload with media, links, and 
   assert.doesNotMatch(html, /why-this-direction/);
 });
 
+test('Pin inspector shows the pin update timestamp instead of "latest effective version" when a timestamp is present', () => {
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource('application/json', { title: 'Timestamped pin' }, {
+    rawPinRecord: {
+      path: '/protocols/simplebuzz',
+      txid: legacyTxid,
+      genesisTransaction: genesisTxid,
+      contentType: 'application/json',
+      timestamp: 1718887380,
+    },
+  }));
+  // "latest effective version" fallback should be replaced by a local timestamp pill.
+  assert.doesNotMatch(html, /latest effective version/);
+  // 1718887380s -> local "YYYY-MM-DD HH:MM:SS" shaped pill.
+  assert.match(html, /updated \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+});
+
+test('Pin inspector falls back to "latest effective version" when no timestamp is present', () => {
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource('application/json', { title: 'Untimestamped pin' }));
+  assert.match(html, /latest effective version/);
+});
+
 test('Pin inspector renders JSON strings from plain text payloads as structured documents', () => {
   const rawPayload = '{"content":"7\\n#美食工厂","contentType":"application/json;utf-8","attachments":["metafile://50d939b24815df1afd4c37137eebe15f65dbd71ae2ea505b465558a3f170c342i0.jpg"]}';
   const html = renderers.renderPinInspectorHtml(pinInspectorResource('text/plain;utf-8', rawPayload, {

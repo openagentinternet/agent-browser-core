@@ -599,9 +599,38 @@ function metaPill(value: unknown): string {
   return normalized ? `<span class="browser-pin-meta-pill">${escapeHtml(normalized)}</span>` : '';
 }
 
-function versionLabel(version: Record<string, unknown>, pin: Record<string, unknown>): string {
+// Normalizes a pin timestamp (seconds, milliseconds, numeric string, or ISO
+// string) into a millisecond epoch. Returns 0 when the value cannot be parsed.
+function timestampMs(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value < 10_000_000_000 ? Math.trunc(value * 1000) : Math.trunc(value);
+  }
+  if (typeof value === 'string') {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric < 10_000_000_000 ? Math.trunc(numeric * 1000) : Math.trunc(numeric);
+    }
+    const parsed = Date.parse(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
+}
+
+// Formats a pin timestamp as a local "yyyy-mm-dd hh:mm:ss" string.
+function formatLocalTimestamp(value: unknown): string {
+  const ms = timestampMs(value);
+  if (!ms) return '';
+  const date = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function versionLabel(version: Record<string, unknown>, pin: Record<string, unknown>, recordValue: Record<string, unknown>): string {
   const selector = text(version.versionSelector);
-  if (selector === 'latest') return 'latest effective version';
+  if (selector === 'latest') {
+    const formatted = formatLocalTimestamp(pin.timestamp ?? recordValue.timestamp);
+    return formatted ? `updated ${formatted}` : 'latest effective version';
+  }
   if (selector === 'history-index') return `history version ${text(version.historyIndex) || '0'}`;
   return text(pin.version) ? `version ${text(pin.version)}` : selector;
 }
@@ -620,7 +649,7 @@ export function renderPinInspectorHtml(resource: BrowserResourceEnvelope, headin
   const metaPills = [
     metaPill(path),
     metaPill(text(pin.contentType ?? recordValue.contentType ?? resource.renderer.contentType)),
-    metaPill(versionLabel(version, pin)),
+    metaPill(versionLabel(version, pin, recordValue)),
   ].filter(Boolean).join('');
   const facts = [
     { key: 'txid', value: txid, copyValue: txid || undefined },

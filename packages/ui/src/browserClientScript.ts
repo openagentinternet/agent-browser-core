@@ -940,9 +940,32 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     const normalized = textValue(value);
     return normalized ? '<span class="browser-pin-meta-pill">' + escapeHtml(normalized) + '</span>' : '';
   }
-  function pinInspectorVersionLabel(version, pin) {
+  function pinInspectorTimestampMs(value) {
+    const numeric = typeof value === 'number' && Number.isFinite(value) && value > 0
+      ? value
+      : Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric < 10000000000 ? Math.trunc(numeric * 1000) : Math.trunc(numeric);
+    }
+    if (typeof value === 'string') {
+      const parsed = Date.parse(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+    return 0;
+  }
+  function formatPinLocalTimestamp(value) {
+    const ms = pinInspectorTimestampMs(value);
+    if (!ms) return '';
+    const date = new Date(ms);
+    const pad = (n) => { n = String(n); return n.length < 2 ? '0' + n : n; };
+    return date.getFullYear() + '-' + pad(date.getMonth() + 1) + '-' + pad(date.getDate()) + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds());
+  }
+  function pinInspectorVersionLabel(version, pin, record) {
     const selector = textValue(version.versionSelector);
-    if (selector === 'latest') return 'latest effective version';
+    if (selector === 'latest') {
+      const formatted = formatPinLocalTimestamp(textValue(pin.timestamp) || textValue(record && record.timestamp));
+      return formatted ? 'updated ' + formatted : 'latest effective version';
+    }
     if (selector === 'history-index') return 'history version ' + (textValue(version.historyIndex) || '0');
     return textValue(pin.version) ? 'version ' + textValue(pin.version) : selector;
   }
@@ -978,7 +1001,7 @@ function openPinRawRecord(trigger) {
     const metaPills = [
       pinInspectorMetaPill(path),
       pinInspectorMetaPill(textValue(pin.contentType || record.contentType || objectValue(resource.renderer).contentType)),
-      pinInspectorMetaPill(pinInspectorVersionLabel(version, pin)),
+      pinInspectorMetaPill(pinInspectorVersionLabel(version, pin, record)),
     ].filter(Boolean).join('');
     const facts = [
       { key: 'txid', value: txid, copyValue: txid || undefined },
