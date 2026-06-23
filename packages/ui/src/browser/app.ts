@@ -2591,9 +2591,10 @@ async function selectUsingIdentity(slug) {
   state.runtime.defaultUri = actorDefaultUri(selected) || null;
   renderUsingIdentity();
   closeModal();
-  var uri = currentResourceUri();
-  if (!uri) return null;
-  return resolveUri(uri, { record: false });
+  // Switching the active actor only updates the Using chip and the recorded
+  // selection. It must NOT navigate or touch the address bar — the selected
+  // actor is applied at action time (resolveUrl / endpointWithActor).
+  return selected;
 }
 
 function usingLabel() {

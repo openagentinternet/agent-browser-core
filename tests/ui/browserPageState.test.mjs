@@ -928,7 +928,7 @@ test('Browser resource chip uses publisher identity for MetaApp resources', asyn
   assert.doesNotMatch(resourceChip, /Fixture MetaApp/);
 });
 
-test('Browser using identity selector switches identity and reloads current URI without history entry', async () => {
+test('Browser using identity selector switches identity without navigating or touching the address bar', async () => {
   const reviewerActor = {
     id: 'reviewer',
     label: 'Reviewer Bot',
@@ -955,14 +955,16 @@ test('Browser using identity selector switches identity and reloads current URI 
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /Reviewer Bot/);
 
   await context.selectUsingIdentity('reviewer');
-  await waitFor(() => fetchCalls.length === 3, 'selected identity reload');
 
   assert.equal(context.state.runtime.defaultActor.id, 'reviewer');
   assert.equal(context.state.actorId, 'reviewer');
   assert.match(elements['[data-browser-using-selector]'].innerHTML, /Using: Reviewer Bot/);
   assert.equal(elements['[data-browser-modal-root]'].hidden, true);
   assert.equal(elements['[data-browser-using-selector]'].getAttribute('aria-expanded'), 'false');
-  assert.equal(fetchCalls[2], '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1worker&actorId=reviewer');
+  // Switching only updates the chip and the recorded actor — it must NOT
+  // re-resolve the page or touch the address bar.
+  assert.equal(fetchCalls.length, 2);
+  assert.equal(elements['[data-browser-uri-input]'].value, 'metaid://idq1worker');
   assert.deepEqual(Array.from(context.state.history), ['metaid://idq1worker']);
   assert.equal(context.state.historyIndex, 0);
 });
@@ -1001,15 +1003,15 @@ test('Browser using identity chip and selector render actor avatars when runtime
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /data:image\/png;base64,reviewer-avatar/);
 
   await context.selectUsingIdentity('reviewer');
-  await waitFor(() => fetchCalls.length === 3, 'selected identity reload');
 
   assert.match(elements['[data-browser-using-selector]'].innerHTML, /data:image\/png;base64,reviewer-avatar/);
   assert.doesNotMatch(elements['[data-browser-using-selector]'].innerHTML, /browser-avatar-fallback/);
 
   await context.selectUsingIdentity('worker');
-  await waitFor(() => fetchCalls.length === 4, 'worker identity reload');
 
   assert.match(elements['[data-browser-using-selector]'].innerHTML, /data:image\/jpeg;base64,worker-avatar/);
+  // Switching the active actor only re-renders the chip; no re-resolution.
+  assert.equal(fetchCalls.length, 2);
 });
 
 test('Browser safeUrl keeps data and blob avatar URLs', async () => {
