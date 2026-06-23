@@ -127,11 +127,12 @@ export const BROWSER_PAGE_STYLES = `
     .browser-pin-raw-modal .browser-modal-body { padding: 14px 16px; }
     .browser-pin-primary-action { cursor: pointer; min-height: 34px; border: 1px solid #2563eb; border-radius: 8px; background: #2563eb; color: #fff; padding: 7px 14px; font-size: 12px; font-weight: 700; }
     .browser-pin-primary-action:hover, .browser-pin-primary-action:focus { background: #1d4ed8; border-color: #1d4ed8; }
-    .browser-pin-copy-btn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-left: 8px; padding: 0; border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; color: #4c5b6f; cursor: pointer; vertical-align: middle; }
+    .browser-pin-copy-btn { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 26px; height: 26px; margin-left: 8px; padding: 0; line-height: 0; border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; color: #4c5b6f; cursor: pointer; vertical-align: middle; }
     .browser-pin-copy-btn:hover, .browser-pin-copy-btn:focus { border-color: #cfe0ff; background: #eaf1ff; color: #2e6fed; }
     .browser-pin-copy-btn .browser-icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
-    .browser-pin-pre-head { display: flex; justify-content: flex-end; }
-    .browser-pin-pre-head .browser-pin-copy-btn { margin: 0 0 6px; }
+    .browser-pin-pre-wrap { position: relative; }
+    .browser-pin-pre-wrap > .browser-pin-copy-btn { position: absolute; top: 8px; left: 8px; z-index: 2; margin: 0; }
+    .browser-pin-pre-wrap > .browser-pin-copy-btn .browser-icon { display: block; }
     .browser-modal-footer-start, .browser-modal-footer-end { display: inline-flex; align-items: center; gap: 8px; }
     .browser-loading, .browser-settings-error { padding: 12px; border: 1px solid #d1d5db; background: #f9fafb; }
     .browser-settings-error { border-color: #fca5a5; color: #991b1b; }

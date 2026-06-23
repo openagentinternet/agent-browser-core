@@ -3238,7 +3238,7 @@ function pinInspectorRenderRawPayload(current) {
       : (typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2));
     body = '<pre class="browser-protocol-raw">' + escapeHtml(copyValue || '') + '</pre>';
   }
-  return '<div class="browser-pin-pre-head"><button type="button" class="browser-pin-copy-btn" title="Copy" aria-label="Copy" data-browser-copy-value="' + escapeHtml(copyValue || '') + '">' + iconHtml('copy') + '</button></div>' + body;
+  return '<div class="browser-pin-pre-wrap"><button type="button" class="browser-pin-copy-btn" title="Copy" aria-label="Copy" data-browser-copy-value="' + escapeHtml(copyValue || '') + '">' + iconHtml('copy') + '</button>' + body + '</div>';
 }
 
 function pinInspectorIsImageReference(uri, sourceKey) {
@@ -3593,8 +3593,7 @@ function openPinRawRecord(trigger) {
     '<section class="browser-modal-panel browser-pin-raw-modal" role="document">' +
       '<header class="browser-modal-header"><h2>Raw PIN record</h2><button type="button" class="browser-modal-close" data-browser-modal-close aria-label="Close">x</button></header>' +
       '<div class="browser-modal-body">' +
-        '<div class="browser-pin-pre-head"><button type="button" class="browser-pin-copy-btn" title="Copy" aria-label="Copy" data-browser-copy-value="' + escapeHtml(rawRecordJson) + '">' + iconHtml('copy') + '</button></div>' +
-        '<pre class="browser-protocol-json">' + escapeHtml(rawRecordJson) + '</pre>' +
+        '<div class="browser-pin-pre-wrap"><button type="button" class="browser-pin-copy-btn" title="Copy" aria-label="Copy" data-browser-copy-value="' + escapeHtml(rawRecordJson) + '">' + iconHtml('copy') + '</button><pre class="browser-protocol-json">' + escapeHtml(rawRecordJson) + '</pre></div>' +
       '</div>' +
     '</section>';
   return true;
