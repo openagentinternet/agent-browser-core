@@ -2991,9 +2991,9 @@ var PIN_INSPECTOR_PAGE_STYLE = '<style>' +
   '.browser-protocol-json, .browser-protocol-raw, .browser-pin-text { margin: 0; overflow: auto; padding: 16px; border-radius: 12px; background: #182235; color: #d7e3f0; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }' +
   '.browser-pin-pre-wrap { position: relative; }' +
   '.browser-pin-pre-wrap > .browser-pin-copy-btn { position: absolute; top: 8px; left: 8px; z-index: 2; margin: 0; }' +
-  '.browser-pin-copy-btn { display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; width: 26px; height: 26px; padding: 0; line-height: 0; border: 1px solid rgba(255,255,255,.35); border-radius: 8px; background: rgba(24,34,53,.7); color: #d7e3f0; cursor: pointer; vertical-align: middle; }' +
+  '.browser-pin-copy-btn { display: inline-flex !important; align-items: center; justify-content: center; box-sizing: border-box; width: 28px; height: 28px; padding: 0 !important; line-height: 0; border: 1px solid rgba(255,255,255,.35); border-radius: 8px; background: rgba(24,34,53,.7); color: #d7e3f0; cursor: pointer; vertical-align: middle; }' +
   '.browser-pin-copy-btn:hover, .browser-pin-copy-btn:focus { border-color: #cfe0ff; background: #eaf1ff; color: #2e6fed; }' +
-  '.browser-pin-copy-btn .browser-icon { display: block; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }' +
+  '.browser-pin-copy-btn .browser-icon { display: block; width: 15px !important; height: 15px !important; min-width: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }' +
   '.browser-pin-raw-modal { width: min(60vw, calc(100vw - 48px)); max-height: min(86vh, calc(100vh - 48px)); }' +
   '.browser-pin-json-doc { display: grid; gap: 12px; }' +
   '.browser-pin-json-row { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 14px; align-items: start; }' +
@@ -3020,7 +3020,7 @@ var PIN_INSPECTOR_PAGE_STYLE = '<style>' +
   '.browser-protocol-proof { display: grid; grid-template-columns: 104px minmax(0, 1fr); gap: 10px 14px; margin: 0; }' +
   '.browser-protocol-proof dt { color: #6a778b; font-size: 12px; font-weight: 700; }' +
   '.browser-protocol-proof dd { margin: 0; overflow-wrap: anywhere; }' +
-  '.browser-protocol-proof dd button { margin-left: 8px; border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; padding: 4px 8px; }' +
+  '.browser-protocol-proof dd button:not(.browser-pin-copy-btn) { margin-left: 8px; border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; padding: 4px 8px; }' +
   '.browser-pin-media-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }' +
   '.browser-pin-media-card { display: grid; grid-template-rows: minmax(0, 1fr) auto auto; gap: 8px; min-width: 0; padding: 10px; border: 1px solid #dce4ef; border-radius: 8px; background: #f8fafc; }' +
   '.browser-pin-media-preview { display: grid; place-items: center; min-height: 110px; border-radius: 7px; background: #e8eef6; color: #62718a; font-size: 12px; font-weight: 700; text-align: center; overflow: hidden; }' +
