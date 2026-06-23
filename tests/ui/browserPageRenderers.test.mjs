@@ -564,14 +564,14 @@ test('bot-page renderer links each Recent Activity and MetaApp item to its pin:/
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Recent Activity'), 'pin badge render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
 
-  // Buzz row: [PIN] badge links to pin://<buzzPin> via internal nav.
-  const buzzBadge = new RegExp(`class="browser-pin-badge" href="pin://${buzzPin}" data-browser-map-link[^>]*>\\[PIN\\]`);
+  // Buzz row: PIN badge links to pin://<buzzPin> via internal nav.
+  const buzzBadge = new RegExp(`class="browser-pin-badge" href="pin://${buzzPin}" data-browser-map-link[^>]*>PIN`);
   assert.match(html, buzzBadge);
-  // Chat row: [PIN] badge links to the chat interaction pin.
-  const chatBadge = new RegExp(`class="browser-pin-badge" href="pin://${chatPin}" data-browser-map-link[^>]*>\\[PIN\\]`);
+  // Chat row: PIN badge links to the chat interaction pin.
+  const chatBadge = new RegExp(`class="browser-pin-badge" href="pin://${chatPin}" data-browser-map-link[^>]*>PIN`);
   assert.match(html, chatBadge);
-  // MetaApps: [PIN] badge links to the metaapp pin detail.
-  const metaAppBadge = new RegExp(`class="browser-pin-badge" href="pin://${metaAppPinId}" data-browser-map-link[^>]*>\\[PIN\\]`);
+  // MetaApps: PIN badge links to the metaapp pin detail.
+  const metaAppBadge = new RegExp(`class="browser-pin-badge" href="pin://${metaAppPinId}" data-browser-map-link[^>]*>PIN`);
   assert.match(html, metaAppBadge);
 });
 
