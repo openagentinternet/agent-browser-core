@@ -123,13 +123,15 @@ export const BROWSER_PAGE_STYLES = `
     .browser-modal-close { width: 30px; height: 30px; border: 1px solid #d1d5db; background: #fff; }
     .browser-modal-body { min-height: 0; overflow: auto; padding: 16px; }
     .browser-modal-panel > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-top: 1px solid #d1d5db; background: #f9fafb; }
-    .browser-pin-raw-modal { width: min(1120px, calc(100vw - 48px)); max-height: min(86vh, calc(100vh - 48px)); }
+    .browser-pin-raw-modal { width: min(60vw, calc(100vw - 48px)); max-height: min(86vh, calc(100vh - 48px)); }
     .browser-pin-raw-modal .browser-modal-body { padding: 14px 16px; }
     .browser-pin-primary-action { cursor: pointer; min-height: 34px; border: 1px solid #2563eb; border-radius: 8px; background: #2563eb; color: #fff; padding: 7px 14px; font-size: 12px; font-weight: 700; }
     .browser-pin-primary-action:hover, .browser-pin-primary-action:focus { background: #1d4ed8; border-color: #1d4ed8; }
     .browser-pin-copy-btn { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; margin-left: 8px; padding: 0; border: 1px solid #d9e1ed; border-radius: 8px; background: #fff; color: #4c5b6f; cursor: pointer; vertical-align: middle; }
     .browser-pin-copy-btn:hover, .browser-pin-copy-btn:focus { border-color: #cfe0ff; background: #eaf1ff; color: #2e6fed; }
     .browser-pin-copy-btn .browser-icon { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }
+    .browser-pin-pre-head { display: flex; justify-content: flex-end; }
+    .browser-pin-pre-head .browser-pin-copy-btn { margin: 0 0 6px; }
     .browser-modal-footer-start, .browser-modal-footer-end { display: inline-flex; align-items: center; gap: 8px; }
     .browser-loading, .browser-settings-error { padding: 12px; border: 1px solid #d1d5db; background: #f9fafb; }
     .browser-settings-error { border-color: #fca5a5; color: #991b1b; }

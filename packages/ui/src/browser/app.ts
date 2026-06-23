@@ -3227,13 +3227,18 @@ function pinInspectorRenderRawPayload(current) {
   var payload = pinInspectorPayload(current);
   var jsonPayload = pinInspectorParseJsonPayload(payload, rawPayload);
   var renderAsJson = pinInspectorContentType(current).indexOf('json') !== -1 || (payload && typeof payload === 'object') || (jsonPayload && typeof jsonPayload === 'object');
+  var copyValue;
+  var body;
   if (renderAsJson) {
-    return pinInspectorJsonBlock(jsonPayload, 'browser-protocol-raw');
+    copyValue = JSON.stringify(jsonPayload, null, 2);
+    body = pinInspectorJsonBlock(jsonPayload, 'browser-protocol-raw');
+  } else {
+    copyValue = typeof rawPayload === 'string'
+      ? rawPayload
+      : (typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2));
+    body = '<pre class="browser-protocol-raw">' + escapeHtml(copyValue || '') + '</pre>';
   }
-  var source = typeof rawPayload === 'string'
-    ? rawPayload
-    : (typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2));
-  return '<pre class="browser-protocol-raw">' + escapeHtml(source || '') + '</pre>';
+  return '<div class="browser-pin-pre-head"><button type="button" class="browser-pin-copy-btn" title="Copy" aria-label="Copy" data-browser-copy-value="' + escapeHtml(copyValue || '') + '">' + iconHtml('copy') + '</button></div>' + body;
 }
 
 function pinInspectorIsImageReference(uri, sourceKey) {
@@ -3582,11 +3587,15 @@ function openPinRawRecord(trigger) {
   var rawRecord = pinInspectorRawPinRecord(state.current);
   if (!rawRecord) return false;
   if (!elements.modalRoot) return false;
+  var rawRecordJson = JSON.stringify(rawRecord, null, 2);
   elements.modalRoot.hidden = false;
   elements.modalRoot.innerHTML = '<div class="browser-modal-backdrop" data-browser-modal-close></div>' +
     '<section class="browser-modal-panel browser-pin-raw-modal" role="document">' +
       '<header class="browser-modal-header"><h2>Raw PIN record</h2><button type="button" class="browser-modal-close" data-browser-modal-close aria-label="Close">x</button></header>' +
-      '<div class="browser-modal-body"><pre class="browser-protocol-json">' + escapeHtml(JSON.stringify(rawRecord, null, 2)) + '</pre></div>' +
+      '<div class="browser-modal-body">' +
+        '<div class="browser-pin-pre-head"><button type="button" class="browser-pin-copy-btn" title="Copy" aria-label="Copy" data-browser-copy-value="' + escapeHtml(rawRecordJson) + '">' + iconHtml('copy') + '</button></div>' +
+        '<pre class="browser-protocol-json">' + escapeHtml(rawRecordJson) + '</pre>' +
+      '</div>' +
     '</section>';
   return true;
 }
