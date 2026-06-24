@@ -89,7 +89,6 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
             <div class="browser-chrome-menu" data-browser-menu role="menu" hidden></div>
           </div>
         </header>
-        <div class="browser-owner-toolbar" data-browser-owner-toolbar hidden></div>
         <div class="browser-viewport-row" data-browser-viewport-row>
           <aside class="browser-drawer" data-browser-drawer hidden></aside>
           <main class="browser-viewport" data-browser-viewport></main>
@@ -137,11 +136,6 @@ var browserLaunchCopy = {
     'resource.emptyTitle': '没有资源',
     'status.unverified': '未验证',
     'status.rendererNone': '渲染器：无',
-    'owner.localBot': '本地 Bot',
-    'owner.editProfile': '编辑主页',
-    'owner.configureChat': '配置聊天',
-    'owner.viewMessages': '查看消息',
-    'owner.share': '分享主页',
     'ownerPanel.visitHome': '访问主页',
     'ownerPanel.sendMessage': '发送信息',
     'ownerPanel.follow': '关注该 Bot',
@@ -150,11 +144,6 @@ var browserLaunchCopy = {
     'modal.close': '关闭',
     'modal.cancel': '取消',
     'modal.usingActorTitle': '选择当前 Bot',
-    'share.title': '分享 Bot 主页',
-    'share.metaidUri': '复制 metaid URI',
-    'share.localUrl': '复制本地 Browser URL',
-    'share.publicUrl': '复制公开 Browser URL',
-    'share.close': '关闭',
     'wallet.connect': '连接钱包',
     'wallet.installTitle': '安装钱包',
     'wallet.installBody': '请先安装钱包扩展。',
@@ -519,7 +508,6 @@ function bindElements() {
     usingChip: document.querySelector('[data-browser-using-selector]'),
     menuTrigger: document.querySelector('[data-browser-menu-trigger]'),
     menu: document.querySelector('[data-browser-menu]'),
-    ownerToolbar: document.querySelector('[data-browser-owner-toolbar]'),
     viewport: document.querySelector('[data-browser-viewport]'),
     statusState: document.querySelector('[data-browser-status-state]'),
     statusProof: document.querySelector('[data-browser-status-proof]'),
@@ -1264,15 +1252,6 @@ function currentResourceUri() {
     textValue(elements.input && elements.input.value);
 }
 
-function ownerActionPayload(owner) {
-  var uri = currentResourceUri();
-  return {
-    ownerActorId: owner.id,
-    ownerGlobalMetaId: owner.globalMetaId,
-    currentUri: uri
-  };
-}
-
 function openTrustedActionHref(result) {
   var href = result && result.data && result.data.href;
   if (!href) return;
@@ -1300,19 +1279,6 @@ function safeTrustedActionHref(value) {
     return '';
   }
   return '';
-}
-
-function currentOwnerGlobalMetaId() {
-  if (!state.current || state.current.resourceType !== 'bot') return '';
-  return textValue(state.current.owner && state.current.owner.globalMetaId);
-}
-
-function findLocalOwnerActor() {
-  var globalMetaId = currentOwnerGlobalMetaId();
-  if (!globalMetaId) return null;
-  return runtimeActors().find(function(actor) {
-    return textValue(actor && actor.globalMetaId) === globalMetaId;
-  }) || null;
 }
 
 function renderUsingIdentity() {
@@ -1357,24 +1323,6 @@ function renderUsingIdentity() {
   }
 }
 
-function renderOwnerToolbar() {
-  var owner = findLocalOwnerActor();
-  if (!elements.ownerToolbar) return;
-  if (!owner) {
-    elements.ownerToolbar.hidden = true;
-    elements.ownerToolbar.innerHTML = '';
-    return;
-  }
-  elements.ownerToolbar.hidden = false;
-  var ownerSeparator = browserIsZhCN() ? '：' : ': ';
-  elements.ownerToolbar.innerHTML =
-    '<span class="browser-owner-label">' + escapeHtml(browserText('owner.localBot', 'Local Bot')) + ownerSeparator + escapeHtml(owner.label || 'Bot') + '</span>' +
-    '<button type="button" data-browser-owner-action="edit-profile">' + escapeHtml(browserText('owner.editProfile', 'Edit Profile')) + '</button>' +
-    '<button type="button" data-browser-owner-action="configure-chat">' + escapeHtml(browserText('owner.configureChat', 'Configure Chat')) + '</button>' +
-    '<button type="button" data-browser-owner-action="view-messages">' + escapeHtml(browserText('owner.viewMessages', 'View Messages')) + '</button>' +
-    '<button type="button" data-browser-owner-action="share">' + escapeHtml(browserText('owner.share', 'Share Bot Page')) + '</button>';
-}
-
 function buildWelcomeShortcutTiles() {
   var tiles = [];
   var seenUris = {};
@@ -1404,7 +1352,6 @@ function buildWelcomeShortcutTiles() {
 function renderWelcome() {
   setStatus('ready', '');
   state.current = null;
-  renderOwnerToolbar();
   if (elements.resourceChip) {
     elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar');
     elements.resourceChip.disabled = true;
@@ -1439,7 +1386,6 @@ function renderNoLocalBot() {
   var actionLabel = browserText('runtime.noActorAction.label', action && typeof action === 'object' ? textValue(action.label) : '');
   setStatus('ready', '');
   state.current = null;
-  renderOwnerToolbar();
   if (elements.resourceChip) {
     elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar');
     elements.resourceChip.disabled = true;
@@ -1481,7 +1427,6 @@ function renderCurrent() {
   if (elements.statusProof) elements.statusProof.innerHTML = proofIconHtml(proofState) + '<span>' + escapeHtml(proofState) + '</span>';
   if (elements.statusRenderer) elements.statusRenderer.textContent = 'renderer: ' + rendererType;
   if (elements.statusTxid) elements.statusTxid.textContent = 'TXID: ' + (shortId(txid) || '-');
-  renderOwnerToolbar();
   if (elements.viewport) {
     elements.viewport.innerHTML = renderRenderer(current);
     enhancePinMediaPreviews(elements.viewport);
@@ -2799,52 +2744,6 @@ async function confirmServiceCall(userTaskText) {
   return result;
 }
 
-function openShareBotPageModal(owner) {
-  var globalMetaId = textValue(owner && owner.globalMetaId);
-  var metaidUri = 'metaid://' + globalMetaId;
-  var localPath = '/browser/metaid/' + encodeURIComponent(globalMetaId);
-  var origin = window.location && window.location.origin ? window.location.origin : '';
-  var localUrl = origin ? origin + localPath : localPath;
-  var publicBaseUrl = textValue(state.runtime && state.runtime.host && state.runtime.host.publicBaseUrl).replace(/[/]+$/, '');
-  var publicButton = publicBaseUrl
-    ? '<button type="button" data-browser-share-copy="' + escapeHtml(publicBaseUrl + localPath) + '">' + escapeHtml(browserText('share.publicUrl', 'Copy public Browser URL')) + '</button>'
-    : '';
-  renderModal(
-    browserText('share.title', 'Share Bot Page'),
-    '<div class="browser-share-list">' +
-      '<button type="button" data-browser-share-copy="' + escapeHtml(metaidUri) + '">' + escapeHtml(browserText('share.metaidUri', 'Copy metaid URI')) + '</button>' +
-      '<button type="button" data-browser-share-copy="' + escapeHtml(localUrl) + '">' + escapeHtml(browserText('share.localUrl', 'Copy local Browser URL')) + '</button>' +
-      publicButton +
-    '</div>',
-    browserText('share.close', 'Close'),
-    ''
-  );
-}
-
-async function handleOwnerAction(action) {
-  var owner = findLocalOwnerActor();
-  if (!owner) return null;
-  if (action === 'share') return openShareBotPageModal(owner);
-  var kindMap = {
-    'edit-profile': 'edit-profile',
-    'configure-chat': 'configure-chat',
-    'view-messages': 'view-messages'
-  };
-  var kind = kindMap[action];
-  if (!kind) return null;
-  var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      resourceUri: currentResourceUri(),
-      kind: kind,
-      payload: ownerActionPayload(owner)
-    })
-  });
-  openTrustedActionHref(result);
-  return result;
-}
-
 async function handleTrustedAction(action) {
   var kind = textValue(action && action.kind);
   if (kind === 'copy') return copyUri(action);
@@ -3752,7 +3651,6 @@ async function resolveUri(uri, options) {
     };
     setStatus('error', error && error.message ? error.message : 'Resolve failed.');
     state.current = null;
-    renderOwnerToolbar();
     if (elements.viewport) {
       elements.viewport.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(state.error) + '</p></section>';
     }
@@ -3908,11 +3806,6 @@ async function initialize() {
         });
         return;
       }
-      var shareCopy = closestWithAttribute(event && event.target, 'data-browser-share-copy');
-      if (shareCopy) {
-        copyUri({ uri: shareCopy.getAttribute('data-browser-share-copy') || '' });
-        return;
-      }
       if (closestWithAttribute(event && event.target, 'data-browser-wallet-install')) {
         installWalletProvider();
         return;
@@ -3995,15 +3888,6 @@ async function initialize() {
       if (!target) return;
       handleBrowserMenuAction(target.getAttribute('data-browser-menu-item')).catch(function (error) {
         setStatus('error', error && error.message ? error.message : 'Menu action failed.');
-      });
-    });
-  }
-  if (elements.ownerToolbar) {
-    elements.ownerToolbar.addEventListener('click', function (event) {
-      var target = closestWithAttribute(event && event.target, 'data-browser-owner-action');
-      if (!target) return;
-      handleOwnerAction(target.getAttribute('data-browser-owner-action')).catch(function (error) {
-        setStatus('error', error && error.message ? error.message : 'Owner action failed.');
       });
     });
   }
@@ -4117,7 +4001,6 @@ globalThis.normalizeBotHomepagePayload = normalizeBotHomepagePayload;
 globalThis.truncateBuzzDetail = truncateBuzzDetail;
 globalThis.confirmPrivateChat = confirmPrivateChat;
 globalThis.confirmServiceCall = confirmServiceCall;
-globalThis.handleOwnerAction = handleOwnerAction;
 globalThis.closeModal = closeModal;
 globalThis.renderModal = renderModal;
 globalThis.loadBookmarks = loadBookmarks;

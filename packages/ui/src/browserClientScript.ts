@@ -51,7 +51,6 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   const statusTxid = document.querySelector('[data-browser-status-txid]');
   const actor = document.querySelector('[data-browser-using-selector]');
   const resourceChip = document.querySelector('[data-browser-resource-chip]');
-  const ownerToolbar = document.querySelector('[data-browser-owner-toolbar]');
   const drawer = document.querySelector('[data-browser-drawer]');
   const drawerToggle = document.querySelector('[data-browser-drawer-toggle]');
   const inspector = document.querySelector('[data-browser-inspector]');
@@ -141,7 +140,6 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     }
     if (statusProof) statusProof.textContent = 'unverified';
     if (statusTxid) statusTxid.textContent = 'TXID: -';
-    renderOwnerToolbar(null);
     if (drawer && !drawer.hidden) renderDrawer();
     if (inspector && !inspector.hidden) renderInspector();
     setStatus(label || 'error', detail || 'renderer');
@@ -306,22 +304,6 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     const resourceActions = resource.actions || [];
     const actions = ownerOnly ? ownerActions : resourceActions.concat(ownerActions);
     return actions.find((action) => id && action.id === id) || actions.find((action) => action.kind === kind) || null;
-  }
-  function renderOwnerToolbar(resource) {
-    if (!ownerToolbar) return;
-    const affinity = resource && resource.ownerAffinity;
-    const actions = affinity && affinity.actions || [];
-    if (!actions.length) {
-      ownerToolbar.hidden = true;
-      ownerToolbar.innerHTML = '';
-      return;
-    }
-    ownerToolbar.hidden = false;
-    ownerToolbar.innerHTML = actions.map((action) =>
-      '<button type="button" data-browser-owner-action="' + escapeAttribute(action.kind) +
-      '" data-browser-action-id="' + escapeAttribute(action.id || '') + '"' +
-      (action.enabled ? '' : ' disabled') + '>' + escapeHtml(action.label || action.kind) + '</button>'
-    ).join('');
   }
   function renderDrawer() {
     if (!drawer) return;
@@ -1312,7 +1294,6 @@ function openPinRawRecord(trigger) {
       viewport.innerHTML = resourceHtml(payload.data);
       enhancePinMediaPreviews(viewport);
       if (resourceChip) resourceChip.querySelector('.browser-chip-title').textContent = payload.data.title || 'Resource';
-      renderOwnerToolbar(payload.data);
       updateResourceStatus(payload.data);
       if (drawer && !drawer.hidden) renderDrawer();
       if (inspector && !inspector.hidden) renderInspector();
@@ -1524,17 +1505,6 @@ function openPinRawRecord(trigger) {
       saveBrowserSettings().catch(() => {});
       return;
     }
-    const ownerAction = closestWithAttribute(target, 'data-browser-owner-action');
-    if (ownerAction) {
-      event.preventDefault();
-      if (ownerAction.hasAttribute('disabled')) return;
-      dispatchResourceAction(
-        ownerAction.getAttribute('data-browser-owner-action') || '',
-        ownerAction.getAttribute('data-browser-action-id') || '',
-        true
-      );
-      return;
-    }
     const resourceAction = closestWithAttribute(target, 'data-browser-action');
     if (resourceAction) {
       event.preventDefault();
@@ -1557,7 +1527,6 @@ function openPinRawRecord(trigger) {
   if (input && !input.value) input.value = initialUri;
   if (state.resource) {
     if (resourceChip) resourceChip.querySelector('.browser-chip-title').textContent = state.resource.title || 'Resource';
-    renderOwnerToolbar(state.resource);
     updateResourceStatus(state.resource);
     setStatus('resolved', state.resource.renderer && state.resource.renderer.type || 'renderer');
   }

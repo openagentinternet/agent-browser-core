@@ -47,12 +47,11 @@ test('generated client script compiles', () => {
   assert.doesNotThrow(() => new Function(script));
 });
 
-test('client script includes drawer inspector owner toolbar share and trusted action flows', () => {
+test('client script includes drawer inspector share and trusted action flows', () => {
   const script = ui.buildBrowserClientScript({ apiBasePath: '/api/browser', initialUri: 'metaid://idq1fixturebot' });
 
   assert.match(script, /function renderDrawer\(/);
   assert.match(script, /function renderInspector\(/);
-  assert.match(script, /function renderOwnerToolbar\(/);
   assert.match(script, /function openShareModal\(/);
   assert.match(script, /function openPrivateChatModal\(/);
   assert.match(script, /function openServiceCallModal\(/);
@@ -60,7 +59,6 @@ test('client script includes drawer inspector owner toolbar share and trusted ac
   assert.match(script, /function applyCommandResult\(/);
   assert.match(script, /manual_action_required/);
   assert.match(script, /waiting/);
-  assert.match(script, /data-browser-owner-action/);
   assert.match(script, /data-browser-private-chat-message/);
   assert.match(script, /data-browser-service-task/);
   assert.match(script, /data-browser-share-copy/);
@@ -125,7 +123,6 @@ test('resolve failures clear stale resource chrome and keep URI history coherent
   assert.match(script, /resourceChip[\s\S]*browser-chip-title[\s\S]*Resource/);
   assert.match(script, /statusProof\) statusProof\.textContent = 'unverified'/);
   assert.match(script, /statusTxid\) statusTxid\.textContent = 'TXID: -'/);
-  assert.match(script, /renderOwnerToolbar\(null\)/);
   assert.match(script, /if \(drawer && !drawer\.hidden\) renderDrawer\(\);/);
   assert.match(script, /if \(inspector && !inspector\.hidden\) renderInspector\(\);/);
   assert.match(script, /function renderResolveFailure\(uri, message, options\) \{[\s\S]*clearResourceChrome\('error', 'renderer'\);[\s\S]*viewport\.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed/);

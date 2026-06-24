@@ -21,7 +21,6 @@ test('Browser root API renders the mature fixed chrome shell asynchronously', as
   assert.match(html, /data-browser-using-selector/);
   assert.match(html, /data-browser-resource-chip/);
   assert.match(html, /data-browser-menu-trigger/);
-  assert.match(html, /data-browser-owner-toolbar/);
   assert.match(html, /data-browser-viewport/);
   assert.match(html, /data-browser-inspector/);
   assert.match(html, /data-browser-status-strip/);
@@ -35,7 +34,6 @@ test('Browser root API uses the generated mature inline CSS template', async () 
   assert.match(template, /body:has\(\.browser-shell\) \{\n        height: 100vh;\n        min-height: 100vh;\n        overflow: hidden;/);
   assert.match(template, /\.browser-shell \{\n        --browser-bg: #f4f6f9;/);
   assert.match(template, /\.browser-viewport \{\n        grid-row: 1;\n        grid-column: 1;/);
-  assert.match(template, /\.browser-owner-toolbar \{/);
   assert.match(template, /\.browser-modal-panel \{/);
   assert.match(template, /\.browser-custom-pages-setting \{/);
   assert.match(template, /\.browser-modal-panel \.browser-help-icon/);
@@ -73,7 +71,7 @@ test('Browser client script exposes mature endpoints and path/default URI boot l
   assert.match(definition.script, /globalThis\.browserEndpoints = browserEndpoints;/);
 });
 
-test('Browser client script includes mature renderer, modal, owner, and share flows', () => {
+test('Browser client script includes mature renderer, modal, and chat flows', () => {
   const definition = ui.buildBrowserPageDefinition();
 
   assert.match(definition.script, /function renderBotHomepageDocumentTemplate\(payload, current\)/);
@@ -84,8 +82,6 @@ test('Browser client script includes mature renderer, modal, owner, and share fl
   assert.match(definition.script, /async function toggleCustomBotPages\(\)/);
   assert.match(definition.script, /state\.pendingPrivateChat = \{/);
   assert.match(definition.script, /state\.pendingServiceCall = \{/);
-  assert.match(definition.script, /data-browser-owner-action="share"/);
-  assert.match(definition.script, /data-browser-share-copy=/);
   assert.match(definition.script, /browser-drawer/);
   assert.match(definition.script, /browser-inspector/);
   assert.match(definition.script, /browser-html-frame" sandbox="allow-scripts"/);

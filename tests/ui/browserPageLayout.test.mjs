@@ -73,34 +73,6 @@ test('Browser page locks outer document while renderer viewport owns content scr
   assertDeclaration(viewportBlock, 'overflow', 'auto');
 });
 
-test('Browser Owner Mode toolbar is Browser chrome outside the renderer viewport', () => {
-  const browserContent = buildBrowserPageDefinition().contentHtml;
-  const toolbarMatch = browserContent.match(/<div[^>]*data-browser-owner-toolbar[^>]*><\/div>/);
-  assert.ok(toolbarMatch, 'missing Owner Mode toolbar');
-  const toolbarIndex = toolbarMatch.index;
-  const topbarCloseIndex = browserContent.indexOf('</header>');
-  const viewportIndex = browserContent.indexOf('<main class="browser-viewport" data-browser-viewport>');
-
-  assert.ok(topbarCloseIndex < toolbarIndex, 'Owner Mode toolbar must render after the topbar');
-  assert.ok(toolbarIndex < viewportIndex, 'Owner Mode toolbar must render before the viewport');
-
-  const viewportCloseIndex = browserContent.indexOf('</main>', viewportIndex);
-  assert.ok(toolbarIndex < viewportIndex || toolbarIndex > viewportCloseIndex, 'Owner Mode toolbar must not be inside the viewport');
-
-  const ownerToolbarBlock = cssBlock('.browser-owner-toolbar');
-  assertDeclaration(ownerToolbarBlock, 'grid-row', '3');
-  assertDeclaration(ownerToolbarBlock, 'grid-column', '1 / -1');
-});
-
-test('Browser Owner Mode toolbar keeps actions reachable on narrow widths', () => {
-  const ownerToolbarBlock = cssBlock('.browser-owner-toolbar');
-  assertDeclaration(ownerToolbarBlock, 'overflow-x', 'auto');
-  assertDeclaration(ownerToolbarBlock, 'overflow-y', 'hidden');
-
-  const ownerButtonBlock = cssBlock('.browser-owner-toolbar button');
-  assertDeclaration(ownerButtonBlock, 'flex', '0 0 auto');
-});
-
 test('Responsive Browser drawer and inspector overlay the viewport row, not owner chrome', () => {
   const responsivePanelBlock = cssBlockAfter(
     '@media (max-width: 900px)',
@@ -124,20 +96,11 @@ test('Responsive Browser overlays stay within renderer viewport geometry', async
     await page.setContent(await renderBrowserPageHtml(buildBrowserPageDefinition()), { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
       const shell = document.querySelector('[data-browser-shell]');
-      const ownerToolbar = document.querySelector('[data-browser-owner-toolbar]');
       const viewport = document.querySelector('[data-browser-viewport]');
       const drawer = document.querySelector('[data-browser-drawer]');
       const inspector = document.querySelector('[data-browser-inspector]');
 
       shell.classList.add('has-drawer', 'has-inspector');
-      ownerToolbar.hidden = false;
-      ownerToolbar.innerHTML = [
-        '<span class="browser-owner-label">Local Bot: Alice</span>',
-        '<button type="button" data-browser-owner-action="edit-profile">Edit Profile</button>',
-        '<button type="button" data-browser-owner-action="configure-chat">Configure Chat</button>',
-        '<button type="button" data-browser-owner-action="view-messages">View Messages</button>',
-        '<button type="button" data-browser-owner-action="share">Share Bot Page</button>',
-      ].join('');
       viewport.innerHTML = '<section class="browser-empty-state"><h2>Viewport content</h2></section>';
       drawer.hidden = false;
       drawer.innerHTML = '<section class="browser-drawer-panel"><h2>Library</h2></section>';
@@ -158,7 +121,6 @@ test('Responsive Browser overlays stay within renderer viewport geometry', async
         };
       }
       return {
-        ownerToolbar: rect('[data-browser-owner-toolbar]'),
         viewport: rect('[data-browser-viewport]'),
         drawer: rect('[data-browser-drawer]'),
         inspector: rect('[data-browser-inspector]'),
@@ -166,10 +128,6 @@ test('Responsive Browser overlays stay within renderer viewport geometry', async
       };
     });
 
-    assert.ok(
-      geometry.ownerToolbar.bottom <= geometry.viewport.top + 1,
-      `owner toolbar should be above viewport: owner=${JSON.stringify(geometry.ownerToolbar)} viewport=${JSON.stringify(geometry.viewport)}`
-    );
     for (const panelName of ['drawer', 'inspector']) {
       const panel = geometry[panelName];
       assert.ok(
