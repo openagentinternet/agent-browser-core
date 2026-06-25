@@ -41,6 +41,76 @@ test('bot-page renderer falls back when avatar URL is unsafe', async () => {
   assert.doesNotMatch(html, /src=""/);
 });
 
+test('bot-page renderer wraps long document template text without horizontal overflow', async () => {
+  const longText = 'x'.repeat(1600);
+  const html = ui.renderResourceHtml({
+    uri: 'metaid://idq1wrapbot',
+    normalizedUri: 'metaid://idq1wrapbot',
+    resourceType: 'bot',
+    title: longText,
+    owner: { kind: 'bot', globalMetaId: longText, name: longText, verificationState: 'partial' },
+    renderer: { type: 'bot-page', contentType: 'application/json', templateId: 'document', data: {} },
+    actions: [{ id: longText, kind: 'copy', label: longText, enabled: true }],
+    sections: [
+      {
+        id: 'overview',
+        title: longText,
+        kind: 'generic-list',
+        items: [{ title: longText, description: longText }],
+      },
+    ],
+  });
+  const playwright = await import('playwright');
+  const browser = await playwright.chromium.launch();
+  let page;
+  try {
+    page = await browser.newPage({ viewport: { width: 520, height: 720 } });
+    await page.setContent(`
+      <style>${ui.BROWSER_PAGE_STYLES}</style>
+      <section class="browser-shell">
+        <main class="browser-viewport" data-browser-viewport>${html}</main>
+      </section>
+    `, { waitUntil: 'domcontentloaded' });
+
+    const metrics = await page.evaluate(() => {
+      const viewport = document.querySelector('[data-browser-viewport]');
+      const botPage = document.querySelector('.browser-bot-page');
+      const title = document.querySelector('.browser-bot-hero h2');
+      return {
+        documentClientWidth: document.documentElement.clientWidth,
+        documentScrollWidth: document.documentElement.scrollWidth,
+        viewportClientWidth: viewport ? viewport.clientWidth : 0,
+        viewportScrollWidth: viewport ? viewport.scrollWidth : 0,
+        pageClientWidth: botPage ? botPage.clientWidth : 0,
+        pageScrollWidth: botPage ? botPage.scrollWidth : 0,
+        titleClientWidth: title ? title.clientWidth : 0,
+        titleScrollWidth: title ? title.scrollWidth : 0,
+      };
+    });
+
+    assert.ok(metrics.titleClientWidth > 0, `missing bot page title: ${JSON.stringify(metrics)}`);
+    assert.ok(
+      metrics.titleScrollWidth <= metrics.titleClientWidth + 1,
+      `bot page title should wrap instead of horizontally scrolling: ${JSON.stringify(metrics)}`
+    );
+    assert.ok(
+      metrics.pageScrollWidth <= metrics.pageClientWidth + 1,
+      `bot page should not be widened by document template content: ${JSON.stringify(metrics)}`
+    );
+    assert.ok(
+      metrics.documentScrollWidth <= metrics.documentClientWidth + 1,
+      `document should not expose page-level horizontal overflow: ${JSON.stringify(metrics)}`
+    );
+    assert.ok(
+      metrics.viewportScrollWidth <= metrics.viewportClientWidth + 1,
+      `Browser viewport should not expose horizontal overflow: ${JSON.stringify(metrics)}`
+    );
+  } finally {
+    if (page) await page.close();
+    await browser.close();
+  }
+});
+
 test('html iframe renderer is sandboxed and rejects unsafe URLs', () => {
   const safe = ui.renderResourceHtml({
     uri: 'metaapp://pin',

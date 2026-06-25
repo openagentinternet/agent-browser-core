@@ -28,15 +28,16 @@ export const BROWSER_PAGE_STYLES = `
     .browser-inspector-list dd { margin: 0; overflow-wrap: anywhere; }
     .browser-viewport { min-height: 0; overflow: auto; padding: 18px; }
     .browser-status-strip { grid-row: 4; display: flex; gap: 8px; align-items: center; padding: 0 8px; border-top: 1px solid #d1d5db; background: #fff; }
-    .browser-bot-page, .browser-empty-state { max-width: 980px; margin: 0 auto; }
-    .browser-bot-hero { display: flex; gap: 12px; align-items: center; margin-bottom: 16px; }
+    .browser-bot-page, .browser-empty-state { width: min(100%, 980px); max-width: 100%; min-width: 0; margin: 0 auto; overflow-wrap: anywhere; word-break: break-word; }
+    .browser-bot-hero { display: flex; gap: 12px; align-items: center; min-width: 0; margin-bottom: 16px; }
+    .browser-bot-hero > div { min-width: 0; max-width: 100%; }
     .browser-bot-avatar { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: #e5e7eb; }
     .browser-action-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
-    .browser-action-row button { display: inline-flex; align-items: center; gap: 8px; border: 1px solid #d1d5db; background: #fff; padding: 6px 10px; }
-    .browser-resource-sections { display: grid; gap: 12px; }
-    .browser-resource-section { background: #fff; border: 1px solid #d1d5db; padding: 12px; }
-    .browser-resource-list { display: grid; gap: 8px; }
-    .browser-resource-list-item { border-top: 1px solid #e5e7eb; padding-top: 8px; }
+    .browser-action-row button { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; border: 1px solid #d1d5db; background: #fff; padding: 6px 10px; }
+    .browser-resource-sections { display: grid; gap: 12px; min-width: 0; }
+    .browser-resource-section { min-width: 0; background: #fff; border: 1px solid #d1d5db; padding: 12px; overflow-wrap: anywhere; word-break: break-word; }
+    .browser-resource-list { display: grid; gap: 8px; min-width: 0; }
+    .browser-resource-list-item { min-width: 0; border-top: 1px solid #e5e7eb; padding-top: 8px; }
     .browser-protocol-detail, .browser-pin-page { width: min(100%, 1380px); max-width: 100%; margin: 18px auto 36px; display: grid; gap: 18px; }
     .browser-pin-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 4px 2px 0; flex-wrap: wrap; }
     .browser-pin-page-copy { display: grid; gap: 10px; min-width: 0; }
