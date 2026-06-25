@@ -940,27 +940,34 @@ test('Browser name resolution settings save ENS fields globally', async () => {
   assert.equal(fetchCalls.includes('/api/browser/settings?actorId=worker'), false);
 });
 
-test('Browser template settings select the default Bot homepage template', async () => {
+test('Browser template settings show only the default Document template', async () => {
   const { context, elements, fetchCalls } = createBrowserContext();
 
   await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
 
+  // Compact List is intentionally hidden from the picker (its built-in rendering
+  // is not production-ready); only Document remains selectable, and it is the
+  // default. compact-list still resolves server-side, so it is absent here only
+  // from the Browser Settings UI list.
   assert.ok(Array.isArray(context.browserBotHomepageTemplates));
-  assert.equal(context.browserBotHomepageTemplates.map((template) => template.id).join(','), 'document,compact-list');
+  assert.equal(context.browserBotHomepageTemplates.map((template) => template.id).join(','), 'document');
 
   await context.handleBrowserMenuAction('templates');
 
   assert.equal(elements['[data-browser-modal-root]'].hidden, false);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /Document/);
-  assert.match(elements['[data-browser-modal-root]'].innerHTML, /Compact List/);
+  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, /Compact List/);
+  // Document is the default and is shown as selected in the picker.
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /aria-pressed="true"/);
   assert.equal(fetchCalls.at(-2), '/api/browser/settings');
   assert.equal(fetchCalls.at(-1), '/api/browser/cache?actorId=worker');
 
-  await context.selectBotHomepageTemplate('compact-list');
+  // Selecting Document persists it as the active template and renders the document shell.
+  await context.selectBotHomepageTemplate('document');
 
-  assert.equal(context.state.settingsData.browser.botHomepageTemplateId, 'compact-list');
-  assert.equal(context.state.current.renderer.templateId, 'compact-list');
-  assert.match(elements['[data-browser-viewport]'].innerHTML, /browser-bot-template-compact-list/);
+  assert.equal(context.state.settingsData.browser.botHomepageTemplateId, 'document');
+  assert.equal(context.state.current.renderer.templateId, 'document');
+  assert.match(elements['[data-browser-viewport]'].innerHTML, /browser-bot-template-document/);
   assert.equal(fetchCalls.includes('/api/browser/settings?actorId=worker'), false);
 });
 
