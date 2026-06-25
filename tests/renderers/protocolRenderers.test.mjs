@@ -233,6 +233,67 @@ test('Pin inspector renders JSON strings from plain text payloads as structured 
   assert.match(html, /browser-protocol-raw">\{\n  &quot;content&quot;: &quot;7\\n#美食工厂&quot;,\n  &quot;contentType&quot;: &quot;application\/json;utf-8&quot;/);
 });
 
+test('Pin inspector wraps long raw payload fields without horizontal overflow', async () => {
+  const rawPayload = JSON.stringify({
+    content: 'x'.repeat(1600),
+    contentType: 'application/json;utf-8',
+  });
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource('application/json;utf-8', rawPayload, {
+    rawPayload,
+  }));
+  const playwright = await import('playwright');
+  const browser = await playwright.chromium.launch();
+  let page;
+  try {
+    page = await browser.newPage({ viewport: { width: 520, height: 720 } });
+    await page.setContent(`
+      <style>
+        html, body { margin: 0; }
+        .browser-shell, .browser-shell * { box-sizing: border-box; }
+        .browser-viewport { width: 504px; overflow: auto; }
+      </style>
+      <section class="browser-shell"><main class="browser-viewport" data-browser-viewport>${html}</main></section>
+    `, { waitUntil: 'domcontentloaded' });
+
+    const metrics = await page.evaluate(() => {
+      const raw = document.querySelector('.browser-protocol-raw');
+      const pageRoot = document.querySelector('.browser-pin-page');
+      const viewport = document.querySelector('[data-browser-viewport]');
+      return {
+        documentClientWidth: document.documentElement.clientWidth,
+        documentScrollWidth: document.documentElement.scrollWidth,
+        pageClientWidth: pageRoot ? pageRoot.clientWidth : 0,
+        pageScrollWidth: pageRoot ? pageRoot.scrollWidth : 0,
+        viewportClientWidth: viewport ? viewport.clientWidth : 0,
+        viewportScrollWidth: viewport ? viewport.scrollWidth : 0,
+        rawClientWidth: raw ? raw.clientWidth : 0,
+        rawScrollWidth: raw ? raw.scrollWidth : 0,
+      };
+    });
+
+    assert.ok(metrics.rawClientWidth > 0, `missing raw payload block: ${JSON.stringify(metrics)}`);
+    assert.ok(
+      metrics.rawScrollWidth <= metrics.rawClientWidth + 1,
+      `raw payload should wrap instead of horizontally scrolling: ${JSON.stringify(metrics)}`
+    );
+    assert.ok(
+      metrics.pageScrollWidth <= metrics.pageClientWidth + 1,
+      `pin page should not be widened by raw payload content: ${JSON.stringify(metrics)}`
+    );
+    assert.ok(
+      metrics.documentScrollWidth <= metrics.documentClientWidth + 1,
+      `document should not expose page-level horizontal overflow: ${JSON.stringify(metrics)}`
+    );
+    assert.ok(
+      metrics.viewportScrollWidth <= metrics.viewportClientWidth + 1,
+      `Browser viewport should not expose horizontal overflow: ${JSON.stringify(metrics)}`
+    );
+  } finally {
+    if (page) await page.close();
+    await browser.close();
+  }
+});
+
 test('Pin inspector discovers related files from JSON-string payload sources', () => {
   const rawPayload = JSON.stringify({
     content: 'String payload source',

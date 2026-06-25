@@ -202,7 +202,7 @@ const PIN_INSPECTOR_PAGE_STYLE = `
       background: #eef3f9;
     }
     body:has(.browser-pin-page) .browser-viewport { padding: 18px 14px 36px; }
-    .browser-pin-page { width: min(1380px, calc(100vw - 28px)); max-width: none; margin: 18px auto 36px; display: grid; gap: 18px; }
+    .browser-pin-page { width: min(100%, 1380px); max-width: 100%; margin: 18px auto 36px; display: grid; gap: 18px; }
     .browser-pin-page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 4px 2px 0; flex-wrap: wrap; }
     .browser-pin-page-copy { display: grid; gap: 10px; min-width: 0; }
     .browser-pin-page-eyebrow { margin: 0; color: #6a778b; font-size: 12px; font-weight: 700; }
@@ -213,14 +213,14 @@ const PIN_INSPECTOR_PAGE_STYLE = `
     .browser-pin-page-actions button { min-height: 34px; border: 1px solid #cfd9e6; border-radius: 8px; background: #fff; color: #162132; padding: 7px 12px; font-size: 12px; font-weight: 700; }
     .browser-pin-page-actions button:first-child { background: #eaf1ff; border-color: #cfe0ff; color: #2e6fed; }
     .browser-pin-page-grid { display: grid; grid-template-columns: minmax(0, 1.58fr) minmax(300px, 320px); gap: 16px; align-items: start; }
-    .browser-pin-stack, .browser-pin-aside { display: grid; gap: 18px; align-content: start; }
-    .browser-pin-section { display: grid; gap: 12px; padding: 16px 18px; border: 1px solid #d9e1ed; border-radius: 14px; background: #fff; }
+    .browser-pin-stack, .browser-pin-aside { display: grid; gap: 18px; min-width: 0; align-content: start; }
+    .browser-pin-section { display: grid; gap: 12px; min-width: 0; padding: 16px 18px; border: 1px solid #d9e1ed; border-radius: 14px; background: #fff; }
     .browser-pin-section-head { display: grid; gap: 5px; }
     .browser-pin-section h3 { margin: 0; color: #141c29; font-size: 15px; }
     .browser-pin-section:first-child h3 { font-size: 18px; }
     .browser-pin-intro { margin: 0; color: #6a778b; font-size: 13px; line-height: 1.45; }
-    .browser-protocol-json, .browser-protocol-raw, .browser-pin-text { margin: 0; overflow: auto; padding: 16px; border-radius: 12px; background: #182235; color: #d7e3f0; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-    .browser-pin-json-doc { display: grid; gap: 12px; }
+    .browser-protocol-json, .browser-protocol-raw, .browser-pin-text { min-width: 0; max-width: 100%; margin: 0; overflow-x: hidden; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; padding: 16px; border-radius: 12px; background: #182235; color: #d7e3f0; font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+    .browser-pin-json-doc { display: grid; gap: 12px; min-width: 0; }
     .browser-pin-json-row { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 14px; align-items: start; }
     .browser-pin-json-key { color: #8b95a5; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-wrap: anywhere; }
     .browser-pin-json-value { min-width: 0; color: #162132; line-height: 1.55; overflow-wrap: anywhere; word-break: break-word; }
@@ -267,7 +267,7 @@ const PIN_INSPECTOR_PAGE_STYLE = `
     .browser-pin-download { display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 10px; border: 1px solid #cfe0ff; background: #eaf1ff; color: #2e6fed; font-size: 12px; font-weight: 700; white-space: nowrap; }
     .browser-pin-link-list { display: flex; flex-wrap: wrap; gap: 8px; }
     .browser-pin-link-pill { display: inline-flex; max-width: 100%; padding: 6px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #f8fafc; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
-    .browser-pin-raw-record { display: grid; gap: 10px; }
+    .browser-pin-raw-record { display: grid; gap: 10px; min-width: 0; }
     .browser-pin-raw-record summary { cursor: pointer; color: #334155; font-size: 13px; font-weight: 700; }
     .browser-pin-primary-action { cursor: pointer; min-height: 34px; border: 1px solid #2563eb; border-radius: 8px; background: #2563eb; color: #fff; padding: 7px 14px; font-size: 12px; font-weight: 700; }
     .browser-pin-primary-action:hover, .browser-pin-primary-action:focus { background: #1d4ed8; border-color: #1d4ed8; }
@@ -279,7 +279,7 @@ const PIN_INSPECTOR_PAGE_STYLE = `
     }
     @media (max-width: 720px) {
       body:has(.browser-pin-page) .browser-viewport { padding: 12px 8px 20px; }
-      .browser-pin-page { width: calc(100vw - 16px); margin: 12px auto 24px; gap: 14px; }
+      .browser-pin-page { width: 100%; margin: 12px auto 24px; gap: 14px; }
       .browser-pin-page-head { flex-direction: column; }
       .browser-pin-page-actions { width: 100%; }
       .browser-pin-page-actions button { width: 100%; }
