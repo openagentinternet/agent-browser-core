@@ -54,6 +54,16 @@ host support for local/public Browser previews.
   The inline client script (`app.ts`) contains regex literals with `$` (e.g. `replace(/\/+$/, '')`),
   which `replace` treats as special substitution patterns, silently truncating the emitted `<script>`
   and breaking all Browser UI (buttons/input/links stop responding with no console error).
+- Browser infrastructure URL defaults (`metasoP2PBaseUrl`, `metafileContentBaseUrl`,
+  `manApiBaseUrl`, `blockExplorerBaseUrl`) have a single source of truth in core:
+  `createDefaultBrowserConfig()` and the exported `DEFAULT_*` constants
+  (`DEFAULT_METASO_P2P_BASE_URL`, `DEFAULT_METAFILE_CONTENT_BASE_URL`, `DEFAULT_MANAPI_BASE_URL`,
+  `DEFAULT_BLOCK_EXPLORER_BASE_URL`). Host adapters MUST source these values from core (call
+  `createDefaultBrowserConfig()` as a base, or `createBrowserSettingsSnapshot()`), and MUST NOT
+  hardcode URL literals. Behavioral fields (`localMode`, `renderCustomBotPages`, `nameResolution`)
+  may be specialized per host; the four URL fields above may not. The test-harness conformance
+  check (`assertBrowserHostConformance`) asserts that a host's `getSettings()` `defaults` return
+  these four URL fields equal to core's defaults, so a drifted value fails integration.
 
 ## Commit and Merge Rules
 
