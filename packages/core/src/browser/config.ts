@@ -5,9 +5,9 @@ import {
 import { DEFAULT_METAFILE_CONTENT_BASE_URL } from './metafileContentUrl.js';
 import type { BrowserBaseConfig, BrowserConfigContainer } from './types.js';
 
-const DEFAULT_METASO_P2P_BASE_URL = 'https://so.metaid.io';
-const DEFAULT_MANAPI_BASE_URL = 'https://manapi.metaid.io';
-const DEFAULT_BLOCK_EXPLORER_BASE_URL = 'https://www.mvcscan.com/tx';
+export const DEFAULT_METASO_P2P_BASE_URL = 'https://so.metaid.io';
+export const DEFAULT_MANAPI_BASE_URL = 'https://manapi.metaid.io';
+export const DEFAULT_BLOCK_EXPLORER_BASE_URL = 'https://www.mvcscan.com/tx';
 const DEFAULT_ENS_TEXT_KEY = 'org.openagentinternet.uri';
 const DEFAULT_ENS_RPC_URLS = ['https://ethereum-rpc.publicnode.com'];
 
