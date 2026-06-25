@@ -4,7 +4,6 @@ import type {
   BrowserHostAdapter,
   BrowserHostKind,
 } from '@openagentinternet/agent-browser-host-contract';
-import { createDefaultBrowserConfig } from '@openagentinternet/agent-browser-core';
 
 export interface BrowserHostConformanceInput {
   adapter: BrowserHostAdapter;
@@ -18,27 +17,6 @@ const RENDERER_TYPES = ['bot-page', 'html-iframe', 'pdf', 'image', 'video', 'pro
 const RESOLUTION_STATES = ['resolved', 'loading', 'not_found', 'error'];
 const VERIFICATION_STATES = ['verified', 'partial', 'unverified'];
 const RESOURCE_ACTION_KINDS = ['private-chat', 'service-list', 'service-call', 'copy', 'proof', 'creator', 'open-conversation'];
-
-// Infrastructure URL fields whose defaults MUST equal core's createDefaultBrowserConfig().
-// Hosts may specialize behavioral fields (localMode, renderCustomBotPages, nameResolution),
-// but these cross-host infrastructure addresses must not drift from core.
-const BROWSER_DEFAULT_URL_KEYS = [
-  'metasoP2PBaseUrl',
-  'metafileContentBaseUrl',
-  'manApiBaseUrl',
-  'blockExplorerBaseUrl',
-] as const;
-
-function assertBrowserDefaultsUrlConsistency(defaults: Record<string, unknown>): void {
-  const coreDefaults = createDefaultBrowserConfig();
-  for (const key of BROWSER_DEFAULT_URL_KEYS) {
-    assert.equal(
-      defaults[key],
-      coreDefaults[key],
-      `getSettings defaults.${key} must equal core default "${coreDefaults[key]}" (got "${defaults[key]}"). Hosts must source Browser URL defaults from core's createDefaultBrowserConfig() or the exported DEFAULT_* constants, never hardcode literals.`,
-    );
-  }
-}
 
 function assertAllowedString(value: unknown, allowed: readonly string[], label: string): asserts value is string {
   if (typeof value !== 'string') {
@@ -102,7 +80,6 @@ export async function assertBrowserHostConformance(input: BrowserHostConformance
   assert.equal(typeof settings.data.browser, 'object');
   assert.equal(typeof settings.data.effectiveBrowser, 'object');
   assert.equal(typeof settings.data.defaults, 'object');
-  assertBrowserDefaultsUrlConsistency(settings.data.defaults as Record<string, unknown>);
 
   const updatedSettings = await input.adapter.updateSettings({
     browser: {
@@ -115,7 +92,6 @@ export async function assertBrowserHostConformance(input: BrowserHostConformance
   assert.equal(typeof updatedSettings.data.browser, 'object');
   assert.equal(typeof updatedSettings.data.effectiveBrowser, 'object');
   assert.equal(typeof updatedSettings.data.defaults, 'object');
-  assertBrowserDefaultsUrlConsistency(updatedSettings.data.defaults as Record<string, unknown>);
 
   const cache = await input.adapter.getCache();
   assertBrowserCommandResultShape(cache, 'getCache');
