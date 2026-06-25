@@ -82,11 +82,18 @@ function browserSafeTemplatePreviewImage(previewImage: string): string {
   return BROWSER_SAFE_TEMPLATE_PREVIEW_IMAGES[previewImage] ?? previewImage;
 }
 
+// Templates exposed for selection in the Browser Settings UI.
+// The compact-list template is intentionally hidden here: its built-in rendering
+// is not production-ready yet, so only Document is selectable (and is the
+// default). compact-list still ships in core (BOT_HOMEPAGE_TEMPLATES) and
+// remains resolvable/renderable server-side; only the UI picker hides it.
 export const BROWSER_BOT_HOMEPAGE_TEMPLATES: readonly BotHomepageTemplateDefinition[] =
-  BOT_HOMEPAGE_TEMPLATES.map((template) => ({
-    ...template,
-    previewImage: browserSafeTemplatePreviewImage(template.previewImage),
-  }));
+  BOT_HOMEPAGE_TEMPLATES
+    .filter((template) => template.id !== 'compact-list')
+    .map((template) => ({
+      ...template,
+      previewImage: browserSafeTemplatePreviewImage(template.previewImage),
+    }));
 
 export const BROWSER_BASE_URL_FIELDS: BrowserBaseUrlFieldDefinition[] = [
   {

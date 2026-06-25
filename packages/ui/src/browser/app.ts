@@ -4,6 +4,7 @@ import {
   BROWSER_MENU_SECTIONS,
   BROWSER_SETTINGS_TABS,
 } from './menuModel.js';
+import { BOT_HOMEPAGE_TEMPLATES } from '@openagentinternet/agent-browser-core';
 
 export interface BrowserPagePanelDefinition {
   title: string;
@@ -113,6 +114,7 @@ function buildBrowserPageScript(): string {
 var browserSettingsTabs = ${JSON.stringify(BROWSER_SETTINGS_TABS)};
 var browserBaseUrlFields = ${JSON.stringify(BROWSER_BASE_URL_FIELDS)};
 var browserBotHomepageTemplates = ${JSON.stringify(BROWSER_BOT_HOMEPAGE_TEMPLATES)};
+var botHomepageTemplateIds = ${JSON.stringify(BOT_HOMEPAGE_TEMPLATES.map((template) => template.id))};
 var CUSTOM_BOT_PAGE_HELP = 'When enabled, Bot Pages can render the custom MetaApp or Metafile declared on /info/homepage. When disabled, Browser always uses the selected built-in template.';
 var OFFICIAL_RECOMMENDATIONS = [
   { uri: 'metaapp://agent-browser', title: 'Agent Browser', kind: 'official' },
@@ -945,7 +947,7 @@ function renderBrowserSettingsModal() {
     : '';
   elements.modalRoot.hidden = false;
   elements.modalRoot.innerHTML = '<section class="browser-modal-panel browser-settings-panel" role="dialog" aria-modal="true">' +
-    '<header><h2>Browser Settings</h2><button type="button" data-browser-modal-close aria-label="Close">Close</button></header>' +
+    '<header><h2>Browser Settings</h2><button type="button" class="browser-icon-button" data-browser-modal-close aria-label="Close settings">' + iconHtml('close') + '</button></header>' +
     '<div class="browser-modal-body">' + renderSettingsTabs() + body + '</div>' +
     '<footer><button type="button" data-browser-modal-close>Close</button>' + saveButton + '</footer></section>';
 }
@@ -963,7 +965,7 @@ async function openBrowserSettings(tabId) {
   if (elements.modalRoot) {
     elements.modalRoot.hidden = false;
     elements.modalRoot.innerHTML = '<section class="browser-modal-panel browser-settings-panel" role="dialog" aria-modal="true">' +
-      '<header><h2>Browser Settings</h2><button type="button" data-browser-modal-close aria-label="Close">Close</button></header>' +
+      '<header><h2>Browser Settings</h2><button type="button" class="browser-icon-button" data-browser-modal-close aria-label="Close settings">' + iconHtml('close') + '</button></header>' +
       '<div class="browser-modal-body"><p class="browser-settings-note">Loading...</p></div></section>';
   }
   try {
@@ -973,7 +975,7 @@ async function openBrowserSettings(tabId) {
     setStatus('error', error && error.message ? error.message : 'Settings failed.');
     if (elements.modalRoot) {
       elements.modalRoot.innerHTML = '<section class="browser-modal-panel browser-settings-panel" role="dialog" aria-modal="true">' +
-        '<header><h2>Browser Settings</h2><button type="button" data-browser-modal-close aria-label="Close">Close</button></header>' +
+        '<header><h2>Browser Settings</h2><button type="button" class="browser-icon-button" data-browser-modal-close aria-label="Close settings">' + iconHtml('close') + '</button></header>' +
         '<div class="browser-modal-body"><p class="browser-settings-error">' + escapeHtml(state.error) + '</p></div></section>';
     }
   }
@@ -2297,9 +2299,20 @@ function renderBotHomepageCompactListTemplate(payload, current) {
     '</article>';
 }
 
+function normalizeRenderBotHomepageTemplateId(templateId) {
+  // Rendering resolves against the full set of core templates (compact-list
+  // still renders server-side even though it is hidden from the picker), so a
+  // resource authored with templateId 'compact-list' keeps rendering compact.
+  var targetId = textValue(templateId) || 'document';
+  for (var index = 0; index < botHomepageTemplateIds.length; index += 1) {
+    if (textValue(botHomepageTemplateIds[index]) === targetId) return targetId;
+  }
+  return 'document';
+}
+
 function renderBotPage(current) {
   var renderer = current.renderer || {};
-  var templateId = normalizeBotHomepageTemplateId(renderer.templateId || selectedBotHomepageTemplateId());
+  var templateId = normalizeRenderBotHomepageTemplateId(renderer.templateId || selectedBotHomepageTemplateId());
   var payload = normalizeBotHomepagePayload(current);
   if (templateId === 'compact-list') {
     return renderBotHomepageCompactListTemplate(payload, current);
