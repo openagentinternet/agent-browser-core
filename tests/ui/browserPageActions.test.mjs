@@ -41,6 +41,7 @@ function elements() {
     '[data-browser-status-txid]': new FakeElement(),
     '[data-browser-drawer]': new FakeElement(),
     '[data-browser-inspector]': new FakeElement(),
+    '[data-browser-owner-panel]': new FakeElement(),
     '[data-browser-modal-root]': new FakeElement(),
   };
 }
@@ -456,3 +457,113 @@ test('sandboxed iframe renderer does not expose side-effect helpers to content',
   assert.doesNotMatch(html, /api\/chat\/private/);
   assert.doesNotMatch(html, /api\/services\/call/);
 });
+
+function standaloneRuntime() {
+  return {
+    host: { kind: 'standalone', name: 'Standalone Browser', localMode: true },
+    actors: [{
+      id: 'wallet',
+      label: 'Standalone Wallet',
+      kind: 'wallet',
+      globalMetaId: 'idq1wallet',
+      wallet: 'metaidwallet',
+      isDefault: true,
+      capabilities: ['template-settings'],
+    }],
+    defaultActor: {
+      id: 'wallet',
+      label: 'Standalone Wallet',
+      kind: 'wallet',
+      globalMetaId: 'idq1wallet',
+      wallet: 'metaidwallet',
+      isDefault: true,
+      capabilities: ['template-settings'],
+    },
+    defaultUri: 'metaid://idq1target',
+    features: {
+      privateChat: false,
+      serviceCall: false,
+      cacheManagement: true,
+      templateSettings: true,
+      walletLogin: true,
+    },
+    labels: {},
+  };
+}
+
+for (const action of [
+  { id: 'message', kind: 'private-chat' },
+  { id: 'conversation', kind: 'open-conversation', payload: { conversationUri: 'map://simplemsg/conversation?peer=idq1target', peerGlobalMetaId: 'idq1target' } },
+  { id: 'call', kind: 'service-call', serviceId: 'service-current-pin' },
+]) {
+  test(`standalone runtime blocks ${action.kind} write action and opens unsupported modal`, async () => {
+    const { context, nodes, requests } = createContext();
+    context.state.runtime = standaloneRuntime();
+
+    await context.handleTrustedAction(action);
+
+    assert.equal(requests.length, 0, `${action.kind} must not POST in standalone`);
+    assert.equal(nodes['[data-browser-modal-root]'].hidden, false, `${action.kind} must open a modal`);
+    assert.match(nodes['[data-browser-modal-root]'].innerHTML, /standalone-unsupported/);
+  });
+}
+
+test('standalone unsupported modal closes on confirm without posting', async () => {
+  const { context, nodes, requests } = createContext();
+  context.state.runtime = standaloneRuntime();
+  await context.initialize();
+
+  await context.handleTrustedAction({ id: 'message', kind: 'private-chat' });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+
+  nodes['[data-browser-modal-root]'].listeners.get('click')({
+    preventDefault() {},
+    target: browserActionTarget({ 'data-browser-modal-action': 'standalone-unsupported' }),
+  });
+
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, true);
+  assert.equal(requests.length, 0);
+});
+
+test('bot page header omits the Follow button across hosts', () => {
+  for (const hostKind of ['oac', 'idbots', 'standalone']) {
+    const { context } = createContext();
+    context.state.runtime = { ...standaloneRuntime(), host: { kind: hostKind, name: hostKind, localMode: true } };
+    context.state.current = {
+      uri: 'metaid://idq1target',
+      normalizedUri: 'metaid://idq1target',
+      resourceType: 'bot',
+      title: 'Target Bot',
+      owner: { kind: 'bot', globalMetaId: 'idq1target', name: 'Target Bot', verificationState: 'partial' },
+      renderer: { type: 'bot-page', contentType: 'application/vnd.oac.bot-homepage+json', data: {} },
+      status: { state: 'resolved', verificationState: 'partial', message: '' },
+      source: { resolver: 'test' },
+      actions: [{ id: 'message', label: 'Message', kind: 'private-chat', enabled: true }],
+    };
+
+    const html = context.renderRenderer(context.state.current);
+    assert.doesNotMatch(html, /data-browser-follow/, `Follow button must not render in ${hostKind} host`);
+    assert.match(html, /data-browser-action="private-chat"/, `Message button must still render in ${hostKind} host`);
+  }
+});
+
+test('owner panel omits the Follow menu item', () => {
+  const { context, nodes } = createContext();
+  context.state.current = {
+    uri: 'metaid://idq1target',
+    normalizedUri: 'metaid://idq1target',
+    resourceType: 'bot',
+    title: 'Target Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1target', name: 'Target Bot', avatar: '' },
+    renderer: { type: 'bot-page', contentType: 'application/vnd.oac.bot-homepage+json', data: {} },
+    status: { state: 'resolved', verificationState: 'partial', message: '' },
+    source: { resolver: 'test' },
+    actions: [],
+  };
+
+  context.renderOwnerPanel();
+  const html = nodes['[data-browser-owner-panel]'].innerHTML;
+  assert.doesNotMatch(html, /data-browser-owner-panel-action="follow"/);
+  assert.match(html, /data-browser-owner-panel-action="visit-home"/);
+});
+

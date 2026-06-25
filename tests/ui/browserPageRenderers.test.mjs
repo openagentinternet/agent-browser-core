@@ -176,8 +176,8 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.doesNotMatch(html, /data-browser-action="service-list"/);
   assert.doesNotMatch(html, /data-browser-action="open-conversation"/);
   assert.doesNotMatch(html, /data-browser-action="copy"/);
-  assert.match(html, /data-browser-follow/);
-  assert.match(html, /<span>Follow<\/span>/);
+  assert.doesNotMatch(html, /data-browser-follow/);
+  assert.doesNotMatch(html, /<span>Follow<\/span>/);
   assert.match(html, new RegExp(`href="pin://${servicePinId}"`));
   assert.doesNotMatch(html, new RegExp(`href="map://simplebuzz/pin/${buzzPinId}"`));
   assert.match(html, /https:\/\/file\.metaid\.io\/metafile-indexer\/content\/avatar-pin/);
