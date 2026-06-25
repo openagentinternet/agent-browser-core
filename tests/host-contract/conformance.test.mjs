@@ -6,6 +6,7 @@ import {
   browserSuccess,
   browserWaiting,
 } from '../../packages/host-contract/dist/index.js';
+import { createDefaultBrowserConfig } from '../../packages/core/dist/index.js';
 import { assertBrowserHostConformance } from '../../packages/test-harness/dist/index.js';
 
 function createResolveResult(uri, overrides = {}) {
@@ -58,7 +59,7 @@ function createConformantAdapter(overrides = {}) {
       return browserSuccess({
         browser: {},
         effectiveBrowser: {},
-        defaults: {},
+        defaults: { ...createDefaultBrowserConfig() },
       });
     },
     async updateSettings(input) {
@@ -66,7 +67,7 @@ function createConformantAdapter(overrides = {}) {
       return browserSuccess({
         browser: input.browser ?? {},
         effectiveBrowser: input.browser ?? {},
-        defaults: {},
+        defaults: { ...createDefaultBrowserConfig() },
       });
     },
     async getCache() {
@@ -258,4 +259,34 @@ test('host conformance accepts protocol resources and open-conversation actions'
     expectedHostKind: 'standalone',
     sampleUri: 'map://simplebuzz/pin/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
   });
+});
+
+test('host conformance rejects settings defaults with drifted metafileContentBaseUrl', async () => {
+  const driftedDefaults = { ...createDefaultBrowserConfig(), metafileContentBaseUrl: 'https://so.metaid.io/content' };
+  const adapter = createConformantAdapter({
+    async getSettings() {
+      return browserSuccess({
+        browser: {},
+        effectiveBrowser: {},
+        defaults: driftedDefaults,
+      });
+    },
+    async updateSettings(input) {
+      assert.equal(input.browser.botHomepageTemplateId, 'document');
+      return browserSuccess({
+        browser: input.browser ?? {},
+        effectiveBrowser: input.browser ?? {},
+        defaults: driftedDefaults,
+      });
+    },
+  });
+
+  await assert.rejects(
+    () => assertBrowserHostConformance({
+      adapter,
+      expectedHostKind: 'standalone',
+      sampleUri: 'metaid://idq1fake',
+    }),
+    /defaults\.metafileContentBaseUrl must equal core default/,
+  );
 });

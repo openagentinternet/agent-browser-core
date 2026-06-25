@@ -6,7 +6,8 @@
     "tsBuildInfoFile": "dist/.tsbuildinfo"
   },
   "references": [
-    { "path": "../host-contract" }
+    { "path": "../host-contract" },
+    { "path": "../core" }
   ],
   "include": [
     "src/**/*.ts"
