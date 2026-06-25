@@ -143,6 +143,7 @@ var browserLaunchCopy = {
     'ownerPanel.copyMetaId': '复制 GlobalMetaId',
     'modal.close': '关闭',
     'modal.cancel': '取消',
+    'modal.ok': '确定',
     'modal.usingActorTitle': '选择当前 Bot',
     'wallet.connect': '连接钱包',
     'wallet.installTitle': '安装钱包',
@@ -158,7 +159,9 @@ var browserLaunchCopy = {
     'welcome.title': 'Agent Internet',
     'welcome.subtitle': '在地址栏输入 metaid:// URI 即可访问',
     'welcome.promptPlaceholder': 'metaid://',
-    'welcome.gridHeading': '书签 / 最近访问'
+    'welcome.gridHeading': '书签 / 最近访问',
+    'status.standaloneUnsupported': '网页版暂时不支持此功能',
+    'standaloneUnsupported.title': '暂不支持'
   }
 };
 
@@ -468,11 +471,6 @@ function actionIconName(kind) {
   return 'chevronRight';
 }
 
-function renderBotPageFollowButton() {
-  return '<button type="button" data-browser-follow>' +
-    iconHtml('follow') + '<span>Follow</span></button>';
-}
-
 function isBotPageHeaderAction(action) {
   var kind = textValue(action && action.kind);
   return kind !== 'open-conversation' &&
@@ -690,7 +688,6 @@ function renderOwnerPanel() {
   var avatar = textValue(owner && owner.avatar);
   var visitHomeText = browserText('ownerPanel.visitHome', 'Visit home');
   var sendMessageText = browserText('ownerPanel.sendMessage', 'Send message');
-  var followText = browserText('ownerPanel.follow', 'Follow this Bot');
   var copyMetaTitle = browserText('ownerPanel.copyMetaId', 'Copy GlobalMetaId');
   elements.ownerPanel.innerHTML =
     '<div class="browser-owner-panel-head">' +
@@ -707,9 +704,6 @@ function renderOwnerPanel() {
       '</button>' +
       '<button type="button" role="menuitem" class="browser-owner-panel-item" data-browser-owner-panel-action="send-message" disabled>' +
         iconHtml('message') + '<span>' + escapeHtml(sendMessageText) + '</span>' +
-      '</button>' +
-      '<button type="button" role="menuitem" class="browser-owner-panel-item" data-browser-owner-panel-action="follow" disabled>' +
-        iconHtml('star') + '<span>' + escapeHtml(followText) + '</span>' +
       '</button>' +
     '</div>';
 }
@@ -1196,6 +1190,18 @@ function isStandaloneWalletRuntime() {
     state.runtime.host &&
     state.runtime.host.kind === 'standalone' &&
     runtimeFeatures().walletLogin === true);
+}
+
+function isStandaloneHostRuntime() {
+  return !!(state.runtime &&
+    state.runtime.host &&
+    state.runtime.host.kind === 'standalone');
+}
+
+function isStandaloneUnsupportedActionKind(kind) {
+  return kind === 'private-chat' ||
+    kind === 'open-conversation' ||
+    kind === 'service-call';
 }
 
 function isConnectedWalletActor(actor) {
@@ -1892,7 +1898,7 @@ function closeInspector() {
   syncPanelState();
 }
 
-function renderActionButtons(actions, options) {
+function renderActionButtons(actions) {
   var buttons = Array.isArray(actions) ? actions.map(function (action) {
     var kind = textValue(action && action.kind);
     var label = textValue(action && action.label) || kind || 'Action';
@@ -1901,16 +1907,13 @@ function renderActionButtons(actions, options) {
       actionPayloadAttribute(action) + disabled + '>' +
       iconHtml(actionIconName(kind)) + '<span>' + escapeHtml(label) + '</span></button>';
   }) : [];
-  if (options && options.includeFollow) {
-    buttons.push(renderBotPageFollowButton());
-  }
   if (buttons.length === 0) return '';
   return '<div class="browser-action-row">' + buttons.join('') + '</div>';
 }
 
 function renderBotPageActionButtons(actions) {
   var visibleActions = Array.isArray(actions) ? actions.filter(isBotPageHeaderAction) : [];
-  return renderActionButtons(visibleActions, { includeFollow: true });
+  return renderActionButtons(visibleActions);
 }
 
 function objectValue(value) {
@@ -2612,6 +2615,15 @@ function openCreatorFromChip() {
   return navigateTo(creatorUri);
 }
 
+function openStandaloneUnsupportedModal() {
+  renderModal(
+    browserText('standaloneUnsupported.title', 'Not supported'),
+    '<p>' + escapeHtml(browserText('status.standaloneUnsupported', 'This feature is not supported in the web version.')) + '</p>',
+    browserText('modal.ok', 'OK'),
+    'standalone-unsupported'
+  );
+}
+
 function openPrivateChatModal() {
   if (!state.current || !state.current.owner || !state.current.owner.globalMetaId) {
     setStatus('error', 'Target Bot is missing.');
@@ -2747,6 +2759,10 @@ async function confirmServiceCall(userTaskText) {
 async function handleTrustedAction(action) {
   var kind = textValue(action && action.kind);
   if (kind === 'copy') return copyUri(action);
+  if (isStandaloneHostRuntime() && isStandaloneUnsupportedActionKind(kind)) {
+    openStandaloneUnsupportedModal();
+    return null;
+  }
   if (kind === 'private-chat') return openPrivateChatModal(action);
   if (kind === 'open-conversation') {
     var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
@@ -3844,6 +3860,10 @@ async function initialize() {
           removeBookmark(removalUri);
           showToast(browserText('bookmark.removed', 'Bookmark removed'));
         }
+        closeModal();
+        return;
+      }
+      if (action === 'standalone-unsupported') {
         closeModal();
       }
     });
