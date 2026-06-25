@@ -478,6 +478,8 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   }
   const PIN_INSPECTOR_MEDIA_KEYS = ['images', 'image', 'imageUrls', 'attachments', 'files', 'media'];
   const PIN_INSPECTOR_IMAGE_MEDIA_KEYS = new Set(['images', 'image', 'imageUrls']);
+  const PIN_INSPECTOR_PIN_ID_RE = /(^|[^0-9a-z])([0-9a-f]{64}i[0-9]+)(?=$|[^0-9a-z])/gi;
+  const PIN_INSPECTOR_EXACT_PIN_ID_RE = /^(?:pin:\\/\\/)?([0-9a-f]{64}i[0-9]+)(?:[/?#].*)?$/i;
   function pinInspectorJsonBlock(value, className) {
     return '<pre class="' + escapeHtml(className) + '">' + escapeHtml(JSON.stringify(value, null, 2)) + '</pre>';
   }
@@ -491,6 +493,31 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       if (body.length > 28) return prefix + body.slice(0, 10) + '...' + body.slice(-10);
     }
     return normalized.slice(0, 18) + '...' + normalized.slice(-14);
+  }
+  function pinInspectorNormalizePinId(value) {
+    const match = textValue(value).match(PIN_INSPECTOR_EXACT_PIN_ID_RE);
+    return match ? match[1].toLowerCase() : '';
+  }
+  function pinInspectorCurrentPinIds(resource) {
+    const pin = pinInspectorPin(resource);
+    const record = pinInspectorRawPinRecord(resource);
+    const version = pinInspectorVersion(resource);
+    const ids = new Set();
+    [
+      resource && resource.uri,
+      resource && resource.normalizedUri,
+      pin.pinId,
+      pin.id,
+      record.pinId,
+      record.id,
+      version.requestedPinId,
+      version.resolvedPinId,
+      version.rootPinId,
+    ].forEach((value) => {
+      const pinId = pinInspectorNormalizePinId(value);
+      if (pinId) ids.add(pinId);
+    });
+    return ids;
   }
   function pinInspectorReferenceHtml(value, label, title, extraAttributes, className) {
     const href = textValue(value);
@@ -792,8 +819,20 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     const code = char ? char.charCodeAt(0) : 0;
     return code === 32 || code === 9 || code === 10 || code === 13 || char === '"' || char === "'" || char === '<' || char === '>' || char === '(' || char === ')' || char === '[' || char === ']' || char === '{' || char === '}';
   }
-  function pinInspectorCollectBrowserUris(value, output, seen, includeExternal) {
+  function pinInspectorCollectBarePinIdUris(value, output, ignoredPinIds) {
+    PIN_INSPECTOR_PIN_ID_RE.lastIndex = 0;
+    let match;
+    while ((match = PIN_INSPECTOR_PIN_ID_RE.exec(value)) !== null) {
+      const pinId = match[2].toLowerCase();
+      const pinIdStart = match.index + match[1].length;
+      if (value.slice(Math.max(0, pinIdStart - 3), pinIdStart) === '://') continue;
+      if (ignoredPinIds && ignoredPinIds.has(pinId)) continue;
+      output.add('pin://' + pinId);
+    }
+  }
+  function pinInspectorCollectBrowserUris(value, output, seen, includeExternal, ignoredPinIds) {
     seen = seen || new WeakSet();
+    ignoredPinIds = ignoredPinIds || new Set();
     if (typeof value === 'string') {
       const prefixes = ['metaid://', 'metaapp://', 'metafile://', 'map://', 'pin://'];
       if (includeExternal) {
@@ -815,11 +854,12 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
           start = end;
         }
       });
+      pinInspectorCollectBarePinIdUris(value, output, ignoredPinIds);
       return;
     }
     if (Array.isArray(value)) {
       value.forEach((item) => {
-        pinInspectorCollectBrowserUris(item, output, seen, includeExternal);
+        pinInspectorCollectBrowserUris(item, output, seen, includeExternal, ignoredPinIds);
       });
       return;
     }
@@ -827,7 +867,7 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     if (seen.has(value)) return;
     seen.add(value);
     Object.keys(value).forEach((key) => {
-      pinInspectorCollectBrowserUris(value[key], output, seen, includeExternal);
+      pinInspectorCollectBrowserUris(value[key], output, seen, includeExternal, ignoredPinIds);
     });
   }
   function pinInspectorIsDownloadableMediaReference(reference) {
@@ -912,7 +952,7 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       ? jsonPayload
       : payload;
     const uris = new Set();
-    pinInspectorCollectBrowserUris(source, uris);
+    pinInspectorCollectBrowserUris(source, uris, new WeakSet(), false, pinInspectorCurrentPinIds(resource));
     if (!uris.size) {
       return '<p>No related Browser links found.</p>';
     }

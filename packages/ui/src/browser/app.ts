@@ -2840,6 +2840,8 @@ var PIN_INSPECTOR_VIDEO_MEDIA_KEYS = { videos: true, video: true, videoUrls: tru
 var PIN_INSPECTOR_AUDIO_MEDIA_KEYS = { audios: true, audio: true, audioUrls: true, audioFiles: true };
 var PIN_INSPECTOR_VIDEO_EXTENSION_RE = /\.(mp4|webm|mov|m4v|ogv|avi|mkv|3gp|flv|wmv)(?:[?#].*)?$/i;
 var PIN_INSPECTOR_AUDIO_EXTENSION_RE = /\.(mp3|aac|wav|flac|ogg|oga|wma|m4a|opus)(?:[?#].*)?$/i;
+var PIN_INSPECTOR_PIN_ID_RE = /(^|[^0-9a-z])([0-9a-f]{64}i[0-9]+)(?=$|[^0-9a-z])/gi;
+var PIN_INSPECTOR_EXACT_PIN_ID_RE = /^(?:pin:\\/\\/)?([0-9a-f]{64}i[0-9]+)(?:[/?#].*)?$/i;
 var PIN_INSPECTOR_GLOBAL_META_ID_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 var PIN_INSPECTOR_GLOBAL_META_ID_CHECKSUM_LENGTH = 6;
 var PIN_INSPECTOR_GLOBAL_META_ID_VERSION_CHARS = { q: true, p: true, z: true, r: true, y: true, t: true };
@@ -2866,6 +2868,33 @@ function pinInspectorShortReference(value) {
     if (body.length > 28) return prefix + body.slice(0, 10) + '...' + body.slice(-10);
   }
   return normalized.slice(0, 18) + '...' + normalized.slice(-14);
+}
+
+function pinInspectorNormalizePinId(value) {
+  var match = textValue(value).match(PIN_INSPECTOR_EXACT_PIN_ID_RE);
+  return match ? match[1].toLowerCase() : '';
+}
+
+function pinInspectorCurrentPinIds(current) {
+  var pin = pinInspectorPin(current);
+  var record = pinInspectorRawPinRecord(current);
+  var version = pinInspectorVersion(current);
+  var ids = new Set();
+  [
+    current && current.uri,
+    current && current.normalizedUri,
+    pin.pinId,
+    pin.id,
+    record.pinId,
+    record.id,
+    version.requestedPinId,
+    version.resolvedPinId,
+    version.rootPinId
+  ].forEach(function(value) {
+    var pinId = pinInspectorNormalizePinId(value);
+    if (pinId) ids.add(pinId);
+  });
+  return ids;
 }
 
 function pinInspectorGlobalMetaIdPolymod(values) {
@@ -3443,8 +3472,21 @@ function pinInspectorIsBrowserUriTerminator(char) {
   return code === 32 || code === 9 || code === 10 || code === 13 || char === '"' || char === "'" || char === '<' || char === '>' || char === '(' || char === ')' || char === '[' || char === ']' || char === '{' || char === '}';
 }
 
-function pinInspectorCollectBrowserUris(value, output, seen, includeExternal) {
+function pinInspectorCollectBarePinIdUris(value, output, ignoredPinIds) {
+  var match;
+  PIN_INSPECTOR_PIN_ID_RE.lastIndex = 0;
+  while ((match = PIN_INSPECTOR_PIN_ID_RE.exec(value)) !== null) {
+    var pinId = match[2].toLowerCase();
+    var pinIdStart = match.index + match[1].length;
+    if (value.slice(Math.max(0, pinIdStart - 3), pinIdStart) === '://') continue;
+    if (ignoredPinIds && ignoredPinIds.has(pinId)) continue;
+    output.add('pin://' + pinId);
+  }
+}
+
+function pinInspectorCollectBrowserUris(value, output, seen, includeExternal, ignoredPinIds) {
   seen = seen || new WeakSet();
+  ignoredPinIds = ignoredPinIds || new Set();
   if (typeof value === 'string') {
     var prefixes = ['metaid://', 'metaapp://', 'metafile://', 'map://', 'pin://'];
     if (includeExternal) {
@@ -3466,11 +3508,12 @@ function pinInspectorCollectBrowserUris(value, output, seen, includeExternal) {
         start = end;
       }
     });
+    pinInspectorCollectBarePinIdUris(value, output, ignoredPinIds);
     return;
   }
   if (Array.isArray(value)) {
     value.forEach(function(item) {
-      pinInspectorCollectBrowserUris(item, output, seen, includeExternal);
+      pinInspectorCollectBrowserUris(item, output, seen, includeExternal, ignoredPinIds);
     });
     return;
   }
@@ -3478,7 +3521,7 @@ function pinInspectorCollectBrowserUris(value, output, seen, includeExternal) {
   if (seen.has(value)) return;
   seen.add(value);
   Object.keys(value).forEach(function(key) {
-    pinInspectorCollectBrowserUris(value[key], output, seen, includeExternal);
+    pinInspectorCollectBrowserUris(value[key], output, seen, includeExternal, ignoredPinIds);
   });
 }
 
@@ -3582,7 +3625,7 @@ function pinInspectorRenderRelatedLinks(current) {
     ? jsonPayload
     : payload;
   var uris = new Set();
-  pinInspectorCollectBrowserUris(source, uris);
+  pinInspectorCollectBrowserUris(source, uris, new WeakSet(), false, pinInspectorCurrentPinIds(current));
   if (!uris.size) {
     return '<p>No related Browser links found.</p>';
   }

@@ -7,6 +7,10 @@ const genesisTxid = 'b'.repeat(64);
 const creatorGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
 const peerGlobalMetaId = 'idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz';
 const secondPeerGlobalMetaId = 'idq1zfazvxaq69uw6txe3ewce30ewyhy9a7mzykgv0';
+const currentRequestedPinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+const currentResolvedPinId = '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+const relatedMetaAppPinId = 'c67c6dfac211747156757f4bbdb710df1c27e680719c156aaea21f858a1cc2cei0';
+const relatedBarePinId = 'fd7603131166e30663981864c0223351deb1336b6eb33a0396237d5847fa504ai9';
 
 function protocolResource(rendererId, payload, overrides = {}) {
   return {
@@ -245,6 +249,26 @@ test('Pin inspector renders related entities from creator and payload Global Met
   assert.match(html, /idq14hmv\.\.\.zwg9xz/);
   assert.equal((html.match(/class="browser-pin-entity-card"/g) || []).length, 3);
   assert.doesNotMatch(html, /href="metaid:\/\/idq1fixturebot"/);
+});
+
+test('Pin inspector renders metaapp links and bare non-current pin IDs as related links', () => {
+  const payload = [
+    `MetaApp: metaapp://${relatedMetaAppPinId}`,
+    `Reference pin: ${relatedBarePinId}`,
+    `Current requested pin should not self-link: ${currentRequestedPinId}`,
+    `Current resolved pin should not self-link: ${currentResolvedPinId}`,
+  ].join('\n');
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource('text/plain;utf-8', payload, {
+    rawPayload: payload,
+  }));
+
+  assert.match(html, /<h3>Related Links<\/h3>/);
+  assert.match(html, new RegExp(`href="metaapp://${relatedMetaAppPinId}" data-browser-map-link`));
+  assert.match(html, new RegExp(`metaapp://${relatedMetaAppPinId.slice(0, 10)}\\.\\.\\.${relatedMetaAppPinId.slice(-10)}`));
+  assert.match(html, new RegExp(`href="pin://${relatedBarePinId}" data-browser-map-link`));
+  assert.match(html, new RegExp(`pin://${relatedBarePinId.slice(0, 10)}\\.\\.\\.${relatedBarePinId.slice(-10)}`));
+  assert.doesNotMatch(html, new RegExp(`href="pin://${currentRequestedPinId}"`));
+  assert.doesNotMatch(html, new RegExp(`href="pin://${currentResolvedPinId}"`));
 });
 
 test('Pin inspector shows the pin update timestamp instead of "latest effective version" when a timestamp is present', () => {

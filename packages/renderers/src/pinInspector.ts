@@ -12,6 +12,8 @@ const VIDEO_EXTENSION_PATTERN = /\.(mp4|webm|mov|m4v|ogv|avi|mkv|3gp|flv|wmv)(?:
 const AUDIO_EXTENSION_PATTERN = /\.(mp3|aac|wav|flac|ogg|oga|wma|m4a|opus)(?:[?#].*)?$/iu;
 const VIDEO_PATH_PATTERN = /\/video\//iu;
 const AUDIO_PATH_PATTERN = /\/audio\//iu;
+const PIN_ID_PATTERN = /(^|[^0-9a-z])([0-9a-f]{64}i[0-9]+)(?=$|[^0-9a-z])/giu;
+const EXACT_PIN_ID_PATTERN = /^(?:pin:\/\/)?([0-9a-f]{64}i[0-9]+)(?:[/?#].*)?$/iu;
 const GLOBAL_META_ID_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
 const GLOBAL_META_ID_CHECKSUM_LENGTH = 6;
 const GLOBAL_META_ID_VERSION_CHARS = new Set(['q', 'p', 'z', 'r', 'y', 't']);
@@ -78,6 +80,34 @@ function shortReference(value: string): string {
     if (body.length > 28) return `${prefix}${body.slice(0, 10)}...${body.slice(-10)}`;
   }
   return `${normalized.slice(0, 18)}...${normalized.slice(-14)}`;
+}
+
+function normalizePinId(value: unknown): string {
+  const normalized = text(value);
+  const match = normalized.match(EXACT_PIN_ID_PATTERN);
+  return match ? match[1].toLowerCase() : '';
+}
+
+function currentPinIds(resource: BrowserResourceEnvelope): Set<string> {
+  const pin = pinValue(resource);
+  const recordValue = rawPinRecord(resource);
+  const version = versionValue(resource);
+  const ids = new Set<string>();
+  [
+    resource.uri,
+    resource.normalizedUri,
+    pin.pinId,
+    pin.id,
+    recordValue.pinId,
+    recordValue.id,
+    version.requestedPinId,
+    version.resolvedPinId,
+    version.rootPinId,
+  ].forEach((value) => {
+    const pinId = normalizePinId(value);
+    if (pinId) ids.add(pinId);
+  });
+  return ids;
 }
 
 function globalMetaIdPolymod(values: number[]): number {
@@ -619,7 +649,25 @@ function mediaReference(value: unknown, sourceKey = ''): PinMediaItem | null {
   return null;
 }
 
-function collectBrowserUris(value: unknown, output: Set<string>, seen = new WeakSet<object>(), includeExternal = false): void {
+function collectBarePinIdUris(value: string, output: Set<string>, ignoredPinIds: Set<string>): void {
+  PIN_ID_PATTERN.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = PIN_ID_PATTERN.exec(value)) !== null) {
+    const pinId = match[2].toLowerCase();
+    const pinIdStart = match.index + match[1].length;
+    if (value.slice(Math.max(0, pinIdStart - 3), pinIdStart) === '://') continue;
+    if (ignoredPinIds.has(pinId)) continue;
+    output.add(`pin://${pinId}`);
+  }
+}
+
+function collectBrowserUris(
+  value: unknown,
+  output: Set<string>,
+  seen = new WeakSet<object>(),
+  includeExternal = false,
+  ignoredPinIds = new Set<string>()
+): void {
   if (typeof value === 'string') {
     const matches = value.match(/(?:metaid|metaapp|metafile|map|pin):\/\/[^\s"'<>()[\]{}]+/giu) || [];
     for (const uri of matches) {
@@ -631,11 +679,12 @@ function collectBrowserUris(value: unknown, output: Set<string>, seen = new Weak
         output.add(uri.replace(/[),.;!?]+$/u, ''));
       }
     }
+    collectBarePinIdUris(value, output, ignoredPinIds);
     return;
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      collectBrowserUris(item, output, seen, includeExternal);
+      collectBrowserUris(item, output, seen, includeExternal, ignoredPinIds);
     }
     return;
   }
@@ -647,7 +696,7 @@ function collectBrowserUris(value: unknown, output: Set<string>, seen = new Weak
   }
   seen.add(value as object);
   for (const item of Object.values(value as Record<string, unknown>)) {
-    collectBrowserUris(item, output, seen, includeExternal);
+    collectBrowserUris(item, output, seen, includeExternal, ignoredPinIds);
   }
 }
 
@@ -763,7 +812,7 @@ function renderRelatedLinks(resource: BrowserResourceEnvelope): string {
     ? jsonPayload
     : payload;
   const uris = new Set<string>();
-  collectBrowserUris(source, uris);
+  collectBrowserUris(source, uris, new WeakSet<object>(), false, currentPinIds(resource));
   if (!uris.size) {
     return '<p>No related Browser links found.</p>';
   }

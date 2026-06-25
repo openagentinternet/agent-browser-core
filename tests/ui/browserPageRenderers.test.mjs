@@ -21,6 +21,8 @@ const chatPeerDon = 'idq1kwa7ku4w7rrx07cra9t5qr33stszvml3s96qjy';
 const chatPeerAtlas = 'idq1g6d3c36xl5uphy8z2w4q8g2jp3xcz9n9s7t4nq';
 const pinCreatorGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
 const pinPeerGlobalMetaId = 'idq1zfazvxaq69uw6txe3ewce30ewyhy9a7mzykgv0';
+const relatedMetaAppPinId = 'c67c6dfac211747156757f4bbdb710df1c27e680719c156aaea21f858a1cc2cei0';
+const relatedBarePinId = 'fd7603131166e30663981864c0223351deb1336b6eb33a0396237d5847fa504ai9';
 const chatPeerSunnyAvatarPinId = 'd'.repeat(64) + 'i0';
 const chatPeerDonAvatarPinId = 'e'.repeat(64) + 'i0';
 const chatPeerAtlasAvatarPinId = 'f'.repeat(64) + 'i0';
@@ -858,6 +860,60 @@ test('pin-inspector renders related entities and hydrates creator and peer profi
   const infoCalls = fetchCalls.filter((url) => url.includes('/api/browser/info'));
   assert.equal(infoCalls.length, 3);
   assert.doesNotMatch(infoCalls.join('\n'), /idq1fixturebot/);
+});
+
+test('pin-inspector renders metaapp links and bare non-current pin IDs as related links', async () => {
+  const requestedPinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  const resolvedPinId = '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  const rawPayload = [
+    `MetaApp: metaapp://${relatedMetaAppPinId}`,
+    `Reference pin: ${relatedBarePinId}`,
+    `Current requested pin should not self-link: ${requestedPinId}`,
+    `Current resolved pin should not self-link: ${resolvedPinId}`,
+  ].join('\n');
+  const { nodes } = runWithResolve(result({
+    type: 'pin-inspector',
+    contentType: 'text/plain;utf-8',
+    data: {
+      rendererId: 'generic.pin-inspector',
+      version: {
+        requestedPinId,
+        resolvedPinId,
+        versionSelector: 'latest',
+      },
+      pin: {
+        pinId: resolvedPinId,
+        path: '/protocols/simplebuzz',
+        contentType: 'text/plain;utf-8',
+        chainName: 'btc',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+      payload: rawPayload,
+      rawPayload,
+      rawPinRecord: {
+        pinId: resolvedPinId,
+        contentType: 'text/plain;utf-8',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+    },
+  }, {
+    uri: `pin://${requestedPinId}`,
+    normalizedUri: `pin://${requestedPinId}`,
+    resourceType: 'pin',
+    title: 'Pin 6ea8a0bd...',
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('<h3>Related Links</h3>'), 'related links render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+
+  assert.match(html, new RegExp(`href="metaapp://${relatedMetaAppPinId}" data-browser-map-link`));
+  assert.match(html, new RegExp(`metaapp://${relatedMetaAppPinId.slice(0, 10)}\\.\\.\\.${relatedMetaAppPinId.slice(-10)}`));
+  assert.match(html, new RegExp(`href="pin://${relatedBarePinId}" data-browser-map-link`));
+  assert.match(html, new RegExp(`pin://${relatedBarePinId.slice(0, 10)}\\.\\.\\.${relatedBarePinId.slice(-10)}`));
+  assert.doesNotMatch(html, new RegExp(`href="pin://${requestedPinId}"`));
+  assert.doesNotMatch(html, new RegExp(`href="pin://${resolvedPinId}"`));
 });
 
 test('pin-inspector renders JSON strings from plain text payloads as structured documents', async () => {
