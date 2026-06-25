@@ -189,6 +189,8 @@ var state = {
   error: '',
   lastResolveError: null,
   toastTimer: null,
+  pinEntityProfiles: {},
+  pinEntityProfilePending: {},
   enrichToken: 0
 };
 
@@ -1438,6 +1440,9 @@ function renderCurrent() {
   if (elements.viewport) {
     elements.viewport.innerHTML = renderRenderer(current);
     enhancePinMediaPreviews(elements.viewport);
+    if (rendererType === 'pin-inspector') {
+      pinInspectorHydrateRelatedEntityProfiles(current);
+    }
     triggerEnterAnimation(elements.viewport);
   }
   renderBookmarkStar();
@@ -2835,6 +2840,14 @@ var PIN_INSPECTOR_VIDEO_MEDIA_KEYS = { videos: true, video: true, videoUrls: tru
 var PIN_INSPECTOR_AUDIO_MEDIA_KEYS = { audios: true, audio: true, audioUrls: true, audioFiles: true };
 var PIN_INSPECTOR_VIDEO_EXTENSION_RE = /\.(mp4|webm|mov|m4v|ogv|avi|mkv|3gp|flv|wmv)(?:[?#].*)?$/i;
 var PIN_INSPECTOR_AUDIO_EXTENSION_RE = /\.(mp3|aac|wav|flac|ogg|oga|wma|m4a|opus)(?:[?#].*)?$/i;
+var PIN_INSPECTOR_GLOBAL_META_ID_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+var PIN_INSPECTOR_GLOBAL_META_ID_CHECKSUM_LENGTH = 6;
+var PIN_INSPECTOR_GLOBAL_META_ID_VERSION_CHARS = { q: true, p: true, z: true, r: true, y: true, t: true };
+var PIN_INSPECTOR_GLOBAL_META_ID_RE = /id[qpzryt]1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{10,}/gi;
+var PIN_INSPECTOR_GLOBAL_META_ID_CHARSET_MAP = {};
+PIN_INSPECTOR_GLOBAL_META_ID_CHARSET.split('').forEach(function(char, index) {
+  PIN_INSPECTOR_GLOBAL_META_ID_CHARSET_MAP[char] = index;
+});
 
 function pinInspectorJsonBlock(value, className) {
   return '<pre class="' + escapeHtml(className) + '">' + escapeHtml(JSON.stringify(value, null, 2)) + '</pre>';
@@ -2853,6 +2866,198 @@ function pinInspectorShortReference(value) {
     if (body.length > 28) return prefix + body.slice(0, 10) + '...' + body.slice(-10);
   }
   return normalized.slice(0, 18) + '...' + normalized.slice(-14);
+}
+
+function pinInspectorGlobalMetaIdPolymod(values) {
+  var generators = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+  var checksum = 1;
+  values.forEach(function(value) {
+    var top = checksum >> 25;
+    checksum = ((checksum & 0x1ffffff) << 5) ^ value;
+    generators.forEach(function(generator, index) {
+      if ((top >> index) & 1) checksum ^= generator;
+    });
+  });
+  return checksum;
+}
+
+function pinInspectorExpandGlobalMetaIdHrp(hrp) {
+  var chars = hrp.split('');
+  return chars.map(function(char) {
+    return char.charCodeAt(0) >> 5;
+  }).concat([0], chars.map(function(char) {
+    return char.charCodeAt(0) & 31;
+  }));
+}
+
+function pinInspectorConvertGlobalMetaIdBits(values, fromBits, toBits) {
+  var accumulator = 0;
+  var bitCount = 0;
+  var maxValue = (1 << toBits) - 1;
+  var result = [];
+  for (var index = 0; index < values.length; index += 1) {
+    var value = values[index];
+    if (value < 0 || value >> fromBits !== 0) return null;
+    accumulator = (accumulator << fromBits) | value;
+    bitCount += fromBits;
+    while (bitCount >= toBits) {
+      bitCount -= toBits;
+      result.push((accumulator >> bitCount) & maxValue);
+    }
+  }
+  if (bitCount >= fromBits) return null;
+  if (((accumulator << (toBits - bitCount)) & maxValue) !== 0) return null;
+  return result;
+}
+
+function pinInspectorHasValidGlobalMetaIdPayloadLength(versionChar, bytes) {
+  if (versionChar === 'q') return bytes.length >= 20;
+  if (versionChar === 'p') return bytes.length >= 33;
+  if (versionChar === 'z') return bytes.length >= 42;
+  if (versionChar === 'r' || versionChar === 'y') return bytes.length >= 18;
+  if (versionChar === 't') return bytes.length >= 40;
+  return false;
+}
+
+function pinInspectorNormalizeGlobalMetaId(value) {
+  var normalized = textValue(value).toLowerCase();
+  var versionChar;
+  var payload;
+  var decoded = [];
+  var index;
+  if (!/^id[qpzryt]1/.test(normalized)) return '';
+  versionChar = normalized.charAt(2);
+  if (!PIN_INSPECTOR_GLOBAL_META_ID_VERSION_CHARS[versionChar]) return '';
+  payload = normalized.slice(4);
+  if (payload.length <= PIN_INSPECTOR_GLOBAL_META_ID_CHECKSUM_LENGTH) return '';
+  for (index = 0; index < payload.length; index += 1) {
+    var decodedValue = PIN_INSPECTOR_GLOBAL_META_ID_CHARSET_MAP[payload.charAt(index)];
+    if (decodedValue === undefined) return '';
+    decoded.push(decodedValue);
+  }
+  if (pinInspectorGlobalMetaIdPolymod(pinInspectorExpandGlobalMetaIdHrp('id' + versionChar).concat(decoded)) !== 1) return '';
+  var bytes = pinInspectorConvertGlobalMetaIdBits(decoded.slice(0, -PIN_INSPECTOR_GLOBAL_META_ID_CHECKSUM_LENGTH), 5, 8);
+  if (!bytes || !pinInspectorHasValidGlobalMetaIdPayloadLength(versionChar, bytes)) return '';
+  return normalized;
+}
+
+function pinInspectorShortGlobalMetaId(value) {
+  var normalized = textValue(value);
+  return normalized.length > 17 ? normalized.slice(0, 8) + '...' + normalized.slice(-6) : normalized;
+}
+
+function pinInspectorCollectGlobalMetaIds(value, output, seen) {
+  seen = seen || new WeakSet();
+  if (typeof value === 'string') {
+    var matches = value.match(PIN_INSPECTOR_GLOBAL_META_ID_RE) || [];
+    matches.forEach(function(match) {
+      var normalized = pinInspectorNormalizeGlobalMetaId(match);
+      if (normalized) output.add(normalized);
+    });
+    return;
+  }
+  if (Array.isArray(value)) {
+    value.forEach(function(item) {
+      pinInspectorCollectGlobalMetaIds(item, output, seen);
+    });
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  if (seen.has(value)) return;
+  seen.add(value);
+  Object.keys(value).forEach(function(key) {
+    pinInspectorCollectGlobalMetaIds(value[key], output, seen);
+  });
+}
+
+function pinInspectorCreatorGlobalMetaId(current) {
+  var owner = objectValue(current && current.owner);
+  var pin = pinInspectorPin(current);
+  var record = pinInspectorRawPinRecord(current);
+  return pinInspectorNormalizeGlobalMetaId(
+    owner.globalMetaId
+      || owner.metaid
+      || pin.ownerGlobalMetaId
+      || pin.globalMetaId
+      || record.ownerGlobalMetaId
+      || record.globalMetaId
+      || record.global_meta_id
+      || record.metaid
+      || record.metaId
+  );
+}
+
+function pinInspectorRelatedEntityIds(current) {
+  var data = pinInspectorData(current);
+  var ids = new Set();
+  var creator = pinInspectorCreatorGlobalMetaId(current);
+  pinInspectorCollectGlobalMetaIds(pinInspectorPayload(current), ids);
+  pinInspectorCollectGlobalMetaIds(data.rawPayload, ids);
+  if (creator) ids.delete(creator);
+  return { creator: creator, peers: Array.from(ids) };
+}
+
+function pinInspectorRenderEntityCard(globalMetaId, fallbackName) {
+  var profiles = objectValue(state.pinEntityProfiles);
+  var profile = objectValue(profiles[globalMetaId]);
+  var name = textValue(profile.name) || textValue(fallbackName) || pinInspectorShortGlobalMetaId(globalMetaId);
+  var avatar = textValue(profile.avatar);
+  return '<a class="browser-pin-entity-card" href="metaid://' + escapeHtml(globalMetaId) + '" data-browser-map-link>' +
+    avatarHtml(avatar, name, 'browser-pin-entity-avatar') +
+    '<span class="browser-pin-entity-copy"><span class="browser-pin-entity-name">' + escapeHtml(name) + '</span><span class="browser-pin-entity-meta">' + escapeHtml(pinInspectorShortGlobalMetaId(globalMetaId)) + '</span></span></a>';
+}
+
+function pinInspectorRenderEntityRow(role, ids, fallbackNames) {
+  if (!ids.length) return '';
+  fallbackNames = fallbackNames || {};
+  return '<div class="browser-pin-entity-row"><div class="browser-pin-entity-role">' + escapeHtml(role) + '</div><div class="browser-pin-entity-items">' + ids.map(function(id) {
+    return pinInspectorRenderEntityCard(id, fallbackNames[id] || '');
+  }).join('') + '</div></div>';
+}
+
+function pinInspectorRenderRelatedEntities(current) {
+  var entities = pinInspectorRelatedEntityIds(current);
+  var fallbackNames = {};
+  var owner = objectValue(current && current.owner);
+  if (entities.creator) fallbackNames[entities.creator] = textValue(owner.name);
+  var rows = [
+    pinInspectorRenderEntityRow('creator', entities.creator ? [entities.creator] : [], fallbackNames),
+    pinInspectorRenderEntityRow('peer', entities.peers, fallbackNames)
+  ].filter(Boolean).join('');
+  return rows ? '<div class="browser-pin-entity-list">' + rows + '</div>' : '<p>No related entities found.</p>';
+}
+
+function pinInspectorHydrateRelatedEntityProfiles(current) {
+  var entities = pinInspectorRelatedEntityIds(current);
+  var ids = [];
+  var targetUri = textValue(current && (current.normalizedUri || current.uri));
+  var profiles = objectValue(state.pinEntityProfiles);
+  var pending = objectValue(state.pinEntityProfilePending);
+  if (entities.creator) ids.push(entities.creator);
+  entities.peers.forEach(function(id) {
+    if (ids.indexOf(id) === -1) ids.push(id);
+  });
+  ids.forEach(function(globalMetaId) {
+    if (!globalMetaId || profiles[globalMetaId] || pending[globalMetaId]) return;
+    pending[globalMetaId] = true;
+    var query = new URLSearchParams();
+    query.set('globalMetaId', globalMetaId);
+    api(browserEndpoints.info + '?' + query.toString()).then(function(profile) {
+      profiles[globalMetaId] = {
+        globalMetaId: textValue(profile && profile.globalMetaId) || globalMetaId,
+        name: textValue(profile && profile.name) || globalMetaId,
+        avatar: textValue(profile && profile.avatar)
+      };
+    }).catch(function() {
+      profiles[globalMetaId] = { globalMetaId: globalMetaId, name: globalMetaId, avatar: '' };
+    }).then(function() {
+      delete pending[globalMetaId];
+      var currentUri = textValue(state.current && (state.current.normalizedUri || state.current.uri));
+      if (state.current && currentUri === targetUri) {
+        renderCurrent();
+      }
+    });
+  });
 }
 
 function pinInspectorReferenceHtml(value, label, title, extraAttributes, className) {
@@ -2968,12 +3173,23 @@ var PIN_INSPECTOR_PAGE_STYLE = '<style>' +
   '.browser-pin-file-desc { color: #6a778b; font-size: 12px; word-break: break-word; }' +
   '.browser-pin-file-row span { min-width: 0; overflow-wrap: anywhere; }' +
   '.browser-pin-download { display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 10px; border: 1px solid #cfe0ff; background: #eaf1ff; color: #2e6fed; font-size: 12px; font-weight: 700; white-space: nowrap; }' +
+  '.browser-pin-entity-list { display: grid; gap: 12px; min-width: 0; }' +
+  '.browser-pin-entity-row { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 12px; align-items: start; min-width: 0; }' +
+  '.browser-pin-entity-role { color: #6a778b; font-size: 12px; font-weight: 700; line-height: 34px; }' +
+  '.browser-pin-entity-items { display: grid; gap: 8px; min-width: 0; }' +
+  '.browser-pin-entity-card { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 9px; min-width: 0; padding: 8px 9px; border: 1px solid #d9e1ed; border-radius: 10px; background: #f8fafc; color: #162132; text-decoration: none; }' +
+  '.browser-pin-entity-card:hover, .browser-pin-entity-card:focus { border-color: #cfe0ff; background: #f3f7ff; text-decoration: none; }' +
+  '.browser-pin-entity-avatar { width: 34px; height: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; background: #e8eef6; color: #344054; font-size: 11px; font-weight: 700; }' +
+  '.browser-pin-entity-avatar img, .browser-pin-entity-avatar .browser-avatar-image { width: 100%; height: 100%; object-fit: cover; display: block; }' +
+  '.browser-pin-entity-copy { display: grid; gap: 2px; min-width: 0; }' +
+  '.browser-pin-entity-name { color: #162132; font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }' +
+  '.browser-pin-entity-meta { color: #6a778b; font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }' +
   '.browser-pin-link-list { display: flex; flex-wrap: wrap; gap: 8px; }' +
   '.browser-pin-link-pill { display: inline-flex; max-width: 100%; padding: 6px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #f8fafc; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }' +
   '.browser-pin-raw-record { display: grid; gap: 10px; min-width: 0; }' +
   '.browser-pin-raw-record summary { cursor: pointer; color: #334155; font-size: 13px; font-weight: 700; }' +
   '@media (max-width: 1100px) { .browser-pin-page-grid { grid-template-columns: minmax(0, 1fr); } }' +
-  '@media (max-width: 720px) { .browser-pin-page { width: 100%; margin: 12px auto 24px; gap: 14px; } .browser-pin-page-head { flex-direction: column; } .browser-pin-page-actions { width: 100%; } .browser-pin-page-actions button { width: 100%; } .browser-pin-json-row, .browser-pin-json-subblock .browser-pin-json-row { grid-template-columns: 1fr; gap: 5px; } .browser-protocol-proof { grid-template-columns: 1fr; } .browser-pin-file-row { grid-template-columns: 1fr; align-items: stretch; } }' +
+  '@media (max-width: 720px) { .browser-pin-page { width: 100%; margin: 12px auto 24px; gap: 14px; } .browser-pin-page-head { flex-direction: column; } .browser-pin-page-actions { width: 100%; } .browser-pin-page-actions button { width: 100%; } .browser-pin-entity-row { grid-template-columns: 1fr; gap: 6px; } .browser-pin-entity-role { line-height: 1.2; } .browser-pin-json-row, .browser-pin-json-subblock .browser-pin-json-row { grid-template-columns: 1fr; gap: 5px; } .browser-protocol-proof { grid-template-columns: 1fr; } .browser-pin-file-row { grid-template-columns: 1fr; align-items: stretch; } }' +
   '</style>';
 
 function pinInspectorParseJsonPayload(payload, rawPayload) {
@@ -3576,6 +3792,7 @@ function renderPinInspectorPage(current) {
         pinInspectorSection('Related Media', pinInspectorRenderMediaItems(current)) +
       '</div>' +
       '<aside class="browser-pin-aside">' +
+        pinInspectorSection('Related Entities', pinInspectorRenderRelatedEntities(current)) +
         pinInspectorSection('Related Links', pinInspectorRenderRelatedLinks(current)) +
         pinInspectorSection('Verify', facts.length ? pinInspectorInfoList(facts) : '<p>No pin facts available.</p>') +
       '</aside>' +

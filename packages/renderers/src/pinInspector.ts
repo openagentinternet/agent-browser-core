@@ -12,6 +12,13 @@ const VIDEO_EXTENSION_PATTERN = /\.(mp4|webm|mov|m4v|ogv|avi|mkv|3gp|flv|wmv)(?:
 const AUDIO_EXTENSION_PATTERN = /\.(mp3|aac|wav|flac|ogg|oga|wma|m4a|opus)(?:[?#].*)?$/iu;
 const VIDEO_PATH_PATTERN = /\/video\//iu;
 const AUDIO_PATH_PATTERN = /\/audio\//iu;
+const GLOBAL_META_ID_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
+const GLOBAL_META_ID_CHECKSUM_LENGTH = 6;
+const GLOBAL_META_ID_VERSION_CHARS = new Set(['q', 'p', 'z', 'r', 'y', 't']);
+const GLOBAL_META_ID_PATTERN = /id[qpzryt]1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]{10,}/giu;
+const GLOBAL_META_ID_CHARSET_MAP = new Map<string, number>(
+  Array.from(GLOBAL_META_ID_CHARSET).map((char, index) => [char, index])
+);
 
 function escapeHtml(value: unknown): string {
   return String(value ?? '').replace(/[&<>"']/g, (char) => ({
@@ -71,6 +78,162 @@ function shortReference(value: string): string {
     if (body.length > 28) return `${prefix}${body.slice(0, 10)}...${body.slice(-10)}`;
   }
   return `${normalized.slice(0, 18)}...${normalized.slice(-14)}`;
+}
+
+function globalMetaIdPolymod(values: number[]): number {
+  const generators = [0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3];
+  let checksum = 1;
+  for (const value of values) {
+    const top = checksum >> 25;
+    checksum = ((checksum & 0x1ffffff) << 5) ^ value;
+    for (let index = 0; index < generators.length; index += 1) {
+      if ((top >> index) & 1) {
+        checksum ^= generators[index];
+      }
+    }
+  }
+  return checksum;
+}
+
+function expandGlobalMetaIdHrp(hrp: string): number[] {
+  return [
+    ...Array.from(hrp).map((char) => char.charCodeAt(0) >> 5),
+    0,
+    ...Array.from(hrp).map((char) => char.charCodeAt(0) & 31),
+  ];
+}
+
+function convertGlobalMetaIdBits(values: number[], fromBits: number, toBits: number): number[] | null {
+  let accumulator = 0;
+  let bitCount = 0;
+  const maxValue = (1 << toBits) - 1;
+  const result: number[] = [];
+  for (const value of values) {
+    if (value < 0 || value >> fromBits !== 0) return null;
+    accumulator = (accumulator << fromBits) | value;
+    bitCount += fromBits;
+    while (bitCount >= toBits) {
+      bitCount -= toBits;
+      result.push((accumulator >> bitCount) & maxValue);
+    }
+  }
+  if (bitCount >= fromBits) return null;
+  if (((accumulator << (toBits - bitCount)) & maxValue) !== 0) return null;
+  return result;
+}
+
+function hasValidGlobalMetaIdPayloadLength(versionChar: string, bytes: number[]): boolean {
+  if (versionChar === 'q') return bytes.length >= 20;
+  if (versionChar === 'p') return bytes.length >= 33;
+  if (versionChar === 'z') return bytes.length >= 42;
+  if (versionChar === 'r' || versionChar === 'y') return bytes.length >= 18;
+  if (versionChar === 't') return bytes.length >= 40;
+  return false;
+}
+
+function normalizeGlobalMetaId(value: unknown): string {
+  const normalized = text(value).toLowerCase();
+  if (!/^id[qpzryt]1/u.test(normalized)) return '';
+  const versionChar = normalized[2];
+  if (!GLOBAL_META_ID_VERSION_CHARS.has(versionChar)) return '';
+  const payload = normalized.slice(4);
+  if (payload.length <= GLOBAL_META_ID_CHECKSUM_LENGTH) return '';
+  const decoded: number[] = [];
+  for (const char of payload) {
+    const decodedValue = GLOBAL_META_ID_CHARSET_MAP.get(char);
+    if (decodedValue === undefined) return '';
+    decoded.push(decodedValue);
+  }
+  const hrp = `id${versionChar}`;
+  if (globalMetaIdPolymod([...expandGlobalMetaIdHrp(hrp), ...decoded]) !== 1) return '';
+  const bytes = convertGlobalMetaIdBits(decoded.slice(0, -GLOBAL_META_ID_CHECKSUM_LENGTH), 5, 8);
+  if (!bytes || !hasValidGlobalMetaIdPayloadLength(versionChar, bytes)) return '';
+  return normalized;
+}
+
+function shortGlobalMetaId(value: string): string {
+  const normalized = text(value);
+  return normalized.length > 17 ? `${normalized.slice(0, 8)}...${normalized.slice(-6)}` : normalized;
+}
+
+function collectGlobalMetaIds(value: unknown, output: Set<string>, seen = new WeakSet<object>()): void {
+  if (typeof value === 'string') {
+    const matches = value.match(GLOBAL_META_ID_PATTERN) || [];
+    for (const match of matches) {
+      const normalized = normalizeGlobalMetaId(match);
+      if (normalized) output.add(normalized);
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectGlobalMetaIds(item, output, seen);
+    }
+    return;
+  }
+  if (!value || typeof value !== 'object') return;
+  if (seen.has(value as object)) return;
+  seen.add(value as object);
+  for (const item of Object.values(value as Record<string, unknown>)) {
+    collectGlobalMetaIds(item, output, seen);
+  }
+}
+
+function creatorGlobalMetaId(resource: BrowserResourceEnvelope): string {
+  const owner = record(resource.owner);
+  const pin = pinValue(resource);
+  const recordValue = rawPinRecord(resource);
+  return normalizeGlobalMetaId(
+    owner.globalMetaId
+      ?? owner.metaid
+      ?? pin.ownerGlobalMetaId
+      ?? pin.globalMetaId
+      ?? recordValue.ownerGlobalMetaId
+      ?? recordValue.globalMetaId
+      ?? recordValue.global_meta_id
+      ?? recordValue.metaid
+      ?? recordValue.metaId
+  );
+}
+
+function relatedEntityIds(resource: BrowserResourceEnvelope): { creator: string; peers: string[] } {
+  const creator = creatorGlobalMetaId(resource);
+  const payload = payloadValue(resource);
+  const rawPayload = data(resource).rawPayload;
+  const ids = new Set<string>();
+  collectGlobalMetaIds(payload, ids);
+  collectGlobalMetaIds(rawPayload, ids);
+  if (creator) ids.delete(creator);
+  return { creator, peers: Array.from(ids) };
+}
+
+function entityInitials(value: string): string {
+  const normalized = text(value) || 'Bot';
+  return normalized.slice(0, 2).toUpperCase();
+}
+
+function renderEntityCard(globalMetaId: string, name = ''): string {
+  const label = text(name) || shortGlobalMetaId(globalMetaId);
+  return `<a class="browser-pin-entity-card" href="metaid://${escapeHtml(globalMetaId)}" data-browser-map-link><span class="browser-pin-entity-avatar browser-avatar-fallback" aria-hidden="true">${escapeHtml(entityInitials(label))}</span><span class="browser-pin-entity-copy"><span class="browser-pin-entity-name">${escapeHtml(label)}</span><span class="browser-pin-entity-meta">${escapeHtml(shortGlobalMetaId(globalMetaId))}</span></span></a>`;
+}
+
+function renderEntityRow(role: string, ids: string[], fallbackNames = new Map<string, string>()): string {
+  if (!ids.length) return '';
+  return `<div class="browser-pin-entity-row"><div class="browser-pin-entity-role">${escapeHtml(role)}</div><div class="browser-pin-entity-items">${ids.map((id) => renderEntityCard(id, fallbackNames.get(id) || '')).join('')}</div></div>`;
+}
+
+function renderRelatedEntities(resource: BrowserResourceEnvelope): string {
+  const entities = relatedEntityIds(resource);
+  const fallbackNames = new Map<string, string>();
+  if (entities.creator) {
+    const owner = record(resource.owner);
+    fallbackNames.set(entities.creator, text(owner.name) || '');
+  }
+  const rows = [
+    renderEntityRow('creator', entities.creator ? [entities.creator] : [], fallbackNames),
+    renderEntityRow('peer', entities.peers),
+  ].filter(Boolean).join('');
+  return rows ? `<div class="browser-pin-entity-list">${rows}</div>` : '<p>No related entities found.</p>';
 }
 
 function linkHtml(value: string, label?: string, extraAttributes = '', className = ''): string {
@@ -265,6 +428,17 @@ const PIN_INSPECTOR_PAGE_STYLE = `
     .browser-pin-file-desc { color: #6a778b; font-size: 12px; word-break: break-word; }
     .browser-pin-file-row span { min-width: 0; overflow-wrap: anywhere; }
     .browser-pin-download { display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 10px; border: 1px solid #cfe0ff; background: #eaf1ff; color: #2e6fed; font-size: 12px; font-weight: 700; white-space: nowrap; }
+    .browser-pin-entity-list { display: grid; gap: 12px; min-width: 0; }
+    .browser-pin-entity-row { display: grid; grid-template-columns: 74px minmax(0, 1fr); gap: 12px; align-items: start; min-width: 0; }
+    .browser-pin-entity-role { color: #6a778b; font-size: 12px; font-weight: 700; line-height: 34px; }
+    .browser-pin-entity-items { display: grid; gap: 8px; min-width: 0; }
+    .browser-pin-entity-card { display: grid; grid-template-columns: 34px minmax(0, 1fr); align-items: center; gap: 9px; min-width: 0; padding: 8px 9px; border: 1px solid #d9e1ed; border-radius: 10px; background: #f8fafc; color: #162132; text-decoration: none; }
+    .browser-pin-entity-card:hover, .browser-pin-entity-card:focus { border-color: #cfe0ff; background: #f3f7ff; text-decoration: none; }
+    .browser-pin-entity-avatar { width: 34px; height: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; overflow: hidden; background: #e8eef6; color: #344054; font-size: 11px; font-weight: 700; }
+    .browser-pin-entity-avatar img, .browser-pin-entity-avatar .browser-avatar-image { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .browser-pin-entity-copy { display: grid; gap: 2px; min-width: 0; }
+    .browser-pin-entity-name { color: #162132; font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .browser-pin-entity-meta { color: #6a778b; font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .browser-pin-link-list { display: flex; flex-wrap: wrap; gap: 8px; }
     .browser-pin-link-pill { display: inline-flex; max-width: 100%; padding: 6px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #f8fafc; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }
     .browser-pin-raw-record { display: grid; gap: 10px; min-width: 0; }
@@ -283,6 +457,8 @@ const PIN_INSPECTOR_PAGE_STYLE = `
       .browser-pin-page-head { flex-direction: column; }
       .browser-pin-page-actions { width: 100%; }
       .browser-pin-page-actions button { width: 100%; }
+      .browser-pin-entity-row { grid-template-columns: 1fr; gap: 6px; }
+      .browser-pin-entity-role { line-height: 1.2; }
       .browser-pin-json-row, .browser-pin-json-subblock .browser-pin-json-row { grid-template-columns: 1fr; gap: 5px; }
       .browser-protocol-proof { grid-template-columns: 1fr; }
       .browser-pin-file-row { grid-template-columns: 1fr; align-items: stretch; }
@@ -677,6 +853,7 @@ export function renderPinInspectorHtml(resource: BrowserResourceEnvelope, headin
         ${sectionBlock('Related Media', renderMediaItems(resource), mediaIntro())}
       </div>
       <aside class="browser-pin-aside">
+        ${sectionBlock('Related Entities', renderRelatedEntities(resource))}
         ${sectionBlock('Related Links', renderRelatedLinks(resource))}
         ${sectionBlock('Verify', `${facts.length ? infoList(facts) : '<p>No pin facts available.</p>'}`, verifyIntro())}
       </aside>

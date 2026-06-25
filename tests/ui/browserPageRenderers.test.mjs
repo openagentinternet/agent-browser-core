@@ -19,6 +19,8 @@ const genesisTxid = 'b'.repeat(64);
 const chatPeerSunny = 'idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz';
 const chatPeerDon = 'idq1kwa7ku4w7rrx07cra9t5qr33stszvml3s96qjy';
 const chatPeerAtlas = 'idq1g6d3c36xl5uphy8z2w4q8g2jp3xcz9n9s7t4nq';
+const pinCreatorGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
+const pinPeerGlobalMetaId = 'idq1zfazvxaq69uw6txe3ewce30ewyhy9a7mzykgv0';
 const chatPeerSunnyAvatarPinId = 'd'.repeat(64) + 'i0';
 const chatPeerDonAvatarPinId = 'e'.repeat(64) + 'i0';
 const chatPeerAtlasAvatarPinId = 'f'.repeat(64) + 'i0';
@@ -80,9 +82,10 @@ function elements() {
   };
 }
 
-function runWithResolve(resolvePayload) {
+function runWithResolve(resolvePayload, options = {}) {
   const nodes = elements();
   const fetchCalls = [];
+  const infoProfiles = options.infoProfiles || {};
   const context = {
     console,
     URL,
@@ -105,6 +108,12 @@ function runWithResolve(resolvePayload) {
       fetchCalls.push(String(url));
       if (String(url).startsWith('/api/browser/resolve')) {
         return { ok: true, json: async () => ({ ok: true, data: resolvePayload }) };
+      }
+      if (String(url).startsWith('/api/browser/info')) {
+        const parsed = new URL(String(url), 'http://browser.test');
+        const globalMetaId = parsed.searchParams.get('globalMetaId') || '';
+        const profile = infoProfiles[globalMetaId] || { globalMetaId, name: globalMetaId, avatar: '' };
+        return { ok: true, json: async () => ({ ok: true, data: profile }) };
       }
       return { ok: true, json: async () => ({ ok: true, data: {} }) };
     },
@@ -774,6 +783,81 @@ test('pin-inspector renderer uses payload-first mature shell sections', async ()
   assert.doesNotMatch(html, /why-this-direction/);
   assert.doesNotMatch(html, /Raw MAN pin record/);
   assert.doesNotMatch(html, /data-browser-pin-raw-record/);
+});
+
+test('pin-inspector renders related entities and hydrates creator and peer profiles', async () => {
+  const rawPayload = JSON.stringify({
+    content: 'Plain payload with peer identity.',
+    to: pinPeerGlobalMetaId,
+    nested: [{ id: chatPeerSunny }, { id: pinCreatorGlobalMetaId }, { id: 'idq1fixturebot' }],
+  });
+  const creatorAvatar = 'https://assets.example/creator.png';
+  const peerAvatar = 'https://assets.example/peer.png';
+  const sunnyAvatar = 'https://assets.example/sunny.png';
+  const { nodes, fetchCalls } = runWithResolve(result({
+    type: 'pin-inspector',
+    contentType: 'text/plain;utf-8',
+    data: {
+      rendererId: 'generic.pin-inspector',
+      version: {
+        requestedPinId: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        resolvedPinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        versionSelector: 'latest',
+      },
+      pin: {
+        pinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        path: '/protocols/simplebuzz',
+        contentType: 'text/plain;utf-8',
+        operation: 'create',
+        chainName: 'btc',
+        ownerGlobalMetaId: pinCreatorGlobalMetaId,
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+      payload: rawPayload,
+      rawPayload,
+      rawPinRecord: {
+        globalMetaId: pinCreatorGlobalMetaId,
+        contentType: 'text/plain;utf-8',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+    },
+  }, {
+    uri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    normalizedUri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    resourceType: 'pin',
+    title: 'Pin 6ea8a0bd...',
+    owner: { kind: 'unknown', globalMetaId: pinCreatorGlobalMetaId, name: pinCreatorGlobalMetaId, verificationState: 'partial' },
+  }), {
+    infoProfiles: {
+      [pinCreatorGlobalMetaId]: { globalMetaId: pinCreatorGlobalMetaId, name: 'Creator Bot', avatar: creatorAvatar },
+      [pinPeerGlobalMetaId]: { globalMetaId: pinPeerGlobalMetaId, name: 'Peer Bot', avatar: peerAvatar },
+      [chatPeerSunny]: { globalMetaId: chatPeerSunny, name: 'Sunny', avatar: sunnyAvatar },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('<h3>Related Entities</h3>'), 'related entities section render');
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Creator Bot')
+    && nodes['[data-browser-viewport]'].innerHTML.includes('Peer Bot')
+    && nodes['[data-browser-viewport]'].innerHTML.includes('Sunny'), 'related entity profile hydration');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+
+  assert.ok(html.indexOf('<h3>Related Entities</h3>') < html.indexOf('<h3>Related Links</h3>'));
+  assert.match(html, /<div class="browser-pin-entity-role">creator<\/div>/);
+  assert.match(html, /<div class="browser-pin-entity-role">peer<\/div>/);
+  assert.match(html, new RegExp(`href="metaid://${pinCreatorGlobalMetaId}" data-browser-map-link`));
+  assert.match(html, new RegExp(`href="metaid://${pinPeerGlobalMetaId}" data-browser-map-link`));
+  assert.match(html, /idq14hmv\.\.\.zwg9xz/);
+  assert.match(html, /Creator Bot/);
+  assert.match(html, /Peer Bot/);
+  assert.match(html, /Sunny/);
+  assert.match(html, /src="https:\/\/assets\.example\/creator\.png"/);
+  assert.match(html, /src="https:\/\/assets\.example\/peer\.png"/);
+  assert.match(html, /src="https:\/\/assets\.example\/sunny\.png"/);
+  const infoCalls = fetchCalls.filter((url) => url.includes('/api/browser/info'));
+  assert.equal(infoCalls.length, 3);
+  assert.doesNotMatch(infoCalls.join('\n'), /idq1fixturebot/);
 });
 
 test('pin-inspector renders JSON strings from plain text payloads as structured documents', async () => {

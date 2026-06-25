@@ -4,6 +4,9 @@ import test from 'node:test';
 const renderers = await import('../../packages/renderers/dist/index.js');
 const legacyTxid = 'a'.repeat(64);
 const genesisTxid = 'b'.repeat(64);
+const creatorGlobalMetaId = 'idq1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5pw5z8n';
+const peerGlobalMetaId = 'idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz';
+const secondPeerGlobalMetaId = 'idq1zfazvxaq69uw6txe3ewce30ewyhy9a7mzykgv0';
 
 function protocolResource(rendererId, payload, overrides = {}) {
   return {
@@ -196,6 +199,52 @@ test('Pin inspector renders prototype-style JSON payload with media, links, and 
   assert.doesNotMatch(html, /<h3>Overview<\/h3>/);
   assert.doesNotMatch(html, /Content-type routing model/);
   assert.doesNotMatch(html, /why-this-direction/);
+});
+
+test('Pin inspector renders related entities from creator and payload Global Meta IDs', () => {
+  const payload = {
+    content: 'Entity scan should not depend on content type.',
+    to: peerGlobalMetaId,
+    participants: [
+      { id: secondPeerGlobalMetaId },
+      { id: peerGlobalMetaId },
+      { id: creatorGlobalMetaId },
+      { id: 'idq1fixturebot' },
+    ],
+  };
+  const rawPayload = JSON.stringify(payload);
+  const resource = pinInspectorResource('text/plain;utf-8', rawPayload, {
+    pin: {
+      pinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+      path: '/protocols/simplebuzz',
+      contentType: 'text/plain;utf-8',
+      chainName: 'btc',
+      txid: legacyTxid,
+      genesisTransaction: genesisTxid,
+      ownerGlobalMetaId: creatorGlobalMetaId,
+    },
+    rawPayload,
+    rawPinRecord: {
+      globalMetaId: creatorGlobalMetaId,
+      contentType: 'text/plain;utf-8',
+      txid: legacyTxid,
+      genesisTransaction: genesisTxid,
+    },
+  });
+  resource.owner.globalMetaId = creatorGlobalMetaId;
+  resource.owner.name = 'Creator fallback';
+
+  const html = renderers.renderPinInspectorHtml(resource);
+
+  assert.ok(html.indexOf('<h3>Related Entities</h3>') < html.indexOf('<h3>Related Links</h3>'));
+  assert.match(html, /<div class="browser-pin-entity-role">creator<\/div>/);
+  assert.match(html, /<div class="browser-pin-entity-role">peer<\/div>/);
+  assert.match(html, new RegExp(`href="metaid://${creatorGlobalMetaId}" data-browser-map-link`));
+  assert.match(html, new RegExp(`href="metaid://${peerGlobalMetaId}" data-browser-map-link`));
+  assert.match(html, new RegExp(`href="metaid://${secondPeerGlobalMetaId}" data-browser-map-link`));
+  assert.match(html, /idq14hmv\.\.\.zwg9xz/);
+  assert.equal((html.match(/class="browser-pin-entity-card"/g) || []).length, 3);
+  assert.doesNotMatch(html, /href="metaid:\/\/idq1fixturebot"/);
 });
 
 test('Pin inspector shows the pin update timestamp instead of "latest effective version" when a timestamp is present', () => {
