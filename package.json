@@ -25,7 +25,8 @@
     "verify:release-version": "node scripts/verify-release-version.mjs",
     "publish:packages": "node scripts/publish-packages.mjs",
     "publish:packages:dry-run": "node scripts/publish-packages.mjs --dry-run",
-    "dev:standalone": "node packages/host-standalone/dist/main.js"
+    "dev:standalone": "node packages/host-standalone/dist/main.js",
+    "dev:reload": "node scripts/dev-reload.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
