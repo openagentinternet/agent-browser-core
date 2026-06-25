@@ -58,12 +58,18 @@ host support for local/public Browser previews.
   `manApiBaseUrl`, `blockExplorerBaseUrl`) have a single source of truth in core:
   `createDefaultBrowserConfig()` and the exported `DEFAULT_*` constants
   (`DEFAULT_METASO_P2P_BASE_URL`, `DEFAULT_METAFILE_CONTENT_BASE_URL`, `DEFAULT_MANAPI_BASE_URL`,
-  `DEFAULT_BLOCK_EXPLORER_BASE_URL`). Host adapters MUST source these values from core (call
-  `createDefaultBrowserConfig()` as a base, or `createBrowserSettingsSnapshot()`), and MUST NOT
-  hardcode URL literals. Behavioral fields (`localMode`, `renderCustomBotPages`, `nameResolution`)
-  may be specialized per host; the four URL fields above may not. The test-harness conformance
-  check (`assertBrowserHostConformance`) asserts that a host's `getSettings()` `defaults` return
-  these four URL fields equal to core's defaults, so a drifted value fails integration.
+  `DEFAULT_BLOCK_EXPLORER_BASE_URL`). When a host needs its own defaults it MUST derive them from
+  core (spread `createDefaultBrowserConfig()` as a base, then override only the fields that differ),
+  and MUST NOT hardcode URL literals that silently drift from core. Hosts and end users remain free
+  to override these URLs at runtime (via config or the Browser Settings UI); the rule is about where
+  the *base* defaults come from, not a runtime restriction. Recommended host pattern:
+  ```ts
+  const { nameResolution: _ignored, ...coreDefaults } = createDefaultBrowserConfig();
+  const browser = { ...coreDefaults, localMode: true /* host specialization only */ };
+  ```
+  Prefer `createBrowserSettingsSnapshot()` for `getSettings()`/`updateSettings()` so the returned
+  `defaults` always reflects core. Behavioral fields (`localMode`, `renderCustomBotPages`,
+  `nameResolution`) are specialized per host and are not constrained.
 
 ## Commit and Merge Rules
 
