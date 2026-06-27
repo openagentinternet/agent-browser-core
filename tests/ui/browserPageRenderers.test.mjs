@@ -6,6 +6,7 @@ import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
 const { buildBrowserPageDefinition } = require('../../packages/ui/dist/browser/app.js');
+const { BROWSER_INDEX_HTML } = require('../../packages/ui/dist/browser/indexHtml.js');
 
 const servicePinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
 const buzzPinId = '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
@@ -503,13 +504,96 @@ test('bot-page renderer keeps MetaApp intro scoped to each item and uses metaapp
   const [firstMetaAppRow] = metaAppsSection[1].split('</article>');
   assert.match(html, new RegExp(`href="metaapp://${metaAppPinId}"`));
   assert.doesNotMatch(html, new RegExp(`href="map://metaapp/pin/${metaAppPinId}"`));
-  assert.match(html, /class="browser-metaapp-link"/);
+  assert.match(html, /class="[^"]*\bbrowser-metaapp-link\b[^"]*"/);
   assert.match(html, /class="browser-metaapp-download"/);
   assert.equal((html.match(new RegExp(introText, 'g')) || []).length, 1);
   assert.doesNotMatch(firstMetaAppRow, new RegExp(introText));
   assert.doesNotMatch(html, new RegExp(`>metafile://${metaAppCodePinId}\\.zip<`));
   assert.match(html, new RegExp(`href="https://file\\.metaid\\.io/metafile-indexer/api/v1/files/accelerate/content/${metaAppCodePinId}"`));
   assert.match(html, /aria-label="Download MetaApp code zip"/);
+});
+
+test('bot-page document service and MetaApp links share the recent chat peer link treatment', async () => {
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1styledlinksbot' },
+    profile: { name: 'Styled Links Bot', bio: 'Publishes services and MetaApps.' },
+    sections: [
+      {
+        id: 'services',
+        protocolPath: '/protocols/skill-service',
+        items: [
+          {
+            pinId: servicePinId,
+            protocolPath: '/protocols/skill-service',
+            data: {
+              payload: {
+                displayName: 'Design Review Service',
+                description: 'Reviews Browser pages.',
+              },
+            },
+          },
+        ],
+      },
+      {
+        id: 'metaapps',
+        protocolPath: '/protocols/metaapp',
+        items: [
+          {
+            pinId: metaAppPinId,
+            protocolPath: '/protocols/metaapp',
+            data: {
+              payload: {
+                appName: 'Styled MetaApp',
+                code: `metafile://${metaAppCodePinId}.zip`,
+                content: `metafile://${metaAppCodePinId}.zip`,
+              },
+            },
+          },
+        ],
+      },
+      {
+        id: 'chats',
+        protocolPath: '/protocols/simplemsg',
+        items: [
+          {
+            pinId: '1'.repeat(64) + 'i0',
+            protocolPath: '/protocols/simplemsg',
+            timestamp: Math.floor(Date.UTC(2026, 5, 19) / 1000),
+            data: {
+              interactWith: {
+                globalMetaId: chatPeerSunny,
+                name: 'AI_Sunny',
+              },
+            },
+          },
+        ],
+      },
+    ],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    uri: 'metaid://idq1styledlinksbot',
+    normalizedUri: 'metaid://idq1styledlinksbot',
+    resourceType: 'bot',
+    title: 'Styled Links Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1styledlinksbot', name: 'Styled Links Bot', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('AI_Sunny'), 'styled bot page render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, new RegExp(`<a class="browser-bot-inline-link" href="pin://${servicePinId}" data-browser-map-link>Design Review Service</a>`));
+  assert.match(html, new RegExp(`<a class="browser-metaapp-link browser-bot-inline-link" href="metaapp://${metaAppPinId}" data-browser-map-link>Styled MetaApp</a>`));
+  assert.match(html, /href="metaid:\/\/idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz"[^>]*style="[^"]*text-decoration:none;color:#3558c8;"/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-bot-inline-link \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-bot-inline-link:hover,\s+\.browser-bot-inline-link:focus \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-activity-row strong\.browser-metaapp-heading \{\s+display: inline-flex;\s+align-items: baseline;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-download \{[\s\S]*align-self: baseline;[\s\S]*transform: none;[\s\S]*\}/);
+  assert.match(html, /<path d="M2 17v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2"><\/path>/);
 });
 
 test('bot-page renderer links each Recent Activity and MetaApp item to its pin:// detail via a [PIN] badge', async () => {

@@ -437,7 +437,7 @@ function iconHtml(name) {
     link: '<path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"></path>',
     message: '<path d="M5 6h14v9H8l-3 3V6z"></path>',
     database: '<ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>',
-    download: '<path d="M12 4v10"></path><path d="M8 10l4 4 4-4"></path><path d="M5 19h14"></path>',
+    download: '<path d="M12 3v12"></path><path d="M8 11l4 4 4-4"></path><path d="M2 17v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2"></path>',
     service: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"></path><path d="M4.4 7.8L12 12l7.6-4.2M12 12v8.5"></path>',
     settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1-2.1 2.1-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1.1 1.7V21h-3v-.2a1.8 1.8 0 0 0-1.1-1.7 1.8 1.8 0 0 0-2 .4l-.1.1-2.1-2.1.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.7-1.1H5v-3h.2a1.8 1.8 0 0 0 1.7-1.1 1.8 1.8 0 0 0-.4-2l-.1-.1 2.1-2.1.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1.1-1.7V3h3v.2a1.8 1.8 0 0 0 1.1 1.7 1.8 1.8 0 0 0 2-.4l.1-.1 2.1 2.1-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.7 1.1h.2v3h-.2a1.8 1.8 0 0 0-1.8 1.3z"></path>',
     shield: '<path d="M12 3l7 3v5c0 4.1-2.8 7.9-7 10-4.2-2.1-7-5.9-7-10V6l7-3z"></path><path d="M8.8 12l2.1 2.1 4.5-4.7"></path>',
@@ -2166,7 +2166,7 @@ function renderServiceRows(services) {
     ? services.map(function (service) {
       var title = escapeHtml(service.name || service.title || service.id || 'Service');
       var href = service.mapHref || pinHref(service.pinId);
-      var titleHtml = href ? '<a href="' + escapeHtml(href) + '" data-browser-map-link>' + title + '</a>' : title;
+      var titleHtml = href ? '<a class="browser-bot-inline-link" href="' + escapeHtml(href) + '" data-browser-map-link>' + title + '</a>' : title;
       return '<article class="browser-service-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('service') + '</span>' +
         '<div><strong>' + titleHtml + '</strong>' +
         (service.detail ? '<p>' + escapeHtml(service.detail) + '</p>' : '') + '</div>' +
@@ -2192,8 +2192,8 @@ function renderMetaAppRows(items, emptyText) {
     ? items.slice(0, 6).map(function (item) {
       var title = escapeHtml(item.title);
       var titleHtml = item.href
-        ? '<a class="browser-metaapp-link" href="' + escapeHtml(item.href) + '" data-browser-map-link>' + title + '</a>'
-        : '<span class="browser-metaapp-link">' + title + '</span>';
+        ? '<a class="browser-metaapp-link browser-bot-inline-link" href="' + escapeHtml(item.href) + '" data-browser-map-link>' + title + '</a>'
+        : '<span class="browser-metaapp-link browser-bot-inline-link">' + title + '</span>';
       var downloadHtml = item.downloadHref
         ? '<a class="browser-metaapp-download" href="' + escapeHtml(item.downloadHref) + '" target="_blank" rel="noopener" download aria-label="Download MetaApp code zip" title="Download MetaApp code zip">' + iconHtml('download') + '</a>'
         : '';
