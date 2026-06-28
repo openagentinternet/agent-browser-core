@@ -2242,10 +2242,11 @@ function renderMetaAppRows(items, emptyText) {
     ? items.slice(0, 6).map(function (item) {
       var title = escapeHtml(item.title);
       var appName = textValue(item.appName);
+      var titleHtml = item.mapHref
+        ? '<a href="' + escapeHtml(item.mapHref) + '" data-browser-map-link class="browser-metaapp-title browser-bot-inline-link">' + title + '</a>'
+        : '<strong class="browser-metaapp-title">' + title + '</strong>';
       var appNameHtml = appName
-        ? (item.mapHref
-          ? '<a href="' + escapeHtml(item.mapHref) + '" data-browser-map-link class="browser-metaapp-name browser-bot-inline-link">' + escapeHtml(appName) + '</a>'
-          : '<span class="browser-metaapp-name">' + escapeHtml(appName) + '</span>')
+        ? '<span class="browser-metaapp-name">' + escapeHtml(appName) + '</span>'
         : '';
       var runHtml = item.href
         ? '<a class="browser-metaapp-run" href="' + escapeHtml(item.href) + '" data-browser-map-link>' + iconHtml('play') + '<span>Run</span></a>'
@@ -2263,7 +2264,7 @@ function renderMetaAppRows(items, emptyText) {
         '<div class="browser-metaapp-actions">' + runHtml + downloadHtml + '</div></div>' +
         '<div class="browser-metaapp-main"><div class="browser-metaapp-heading">' +
         renderCardImage(item.icon, item.title, 'browser-metaapp-icon', 'browser-metaapp-icon-image', 'layout') +
-        '<div class="browser-metaapp-title-block"><strong class="browser-metaapp-title">' + title + '</strong>' +
+        '<div class="browser-metaapp-title-block">' + titleHtml +
         appNameHtml + '</div></div>' +
         (item.detail ? '<p class="browser-metaapp-intro">' + escapeHtml(item.detail) + '</p>' : '') +
         (facts ? '<div class="browser-metaapp-facts">' + facts + '</div>' : '') + '</div></article>';

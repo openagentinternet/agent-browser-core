@@ -515,7 +515,8 @@ test('bot-page renderer keeps MetaApp intro scoped to each card and uses Run dee
   assert.match(firstMetaAppRow, /class="browser-metaapp-run"/);
   assert.match(firstMetaAppRow, /class="browser-metaapp-cover-image"/);
   assert.match(firstMetaAppRow, /class="browser-metaapp-icon-image"/);
-  assert.match(firstMetaAppRow, new RegExp(`<strong class="browser-metaapp-title">${escapeRegExp('eric-homepage')}</strong><a href="pin://${metaAppPinId}" data-browser-map-link class="browser-metaapp-name browser-bot-inline-link">${escapeRegExp('eric-homepage')}</a>`));
+  assert.match(firstMetaAppRow, new RegExp(`<a href="pin://${metaAppPinId}" data-browser-map-link class="browser-metaapp-title browser-bot-inline-link">${escapeRegExp('eric-homepage')}</a><span class="browser-metaapp-name">${escapeRegExp('eric-homepage')}</span>`));
+  assert.doesNotMatch(firstMetaAppRow, /class="browser-metaapp-name browser-bot-inline-link"/);
   assert.match(html, /class="browser-metaapp-download"/);
   assert.equal((html.match(new RegExp(introText, 'g')) || []).length, 1);
   assert.doesNotMatch(firstMetaAppRow, new RegExp(introText));
@@ -628,7 +629,9 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.match(metaAppsSection[1], /class="browser-metaapp-card"/);
   assert.match(metaAppsSection[1], /Styled MetaApp Title/);
   assert.match(metaAppsSection[1], /Styled MetaApp/);
-  assert.match(metaAppsSection[1], new RegExp(`href="pin://${metaAppPinId}" data-browser-map-link class="browser-metaapp-name browser-bot-inline-link"`));
+  assert.match(metaAppsSection[1], new RegExp(`<a href="pin://${metaAppPinId}" data-browser-map-link class="browser-metaapp-title browser-bot-inline-link">Styled MetaApp Title</a>`));
+  assert.match(metaAppsSection[1], /<span class="browser-metaapp-name">Styled MetaApp<\/span>/);
+  assert.doesNotMatch(metaAppsSection[1], /class="browser-metaapp-name browser-bot-inline-link"/);
   assert.match(metaAppsSection[1], /Runs a styled Browser application./);
   assert.match(metaAppsSection[1], /1\.2\.3/);
   assert.match(metaAppsSection[1], /application\/zip/);
@@ -636,12 +639,13 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.match(metaAppsSection[1], /class="browser-metaapp-cover-image"/);
   assert.match(metaAppsSection[1], /class="browser-metaapp-icon-image"/);
   assert.doesNotMatch(metaAppsSection[1], /class="browser-pin-badge"/);
-  assert.doesNotMatch(metaAppsSection[1], new RegExp(`<a[^>]+>${escapeRegExp('Styled MetaApp Title')}</a>`));
   assert.match(metaAppsSection[1], new RegExp(`href="https://file\\.metaid\\.io/metafile-indexer/api/v1/files/accelerate/content/${metaAppCodePinId}"`));
 
   assert.match(html, /href="metaid:\/\/idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz"[^>]*style="[^"]*text-decoration:none;color:#3558c8;"/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-bot-inline-link \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-bot-inline-link:hover,\s+\.browser-bot-inline-link:focus \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-title\.browser-bot-inline-link \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
+  assert.doesNotMatch(BROWSER_INDEX_HTML, /\.browser-metaapp-name\.browser-bot-inline-link \{/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-actions \{/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-card \{/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-icon \{\s+align-self: start;/);
