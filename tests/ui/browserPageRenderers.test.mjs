@@ -650,7 +650,8 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-card \{/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-icon \{\s+align-self: start;/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-actions \{/);
-  assert.match(BROWSER_INDEX_HTML, /\.browser-service-price \{\s+color: var\(--browser-accent\);\s+text-align: right;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-price \{\s+color: var\(--browser-muted\);\s+text-align: right;\s+font-size: 14px;\s+font-weight: 400;\s+line-height: 1\.55;/);
+  assert.doesNotMatch(BROWSER_INDEX_HTML, /\.browser-service-price \{\s+color: var\(--browser-accent\);/);
   const narrowCss = BROWSER_INDEX_HTML.match(/@media \(max-width: 520px\) \{[\s\S]*?\.browser-icon-button\.is-loading/);
   assert.ok(narrowCss, 'narrow viewport CSS should be present');
   assert.doesNotMatch(narrowCss[0], /\.browser-service-card,\s+\.browser-metaapp-card,/);
