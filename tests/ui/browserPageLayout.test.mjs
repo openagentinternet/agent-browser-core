@@ -148,3 +148,44 @@ test('Responsive Browser overlays stay within renderer viewport geometry', async
     await browser.close();
   }
 });
+
+test('Responsive Browser status strip stays single-line at narrow widths', async () => {
+  const playwright = await import('playwright');
+  const browser = await playwright.chromium.launch();
+  let page;
+  try {
+    page = await browser.newPage({ viewport: { width: 320, height: 540 } });
+    await page.setContent(await renderBrowserPageHtml(buildBrowserPageDefinition()), { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      document.querySelector('[data-browser-status-state]').textContent = 'resolved';
+      document.querySelector('[data-browser-status-proof]').textContent = 'partial';
+      document.querySelector('[data-browser-status-renderer]').textContent = 'renderer: pin-inspector';
+      document.querySelector('[data-browser-status-txid]').textContent = 'TXID: 47bd23df82d4f5f30ef8d3b43ee05983188571ac328c4de156ee80a1ed5e7ab2';
+    });
+
+    const status = await page.evaluate(() => {
+      const strip = document.querySelector('[data-browser-status-strip]');
+      const style = getComputedStyle(strip);
+      return {
+        height: strip.getBoundingClientRect().height,
+        clientHeight: strip.clientHeight,
+        scrollHeight: strip.scrollHeight,
+        flexWrap: style.flexWrap,
+        overflowX: style.overflowX,
+        overflowY: style.overflowY,
+      };
+    });
+
+    assert.equal(status.flexWrap, 'nowrap');
+    assert.equal(status.overflowX, 'hidden');
+    assert.equal(status.overflowY, 'hidden');
+    assert.ok(status.height <= 33, `status strip should keep fixed chrome height: ${JSON.stringify(status)}`);
+    assert.ok(
+      status.scrollHeight <= status.clientHeight + 1,
+      `status strip should not create a second text row: ${JSON.stringify(status)}`
+    );
+  } finally {
+    if (page) await page.close();
+    await browser.close();
+  }
+});
