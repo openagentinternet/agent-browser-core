@@ -190,7 +190,13 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.doesNotMatch(html, /data-browser-action="copy"/);
   assert.doesNotMatch(html, /data-browser-follow/);
   assert.doesNotMatch(html, /<span>Follow<\/span>/);
-  assert.match(html, new RegExp(`href="pin://${servicePinId}"`));
+  assert.match(html, /class="browser-service-card"/);
+  assert.match(html, /fixture-review/);
+  assert.match(html, /0 SPACE/);
+  assert.match(html, /Output/);
+  assert.match(html, /data-browser-action="service-call"/);
+  assert.match(html, new RegExp(`data-service-id="${servicePinId}"`));
+  assert.doesNotMatch(html, new RegExp(`<a[^>]+href="pin://${servicePinId}"`));
   assert.doesNotMatch(html, new RegExp(`href="map://simplebuzz/pin/${buzzPinId}"`));
   assert.match(html, /https:\/\/file\.metaid\.io\/metafile-indexer\/content\/avatar-pin/);
 });
@@ -442,7 +448,7 @@ test('bot-page renderer removes linked title for multiline simplebuzz recent act
   assert.equal((html.match(/Commit: efea0079 chore: sync package lock after browser cleanup/g) || []).length, 1);
 });
 
-test('bot-page renderer keeps MetaApp intro scoped to each item and uses metaapp deep links', async () => {
+test('bot-page renderer keeps MetaApp intro scoped to each card and uses Run deep links', async () => {
   const homepage = {
     schemaVersion: 'botHomepage.v3',
     identity: { globalMetaId: 'idq1metaappbot' },
@@ -463,6 +469,8 @@ test('bot-page renderer keeps MetaApp intro scoped to each item and uses metaapp
                 content: `metafile://${metaAppCodePinId}.zip`,
                 codeType: 'application/zip',
                 contentType: 'application/zip',
+                coverImg: 'https://file.metaid.io/metafile-indexer/content/cover-pin',
+                icon: 'https://file.metaid.io/metafile-indexer/content/icon-pin',
                 title: 'eric-homepage',
                 version: '1.0.0',
               },
@@ -504,7 +512,10 @@ test('bot-page renderer keeps MetaApp intro scoped to each item and uses metaapp
   const [firstMetaAppRow] = metaAppsSection[1].split('</article>');
   assert.match(html, new RegExp(`href="metaapp://${metaAppPinId}"`));
   assert.doesNotMatch(html, new RegExp(`href="map://metaapp/pin/${metaAppPinId}"`));
-  assert.match(html, /class="[^"]*\bbrowser-metaapp-link\b[^"]*"/);
+  assert.match(firstMetaAppRow, /class="browser-metaapp-run"/);
+  assert.match(firstMetaAppRow, /class="browser-metaapp-cover-image"/);
+  assert.match(firstMetaAppRow, /class="browser-metaapp-icon-image"/);
+  assert.doesNotMatch(firstMetaAppRow, new RegExp(`<a[^>]+>${escapeRegExp('eric-homepage')}</a>`));
   assert.match(html, /class="browser-metaapp-download"/);
   assert.equal((html.match(new RegExp(introText, 'g')) || []).length, 1);
   assert.doesNotMatch(firstMetaAppRow, new RegExp(introText));
@@ -513,11 +524,11 @@ test('bot-page renderer keeps MetaApp intro scoped to each item and uses metaapp
   assert.match(html, /aria-label="Download MetaApp code zip"/);
 });
 
-test('bot-page document service and MetaApp links share the recent chat peer link treatment', async () => {
+test('bot-page document renders service and MetaApp cards from v3 payload fields', async () => {
   const homepage = {
     schemaVersion: 'botHomepage.v3',
-    identity: { globalMetaId: 'idq1styledlinksbot' },
-    profile: { name: 'Styled Links Bot', bio: 'Publishes services and MetaApps.' },
+    identity: { globalMetaId: 'idq1styledcardsbot' },
+    profile: { name: 'Styled Cards Bot', bio: 'Publishes services and MetaApps.' },
     sections: [
       {
         id: 'services',
@@ -528,8 +539,13 @@ test('bot-page document service and MetaApp links share the recent chat peer lin
             protocolPath: '/protocols/skill-service',
             data: {
               payload: {
-                displayName: 'Design Review Service',
-                description: 'Reviews Browser pages.',
+                displayName: '微博热搜',
+                description: '获取微博热搜榜数据，返回热搜标题、热度值和跳转链接。',
+                providerSkill: 'weibo-hot-trend',
+                price: '0.00001',
+                currency: 'SPACE',
+                serviceIcon: 'https://manapi.metaid.io/content/service-icon-pin',
+                outputType: 'text',
               },
             },
           },
@@ -547,6 +563,12 @@ test('bot-page document service and MetaApp links share the recent chat peer lin
                 appName: 'Styled MetaApp',
                 code: `metafile://${metaAppCodePinId}.zip`,
                 content: `metafile://${metaAppCodePinId}.zip`,
+                contentType: 'application/zip',
+                coverImg: 'https://file.metaid.io/metafile-indexer/content/card-cover',
+                icon: 'https://file.metaid.io/metafile-indexer/content/card-icon',
+                intro: 'Runs a styled Browser application.',
+                title: 'Styled MetaApp Title',
+                version: '1.2.3',
               },
             },
           },
@@ -576,27 +598,53 @@ test('bot-page document service and MetaApp links share the recent chat peer lin
     contentType: 'application/vnd.oac.bot-homepage+json',
     data: homepage,
   }, {
-    uri: 'metaid://idq1styledlinksbot',
-    normalizedUri: 'metaid://idq1styledlinksbot',
+    uri: 'metaid://idq1styledcardsbot',
+    normalizedUri: 'metaid://idq1styledcardsbot',
     resourceType: 'bot',
-    title: 'Styled Links Bot',
-    owner: { kind: 'bot', globalMetaId: 'idq1styledlinksbot', name: 'Styled Links Bot', verificationState: 'partial' },
+    title: 'Styled Cards Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1styledcardsbot', name: 'Styled Cards Bot', verificationState: 'partial' },
     actions: [],
   }));
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('AI_Sunny'), 'styled bot page render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
-  assert.match(html, new RegExp(`<a class="browser-bot-inline-link" href="pin://${servicePinId}" data-browser-map-link>Design Review Service</a>`));
-  assert.match(html, new RegExp(`<a class="browser-metaapp-link browser-bot-inline-link" href="metaapp://${metaAppPinId}" data-browser-map-link>Styled MetaApp</a>`));
+  const servicesSection = html.match(/<section class="browser-document-section browser-bot-services"><h3>Services<\/h3>([\s\S]*?)<\/section>/);
+  assert.ok(servicesSection, 'services section should render');
+  assert.match(servicesSection[1], /class="browser-service-card"/);
+  assert.match(servicesSection[1], /微博热搜/);
+  assert.match(servicesSection[1], /获取微博热搜榜数据，返回热搜标题、热度值和跳转链接。/);
+  assert.match(servicesSection[1], /weibo-hot-trend/);
+  assert.match(servicesSection[1], /0\.00001 SPACE/);
+  assert.match(servicesSection[1], /Output/);
+  assert.match(servicesSection[1], /text/);
+  assert.match(servicesSection[1], /class="browser-service-icon-image"/);
+  assert.match(servicesSection[1], /data-browser-action="service-call"/);
+  assert.doesNotMatch(servicesSection[1], /Input/);
+
+  const metaAppsSection = html.match(/<section class="browser-document-section browser-bot-metaapps"><h3>MetaApps<\/h3>([\s\S]*?)<\/section>/);
+  assert.ok(metaAppsSection, 'metaapps section should render');
+  assert.match(metaAppsSection[1], /class="browser-metaapp-card"/);
+  assert.match(metaAppsSection[1], /Styled MetaApp Title/);
+  assert.match(metaAppsSection[1], /Styled MetaApp/);
+  assert.match(metaAppsSection[1], /Runs a styled Browser application./);
+  assert.match(metaAppsSection[1], /1\.2\.3/);
+  assert.match(metaAppsSection[1], /application\/zip/);
+  assert.match(metaAppsSection[1], new RegExp(`class="browser-metaapp-run" href="metaapp://${metaAppPinId}" data-browser-map-link`));
+  assert.match(metaAppsSection[1], /class="browser-metaapp-cover-image"/);
+  assert.match(metaAppsSection[1], /class="browser-metaapp-icon-image"/);
+  assert.doesNotMatch(metaAppsSection[1], /class="browser-pin-badge"/);
+  assert.doesNotMatch(metaAppsSection[1], new RegExp(`<a[^>]+>${escapeRegExp('Styled MetaApp Title')}</a>`));
+  assert.match(metaAppsSection[1], new RegExp(`href="https://file\\.metaid\\.io/metafile-indexer/api/v1/files/accelerate/content/${metaAppCodePinId}"`));
+
   assert.match(html, /href="metaid:\/\/idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz"[^>]*style="[^"]*text-decoration:none;color:#3558c8;"/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-bot-inline-link \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-bot-inline-link:hover,\s+\.browser-bot-inline-link:focus \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
-  assert.match(BROWSER_INDEX_HTML, /\.browser-activity-row strong\.browser-metaapp-heading \{\s+display: inline-flex;\s+align-items: baseline;/);
-  assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-download \{[\s\S]*align-self: baseline;[\s\S]*transform: none;[\s\S]*\}/);
-  assert.match(html, /<path d="M2 17v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2"><\/path>/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-actions \{/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-card \{/);
+  assert.match(html, /<path d="M12 3v12"><\/path>/);
 });
 
-test('bot-page renderer links each Recent Activity and MetaApp item to its pin:// detail via a [PIN] badge', async () => {
+test('bot-page renderer links each Recent Activity item to its pin:// detail via a [PIN] badge', async () => {
   const buzzPin = '4'.repeat(64) + 'i0';
   const chatPin = '1'.repeat(64) + 'i0';
   const homepage = {
@@ -665,9 +713,11 @@ test('bot-page renderer links each Recent Activity and MetaApp item to its pin:/
   // Chat row: PIN badge links to the chat interaction pin.
   const chatBadge = new RegExp(`class="browser-pin-badge" href="pin://${chatPin}" data-browser-map-link[^>]*>PIN`);
   assert.match(html, chatBadge);
-  // MetaApps: PIN badge links to the metaapp pin detail.
-  const metaAppBadge = new RegExp(`class="browser-pin-badge" href="pin://${metaAppPinId}" data-browser-map-link[^>]*>PIN`);
-  assert.match(html, metaAppBadge);
+  // MetaApps use Run for the app link and do not render a PIN badge in the card section.
+  const metaAppsSection = html.match(/<section class="browser-document-section browser-bot-metaapps"><h3>MetaApps<\/h3>([\s\S]*?)<\/section>/);
+  assert.ok(metaAppsSection, 'metaapps section should render');
+  assert.match(metaAppsSection[1], new RegExp(`href="metaapp://${metaAppPinId}"`));
+  assert.doesNotMatch(metaAppsSection[1], /class="browser-pin-badge"/);
 });
 
 test('bot-page renderer uses compact-list template with normalized future lists', async () => {

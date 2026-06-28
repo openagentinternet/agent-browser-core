@@ -438,6 +438,7 @@ function iconHtml(name) {
     message: '<path d="M5 6h14v9H8l-3 3V6z"></path>',
     database: '<ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>',
     download: '<path d="M12 3v12"></path><path d="M8 11l4 4 4-4"></path><path d="M2 17v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2"></path>',
+    play: '<path d="M8 5v14l11-7-11-7z"></path>',
     service: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"></path><path d="M4.4 7.8L12 12l7.6-4.2M12 12v8.5"></path>',
     settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1-2.1 2.1-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1.1 1.7V21h-3v-.2a1.8 1.8 0 0 0-1.1-1.7 1.8 1.8 0 0 0-2 .4l-.1.1-2.1-2.1.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.7-1.1H5v-3h.2a1.8 1.8 0 0 0 1.7-1.1 1.8 1.8 0 0 0-.4-2l-.1-.1 2.1-2.1.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1.1-1.7V3h3v.2a1.8 1.8 0 0 0 1.1 1.7 1.8 1.8 0 0 0 2-.4l.1-.1 2.1 2.1-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.7 1.1h.2v3h-.2a1.8 1.8 0 0 0-1.8 1.3z"></path>',
     shield: '<path d="M12 3l7 3v5c0 4.1-2.8 7.9-7 10-4.2-2.1-7-5.9-7-10V6l7-3z"></path><path d="M8.8 12l2.1 2.1 4.5-4.7"></path>',
@@ -1934,6 +1935,25 @@ function firstArray() {
   return [];
 }
 
+function botHomepageItemFields(item) {
+  var rawItem = objectValue(item);
+  var rawData = objectValue(rawItem.data);
+  var payload = objectValue(rawData.payload);
+  var source = Object.keys(payload).length ? payload : (Object.keys(rawData).length ? rawData : rawItem);
+  if (source === rawItem) return rawItem;
+  var normalized = {};
+  Object.keys(rawItem).forEach(function (key) {
+    normalized[key] = rawItem[key];
+  });
+  Object.keys(source).forEach(function (key) {
+    normalized[key] = source[key];
+  });
+  normalized.pinId = textValue(rawItem.pinId) || textValue(source.pinId) || textValue(source.currentPinId);
+  normalized.protocolPath = textValue(rawItem.protocolPath) || textValue(source.protocolPath);
+  normalized.timestamp = rawItem.timestamp || source.timestamp;
+  return normalized;
+}
+
 function botHomepageSectionItems(data, sectionId) {
   var sections = Array.isArray(data && data.sections) ? data.sections : [];
   var targetId = textValue(sectionId);
@@ -1943,18 +1963,7 @@ function botHomepageSectionItems(data, sectionId) {
     if (rawId !== targetId && !(targetId === 'apps' && rawId === 'metaapps')) continue;
     var items = Array.isArray(section.items) ? section.items : [];
     return items.map(function (item) {
-      var rawItem = objectValue(item);
-      var rawData = objectValue(rawItem.data);
-      var payload = objectValue(objectValue(rawItem.data).payload);
-      var source = Object.keys(payload).length ? payload : (Object.keys(rawData).length ? rawData : rawItem);
-      var normalized = {};
-      Object.keys(source).forEach(function (key) {
-        normalized[key] = source[key];
-      });
-      normalized.pinId = textValue(rawItem.pinId) || textValue(source.pinId) || textValue(source.currentPinId);
-      normalized.protocolPath = textValue(rawItem.protocolPath) || textValue(source.protocolPath);
-      normalized.timestamp = rawItem.timestamp || source.timestamp;
-      return normalized;
+      return botHomepageItemFields(item);
     });
   }
   return [];
@@ -2000,10 +2009,19 @@ function normalizeBotHomepageList(items, fallbackLabel) {
 
 function normalizeBotHomepageServices(items) {
   return firstArray(items).map(function (service, index) {
-    var normalized = normalizeBotHomepageListItem(service, index, 'Service');
-    normalized.serviceId = textValue(service && (service.serviceId || service.id)) || normalized.id;
-    normalized.protocolPath = normalized.protocolPath || textValue(service && service.protocolPath) || '/protocols/skill-service';
+    var fields = botHomepageItemFields(service);
+    var normalized = normalizeBotHomepageListItem(fields, index, 'Service');
+    normalized.title = textValue(fields.displayName || fields.serviceName || fields.name || fields.title || fields.label) || normalized.title;
+    normalized.detail = readableText(fields.description || fields.summary || fields.detail || fields.text) || normalized.detail;
+    normalized.providerSkill = textValue(fields.providerSkill);
+    normalized.price = textValue(fields.price);
+    normalized.currency = textValue(fields.currency);
+    normalized.output = textValue(fields.output || fields.outputType);
+    normalized.serviceIcon = safeUrl(fields.serviceIcon || fields.icon);
+    normalized.serviceId = textValue(fields.serviceId || fields.id || fields.currentPinId || fields.servicePinId || fields.pinId) || normalized.id;
+    normalized.protocolPath = normalized.protocolPath || textValue(fields.protocolPath) || '/protocols/skill-service';
     normalized.mapHref = pinHref(normalized.pinId);
+    normalized.raw = fields;
     return normalized;
   });
 }
@@ -2014,11 +2032,19 @@ function metaAppSummaryText(item) {
 
 function normalizeBotHomepageMetaApps(items) {
   return firstArray(items).map(function (metaapp, index) {
-    var normalized = normalizeBotHomepageListItem(metaapp, index, 'MetaApp');
-    normalized.title = textValue(metaapp && (metaapp.title || metaapp.name || metaapp.appName || metaapp.displayName || metaapp.label || metaapp.pinId)) || normalized.title;
-    normalized.detail = metaAppSummaryText(metaapp);
+    var fields = botHomepageItemFields(metaapp);
+    var normalized = normalizeBotHomepageListItem(fields, index, 'MetaApp');
+    normalized.appName = textValue(fields.appName || fields.serviceName || fields.name);
+    normalized.title = textValue(fields.title || fields.displayName || fields.label || normalized.appName || fields.pinId) || normalized.title;
+    normalized.detail = metaAppSummaryText(fields);
+    normalized.coverImg = safeUrl(fields.coverImg || fields.coverImage || fields.cover || fields.image);
+    normalized.icon = safeUrl(fields.icon || fields.appIcon);
+    normalized.version = textValue(fields.version);
+    normalized.contentType = textValue(fields.contentType || fields.codeType || fields.runtime);
+    normalized.updatedDate = formatActivityDate(normalized.timestamp);
     normalized.href = metaAppHref(normalized.pinId);
-    normalized.downloadHref = buildMetafileDownloadHref(textValue(metaapp && (metaapp.code || metaapp.content || metaapp.metafile || metaapp.file)));
+    normalized.downloadHref = buildMetafileDownloadHref(textValue(fields.code || fields.content || fields.metafile || fields.file));
+    normalized.raw = fields;
     return normalized;
   }).filter(function (item) {
     return !!item.title;
@@ -2161,15 +2187,35 @@ function normalizeBotHomepagePayload(current) {
   };
 }
 
+function renderCardImage(rawUrl, label, wrapperClass, imageClass, fallbackIcon) {
+  var url = safeUrl(rawUrl);
+  if (url) {
+    return '<span class="' + wrapperClass + '" aria-hidden="true"><img class="' + imageClass + '" src="' + escapeHtml(url) + '" alt="" /></span>';
+  }
+  return '<span class="' + wrapperClass + ' browser-card-image-fallback" aria-hidden="true">' + iconHtml(fallbackIcon || 'layout') + '</span>';
+}
+
+function renderLabeledChip(label, value, className) {
+  var text = textValue(value);
+  if (!text) return '';
+  return '<span class="' + className + '"><span>' + escapeHtml(label) + '</span><b>' + escapeHtml(text) + '</b></span>';
+}
+
 function renderServiceRows(services) {
   return services.length
     ? services.map(function (service) {
       var title = escapeHtml(service.name || service.title || service.id || 'Service');
-      var href = service.mapHref || pinHref(service.pinId);
-      var titleHtml = href ? '<a class="browser-bot-inline-link" href="' + escapeHtml(href) + '" data-browser-map-link>' + title + '</a>' : title;
-      return '<article class="browser-service-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('service') + '</span>' +
-        '<div><strong>' + titleHtml + '</strong>' +
-        (service.detail ? '<p>' + escapeHtml(service.detail) + '</p>' : '') + '</div>' +
+      var price = [textValue(service.price), textValue(service.currency)].filter(Boolean).join(' ');
+      var metaHtml = [
+        service.providerSkill ? '<span class="browser-service-provider">' + escapeHtml(service.providerSkill) + '</span>' : '',
+        renderLabeledChip('Output', service.output, 'browser-card-chip')
+      ].filter(Boolean).join('');
+      return '<article class="browser-service-card">' +
+        renderCardImage(service.serviceIcon, service.title, 'browser-service-icon', 'browser-service-icon-image', 'service') +
+        '<div class="browser-service-main"><div class="browser-service-heading"><strong class="browser-service-title">' + title + '</strong>' +
+        (price ? '<span class="browser-service-price">' + escapeHtml(price) + '</span>' : '') + '</div>' +
+        (service.detail ? '<p class="browser-service-description">' + escapeHtml(service.detail) + '</p>' : '') +
+        (metaHtml ? '<div class="browser-service-meta">' + metaHtml + '</div>' : '') + '</div>' +
         '<button type="button" data-browser-action="service-call" data-service-id="' + escapeHtml(service.serviceId || service.id) + '">Request</button></article>';
     }).join('')
     : '<p class="browser-muted-row">No public services.</p>';
@@ -2191,16 +2237,27 @@ function renderMetaAppRows(items, emptyText) {
   return items.length
     ? items.slice(0, 6).map(function (item) {
       var title = escapeHtml(item.title);
-      var titleHtml = item.href
-        ? '<a class="browser-metaapp-link browser-bot-inline-link" href="' + escapeHtml(item.href) + '" data-browser-map-link>' + title + '</a>'
-        : '<span class="browser-metaapp-link browser-bot-inline-link">' + title + '</span>';
+      var appName = textValue(item.appName);
+      var runHtml = item.href
+        ? '<a class="browser-metaapp-run" href="' + escapeHtml(item.href) + '" data-browser-map-link>' + iconHtml('play') + '<span>Run</span></a>'
+        : '<span class="browser-metaapp-run is-disabled">' + iconHtml('play') + '<span>Run</span></span>';
       var downloadHtml = item.downloadHref
         ? '<a class="browser-metaapp-download" href="' + escapeHtml(item.downloadHref) + '" target="_blank" rel="noopener" download aria-label="Download MetaApp code zip" title="Download MetaApp code zip">' + iconHtml('download') + '</a>'
         : '';
-      var pinBadge = pinBadgeHtml(item.pinId);
-      return '<article class="browser-activity-row"><span class="browser-row-icon" aria-hidden="true">' + iconHtml('layout') + '</span>' +
-        '<div><strong class="browser-metaapp-heading">' + titleHtml + downloadHtml + pinBadge + '</strong>' +
-        (item.detail ? '<p>' + escapeHtml(item.detail) + '</p>' : '') + '</div></article>';
+      var facts = [
+        renderLabeledChip('Version', item.version, 'browser-metaapp-fact'),
+        renderLabeledChip('Type', item.contentType, 'browser-metaapp-fact'),
+        renderLabeledChip('Updated', item.updatedDate, 'browser-metaapp-fact')
+      ].filter(Boolean).join('');
+      return '<article class="browser-metaapp-card"><div class="browser-metaapp-media">' +
+        renderCardImage(item.coverImg, item.title, 'browser-metaapp-cover', 'browser-metaapp-cover-image', 'layout') +
+        '<div class="browser-metaapp-actions">' + runHtml + downloadHtml + '</div></div>' +
+        '<div class="browser-metaapp-main"><div class="browser-metaapp-heading">' +
+        renderCardImage(item.icon, item.title, 'browser-metaapp-icon', 'browser-metaapp-icon-image', 'layout') +
+        '<div class="browser-metaapp-title-block"><strong class="browser-metaapp-title">' + title + '</strong>' +
+        (appName ? '<span class="browser-metaapp-name">' + escapeHtml(appName) + '</span>' : '') + '</div></div>' +
+        (item.detail ? '<p class="browser-metaapp-intro">' + escapeHtml(item.detail) + '</p>' : '') +
+        (facts ? '<div class="browser-metaapp-facts">' + facts + '</div>' : '') + '</div></article>';
     }).join('')
     : '<p class="browser-muted-row">' + escapeHtml(emptyText) + '</p>';
 }
