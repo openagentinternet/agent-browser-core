@@ -196,7 +196,7 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.match(html, /Output/);
   assert.match(html, /data-browser-action="service-call"/);
   assert.match(html, new RegExp(`data-service-id="${servicePinId}"`));
-  assert.doesNotMatch(html, new RegExp(`<a[^>]+href="pin://${servicePinId}"`));
+  assert.match(html, new RegExp(`href="pin://${servicePinId}" data-browser-map-link class="browser-service-title browser-bot-inline-link"`));
   assert.doesNotMatch(html, new RegExp(`href="map://simplebuzz/pin/${buzzPinId}"`));
   assert.match(html, /https:\/\/file\.metaid\.io\/metafile-indexer\/content\/avatar-pin/);
 });
@@ -515,7 +515,7 @@ test('bot-page renderer keeps MetaApp intro scoped to each card and uses Run dee
   assert.match(firstMetaAppRow, /class="browser-metaapp-run"/);
   assert.match(firstMetaAppRow, /class="browser-metaapp-cover-image"/);
   assert.match(firstMetaAppRow, /class="browser-metaapp-icon-image"/);
-  assert.doesNotMatch(firstMetaAppRow, new RegExp(`<a[^>]+>${escapeRegExp('eric-homepage')}</a>`));
+  assert.match(firstMetaAppRow, new RegExp(`<strong class="browser-metaapp-title">${escapeRegExp('eric-homepage')}</strong><a href="pin://${metaAppPinId}" data-browser-map-link class="browser-metaapp-name browser-bot-inline-link">${escapeRegExp('eric-homepage')}</a>`));
   assert.match(html, /class="browser-metaapp-download"/);
   assert.equal((html.match(new RegExp(introText, 'g')) || []).length, 1);
   assert.doesNotMatch(firstMetaAppRow, new RegExp(introText));
@@ -612,9 +612,11 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.ok(servicesSection, 'services section should render');
   assert.match(servicesSection[1], /class="browser-service-card"/);
   assert.match(servicesSection[1], /微博热搜/);
+  assert.match(servicesSection[1], new RegExp(`href="pin://${servicePinId}" data-browser-map-link class="browser-service-title browser-bot-inline-link"`));
   assert.match(servicesSection[1], /获取微博热搜榜数据，返回热搜标题、热度值和跳转链接。/);
   assert.match(servicesSection[1], /weibo-hot-trend/);
   assert.match(servicesSection[1], /0\.00001 SPACE/);
+  assert.match(servicesSection[1], /<div class="browser-service-actions"><span class="browser-service-price">0\.00001 SPACE<\/span><button type="button" data-browser-action="service-call"/);
   assert.match(servicesSection[1], /Output/);
   assert.match(servicesSection[1], /text/);
   assert.match(servicesSection[1], /class="browser-service-icon-image"/);
@@ -626,6 +628,7 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.match(metaAppsSection[1], /class="browser-metaapp-card"/);
   assert.match(metaAppsSection[1], /Styled MetaApp Title/);
   assert.match(metaAppsSection[1], /Styled MetaApp/);
+  assert.match(metaAppsSection[1], new RegExp(`href="pin://${metaAppPinId}" data-browser-map-link class="browser-metaapp-name browser-bot-inline-link"`));
   assert.match(metaAppsSection[1], /Runs a styled Browser application./);
   assert.match(metaAppsSection[1], /1\.2\.3/);
   assert.match(metaAppsSection[1], /application\/zip/);
@@ -641,7 +644,62 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.match(BROWSER_INDEX_HTML, /\.browser-bot-inline-link:hover,\s+\.browser-bot-inline-link:focus \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-actions \{/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-card \{/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-icon \{\s+align-self: start;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-actions \{/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-price \{\s+color: var\(--browser-accent\);\s+text-align: right;/);
+  const narrowCss = BROWSER_INDEX_HTML.match(/@media \(max-width: 520px\) \{[\s\S]*?\.browser-icon-button\.is-loading/);
+  assert.ok(narrowCss, 'narrow viewport CSS should be present');
+  assert.doesNotMatch(narrowCss[0], /\.browser-service-card,\s+\.browser-metaapp-card,/);
+  assert.doesNotMatch(narrowCss[0], /\.browser-service-card button/);
+  assert.match(narrowCss[0], /\.browser-service-actions \{\s+justify-items: end;/);
   assert.match(html, /<path d="M12 3v12"><\/path>/);
+});
+
+test('bot-page document hides empty Services and MetaApps sections', async () => {
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1emptycardsbot' },
+    profile: { name: 'Empty Cards Bot', bio: 'Has only activity.' },
+    sections: [
+      { id: 'services', protocolPath: '/protocols/skill-service', items: [] },
+      { id: 'metaapps', protocolPath: '/protocols/metaapp', items: [] },
+      {
+        id: 'chats',
+        protocolPath: '/protocols/simplemsg',
+        items: [
+          {
+            pinId: '1'.repeat(64) + 'i0',
+            protocolPath: '/protocols/simplemsg',
+            timestamp: Math.floor(Date.UTC(2026, 5, 19) / 1000),
+            data: { interactWith: { globalMetaId: chatPeerSunny, name: 'AI_Sunny' } },
+          },
+        ],
+      },
+    ],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    uri: 'metaid://idq1emptycardsbot',
+    normalizedUri: 'metaid://idq1emptycardsbot',
+    resourceType: 'bot',
+    title: 'Empty Cards Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1emptycardsbot', name: 'Empty Cards Bot', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Recent Activity'), 'empty card sections render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.doesNotMatch(html, /browser-bot-services/);
+  assert.doesNotMatch(html, /<h3>Services<\/h3>/);
+  assert.doesNotMatch(html, /No public services/);
+  assert.doesNotMatch(html, /browser-bot-metaapps/);
+  assert.doesNotMatch(html, /<h3>MetaApps<\/h3>/);
+  assert.doesNotMatch(html, /No public MetaApps/);
+  assert.match(html, /Recent Activity/);
+  assert.match(html, /AI_Sunny/);
 });
 
 test('bot-page renderer links each Recent Activity item to its pin:// detail via a [PIN] badge', async () => {

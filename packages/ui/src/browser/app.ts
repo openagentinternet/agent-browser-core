@@ -2206,17 +2206,21 @@ function renderServiceRows(services) {
     ? services.map(function (service) {
       var title = escapeHtml(service.name || service.title || service.id || 'Service');
       var price = [textValue(service.price), textValue(service.currency)].filter(Boolean).join(' ');
+      var titleHtml = service.mapHref
+        ? '<a href="' + escapeHtml(service.mapHref) + '" data-browser-map-link class="browser-service-title browser-bot-inline-link">' + title + '</a>'
+        : '<strong class="browser-service-title">' + title + '</strong>';
+      var priceHtml = price ? '<span class="browser-service-price">' + escapeHtml(price) + '</span>' : '';
       var metaHtml = [
         service.providerSkill ? '<span class="browser-service-provider">' + escapeHtml(service.providerSkill) + '</span>' : '',
         renderLabeledChip('Output', service.output, 'browser-card-chip')
       ].filter(Boolean).join('');
       return '<article class="browser-service-card">' +
         renderCardImage(service.serviceIcon, service.title, 'browser-service-icon', 'browser-service-icon-image', 'service') +
-        '<div class="browser-service-main"><div class="browser-service-heading"><strong class="browser-service-title">' + title + '</strong>' +
-        (price ? '<span class="browser-service-price">' + escapeHtml(price) + '</span>' : '') + '</div>' +
+        '<div class="browser-service-main"><div class="browser-service-heading">' + titleHtml + '</div>' +
         (service.detail ? '<p class="browser-service-description">' + escapeHtml(service.detail) + '</p>' : '') +
         (metaHtml ? '<div class="browser-service-meta">' + metaHtml + '</div>' : '') + '</div>' +
-        '<button type="button" data-browser-action="service-call" data-service-id="' + escapeHtml(service.serviceId || service.id) + '">Request</button></article>';
+        '<div class="browser-service-actions">' + priceHtml +
+        '<button type="button" data-browser-action="service-call" data-service-id="' + escapeHtml(service.serviceId || service.id) + '">Request</button></div></article>';
     }).join('')
     : '<p class="browser-muted-row">No public services.</p>';
 }
@@ -2238,6 +2242,11 @@ function renderMetaAppRows(items, emptyText) {
     ? items.slice(0, 6).map(function (item) {
       var title = escapeHtml(item.title);
       var appName = textValue(item.appName);
+      var appNameHtml = appName
+        ? (item.mapHref
+          ? '<a href="' + escapeHtml(item.mapHref) + '" data-browser-map-link class="browser-metaapp-name browser-bot-inline-link">' + escapeHtml(appName) + '</a>'
+          : '<span class="browser-metaapp-name">' + escapeHtml(appName) + '</span>')
+        : '';
       var runHtml = item.href
         ? '<a class="browser-metaapp-run" href="' + escapeHtml(item.href) + '" data-browser-map-link>' + iconHtml('play') + '<span>Run</span></a>'
         : '<span class="browser-metaapp-run is-disabled">' + iconHtml('play') + '<span>Run</span></span>';
@@ -2255,7 +2264,7 @@ function renderMetaAppRows(items, emptyText) {
         '<div class="browser-metaapp-main"><div class="browser-metaapp-heading">' +
         renderCardImage(item.icon, item.title, 'browser-metaapp-icon', 'browser-metaapp-icon-image', 'layout') +
         '<div class="browser-metaapp-title-block"><strong class="browser-metaapp-title">' + title + '</strong>' +
-        (appName ? '<span class="browser-metaapp-name">' + escapeHtml(appName) + '</span>' : '') + '</div></div>' +
+        appNameHtml + '</div></div>' +
         (item.detail ? '<p class="browser-metaapp-intro">' + escapeHtml(item.detail) + '</p>' : '') +
         (facts ? '<div class="browser-metaapp-facts">' + facts + '</div>' : '') + '</div></article>';
     }).join('')
@@ -2320,6 +2329,12 @@ function renderActivityRows(payload) {
 
 function renderBotHomepageDocumentTemplate(payload, current) {
   var identity = payload.identity;
+  var servicesSection = payload.services.length
+    ? '<section class="browser-document-section browser-bot-services"><h3>Services</h3>' + renderServiceRows(payload.services) + '</section>'
+    : '';
+  var metaappsSection = payload.metaapps.length
+    ? '<section class="browser-document-section browser-bot-metaapps"><h3>MetaApps</h3>' + renderMetaAppRows(payload.metaapps, 'No public MetaApps.') + '</section>'
+    : '';
   return '<article class="browser-bot-page browser-bot-template-document">' +
     '<header class="browser-bot-header">' +
     avatarHtml(identity.avatar, identity.name, 'browser-bot-avatar') +
@@ -2328,8 +2343,8 @@ function renderBotHomepageDocumentTemplate(payload, current) {
     (payload.summary.text ? '<p class="browser-bot-summary">' + escapeHtml(payload.summary.text) + '</p>' : '') + '</div>' +
     renderBotPageActionButtons(current.actions) + '</header>' +
     '<section class="browser-document-section"><h3>Overview</h3><p>' + escapeHtml(payload.summary.overview) + '</p></section>' +
-    '<section class="browser-document-section browser-bot-services"><h3>Services</h3>' + renderServiceRows(payload.services) + '</section>' +
-    '<section class="browser-document-section browser-bot-metaapps"><h3>MetaApps</h3>' + renderMetaAppRows(payload.metaapps, 'No public MetaApps.') + '</section>' +
+    servicesSection +
+    metaappsSection +
     '<section class="browser-document-section browser-bot-activity"><h3>Recent Activity</h3>' + renderActivityRows(payload) + '</section>' +
     '</article>';
 }
