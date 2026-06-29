@@ -97,7 +97,6 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
         </div>
         <footer class="browser-status-strip" data-browser-status-strip>
           <button type="button" data-browser-status-state>loading</button>
-          <button type="button" data-browser-status-proof>unverified</button>
           <span data-browser-status-renderer>renderer: unsupported</span>
           <button type="button" data-browser-status-txid>TXID: -</button>
         </footer>
@@ -456,17 +455,6 @@ function avatarHtml(rawUrl, label, className) {
   return '<span class="' + classValue + ' browser-avatar-fallback" aria-hidden="true">' + escapeHtml(initials(label)) + '</span>';
 }
 
-function proofTone(value) {
-  var stateValue = textValue(value).toLowerCase();
-  if (stateValue === 'verified' || stateValue === 'resolved') return 'verified';
-  if (stateValue === 'partial') return 'partial';
-  return 'unverified';
-}
-
-function proofIconHtml(value) {
-  return '<span class="browser-proof-icon browser-proof-' + proofTone(value) + '" aria-hidden="true">' + iconHtml('shield') + '</span>';
-}
-
 function actionIconName(kind) {
   if (kind === 'open-conversation') return 'message';
   if (kind === 'private-chat') return 'message';
@@ -513,7 +501,6 @@ function bindElements() {
     menu: document.querySelector('[data-browser-menu]'),
     viewport: document.querySelector('[data-browser-viewport]'),
     statusState: document.querySelector('[data-browser-status-state]'),
-    statusProof: document.querySelector('[data-browser-status-proof]'),
     statusRenderer: document.querySelector('[data-browser-status-renderer]'),
     statusTxid: document.querySelector('[data-browser-status-txid]'),
     drawer: document.querySelector('[data-browser-drawer]'),
@@ -1367,7 +1354,6 @@ function renderWelcome() {
     elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar');
     elements.resourceChip.disabled = true;
   }
-  if (elements.statusProof) elements.statusProof.innerHTML = proofIconHtml('unverified') + '<span>' + escapeHtml(browserText('status.unverified', 'unverified')) + '</span>';
   if (elements.statusRenderer) elements.statusRenderer.textContent = browserText('status.rendererNone', 'renderer: none');
   if (elements.statusTxid) elements.statusTxid.textContent = 'TXID: -';
   if (elements.viewport) {
@@ -1401,7 +1387,6 @@ function renderNoLocalBot() {
     elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar');
     elements.resourceChip.disabled = true;
   }
-  if (elements.statusProof) elements.statusProof.innerHTML = proofIconHtml('unverified') + '<span>' + escapeHtml(browserText('status.unverified', 'unverified')) + '</span>';
   if (elements.statusRenderer) elements.statusRenderer.textContent = browserText('status.rendererNone', 'renderer: none');
   if (elements.statusTxid) elements.statusTxid.textContent = 'TXID: -';
   if (elements.viewport) {
@@ -1428,14 +1413,12 @@ function renderCurrent() {
   var ownerId = textValue(current.owner && (current.owner.globalMetaId || current.owner.metaid || current.owner.address)) || textValue(current.normalizedUri || current.uri);
   var ownerAvatar = textValue(current.owner && current.owner.avatar);
   var rendererType = textValue(current.renderer && current.renderer.type) || 'unsupported';
-  var proofState = textValue(current.status && current.status.verificationState) || 'unverified';
   var txid = proofTxid(current.proof);
   if (elements.resourceChip) {
     elements.resourceChip.innerHTML = avatarHtml(ownerAvatar, ownerName, 'browser-chip-avatar');
     elements.resourceChip.disabled = false;
     elements.resourceChip.setAttribute('title', ownerName || ownerId || 'Owner');
   }
-  if (elements.statusProof) elements.statusProof.innerHTML = proofIconHtml(proofState) + '<span>' + escapeHtml(proofState) + '</span>';
   if (elements.statusRenderer) elements.statusRenderer.textContent = 'renderer: ' + rendererType;
   if (elements.statusTxid) elements.statusTxid.textContent = 'TXID: ' + (shortId(txid) || '-');
   if (elements.viewport) {
@@ -1707,9 +1690,6 @@ function syncPanelState() {
   if (elements.resourceChip && typeof elements.resourceChip.setAttribute === 'function') {
     elements.resourceChip.setAttribute('aria-expanded', 'false');
   }
-  if (elements.statusProof && typeof elements.statusProof.setAttribute === 'function') {
-    elements.statusProof.setAttribute('aria-expanded', state.inspectorOpen ? 'true' : 'false');
-  }
   if (elements.statusTxid && typeof elements.statusTxid.setAttribute === 'function') {
     elements.statusTxid.setAttribute('aria-expanded', state.inspectorOpen ? 'true' : 'false');
   }
@@ -1789,7 +1769,6 @@ function renderNameAliasInspector(source) {
     keyValue('text key', alias.textKey) +
     keyValue('canonical URI', alias.canonicalUri) +
     keyValue('resolved at', alias.resolvedAt) +
-    keyValue('verification', alias.verificationState) +
     '</dl>';
 }
 
@@ -1811,7 +1790,6 @@ function renderResolveErrorInspector() {
   var aliasError = isNameAliasResolveError(error, data);
   elements.inspector.innerHTML = '<section class="browser-inspector-panel">' +
     '<header class="browser-panel-header"><h2>Inspector</h2><button type="button" class="browser-icon-button" data-browser-inspector-close aria-label="Close inspector">' + iconHtml('close') + '</button></header>' +
-    '<div class="browser-proof-summary">' + proofIconHtml('unverified') + '<span>unverified</span></div>' +
     '<h3>' + (aliasError ? 'Name Alias Error' : 'Resolve Error') + '</h3><dl>' +
       keyValue('code', error.code) +
       keyValue('message', error.message) +
@@ -1829,7 +1807,6 @@ function renderInspector() {
   var proof = current.proof || {};
   var source = current.source || {};
   var renderer = current.renderer || {};
-  var proofState = textValue(proof.verificationState || (current.status && current.status.verificationState)) || 'unverified';
   var explorerUrl = safeUrl(proof.explorerUrl);
   var identityHeading = ['Identity'].join('');
   var proofHeading = ['Proof'].join('');
@@ -1839,13 +1816,11 @@ function renderInspector() {
     : '';
   elements.inspector.innerHTML = '<section class="browser-inspector-panel">' +
     '<header class="browser-panel-header"><h2>Inspector</h2><button type="button" class="browser-icon-button" data-browser-inspector-close aria-label="Close inspector">' + iconHtml('close') + '</button></header>' +
-    '<div class="browser-proof-summary">' + proofIconHtml(proofState) + '<span>' + escapeHtml(proofState) + '</span></div>' +
     '<h3>' + identityHeading + '</h3><dl>' +
     keyValue('name', owner.name || current.title) +
     keyValue('GlobalMetaId', owner.globalMetaId) +
     keyValue('metaid', owner.metaid) +
     keyValue('address', owner.address) +
-    keyValue('verification', owner.verificationState) +
     '</dl><h3>' + proofHeading + '</h3><dl>' +
     requiredKeyValue('TXID', proofTxid(proof)) +
     requiredKeyValue('pin id', proof.pinId) +
@@ -1853,7 +1828,6 @@ function renderInspector() {
     requiredKeyValue('content hash', proof.contentHash) +
     requiredKeyValue('publisher GlobalMetaId', proof.publisherGlobalMetaId || owner.globalMetaId) +
     requiredKeyValue('block explorer action', explorerUrl ? 'available' : 'unavailable') +
-    keyValue('verification', proof.verificationState) +
     '</dl>' + explorerAction + '<h3>' + sourceHeading + '</h3><dl>' +
     keyValue('resolved URI', current.normalizedUri || current.uri) +
     keyValue('content type', renderer.contentType) +
@@ -2339,7 +2313,7 @@ function renderBotHomepageDocumentTemplate(payload, current) {
   return '<article class="browser-bot-page browser-bot-template-document">' +
     '<header class="browser-bot-header">' +
     avatarHtml(identity.avatar, identity.name, 'browser-bot-avatar') +
-    '<div class="browser-bot-identity"><div class="browser-bot-title-line"><h2>' + escapeHtml(identity.name) + '</h2>' + proofIconHtml(identity.proofState) + '</div>' +
+    '<div class="browser-bot-identity"><div class="browser-bot-title-line"><h2>' + escapeHtml(identity.name) + '</h2></div>' +
     (identity.globalMetaId ? '<p class="browser-globalmetaid">' + escapeHtml(identity.globalMetaId) + '</p>' : '') +
     (payload.summary.text ? '<p class="browser-bot-summary">' + escapeHtml(payload.summary.text) + '</p>' : '') + '</div>' +
     renderBotPageActionButtons(current.actions) + '</header>' +
@@ -2368,7 +2342,7 @@ function renderBotHomepageCompactListTemplate(payload, current) {
   return '<article class="browser-bot-page browser-bot-template-compact-list">' +
     '<header class="browser-compact-header">' +
     avatarHtml(identity.avatar, identity.name, 'browser-bot-avatar') +
-    '<div class="browser-bot-identity"><div class="browser-bot-title-line"><h2>' + escapeHtml(identity.name) + '</h2>' + proofIconHtml(identity.proofState) + '</div>' +
+    '<div class="browser-bot-identity"><div class="browser-bot-title-line"><h2>' + escapeHtml(identity.name) + '</h2></div>' +
     (identity.globalMetaId ? '<p class="browser-globalmetaid">' + escapeHtml(identity.globalMetaId) + '</p>' : '') +
     (payload.summary.text ? '<p class="browser-bot-summary">' + escapeHtml(payload.summary.text) + '</p>' : '') + '</div>' +
     renderBotPageActionButtons(current.actions) + '</header>' +
@@ -4296,7 +4270,6 @@ async function initialize() {
   document.addEventListener('click', function () {
     if (state.ownerPanelOpen) closeOwnerPanel();
   });
-  if (elements.statusProof) elements.statusProof.addEventListener('click', openInspector);
   if (elements.statusTxid) elements.statusTxid.addEventListener('click', openInspector);
 
   var queryUri = new URLSearchParams(window.location.search || '').get('uri') || '';

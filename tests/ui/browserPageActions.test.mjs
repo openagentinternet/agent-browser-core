@@ -36,7 +36,6 @@ function elements() {
     '[data-browser-owner-toolbar]': new FakeElement(),
     '[data-browser-viewport]': new FakeElement(),
     '[data-browser-status-state]': new FakeElement(),
-    '[data-browser-status-proof]': new FakeElement(),
     '[data-browser-status-renderer]': new FakeElement(),
     '[data-browser-status-txid]': new FakeElement(),
     '[data-browser-drawer]': new FakeElement(),
@@ -566,4 +565,3 @@ test('owner panel omits the Follow menu item', () => {
   assert.doesNotMatch(html, /data-browser-owner-panel-action="follow"/);
   assert.match(html, /data-browser-owner-panel-action="visit-home"/);
 });
-

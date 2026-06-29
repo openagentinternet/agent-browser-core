@@ -76,7 +76,6 @@ function elements() {
     '[data-browser-using-selector]': new FakeElement(),
     '[data-browser-viewport]': new FakeElement(),
     '[data-browser-status-state]': new FakeElement(),
-    '[data-browser-status-proof]': new FakeElement(),
     '[data-browser-status-renderer]': new FakeElement(),
     '[data-browser-status-txid]': new FakeElement(),
     '[data-browser-drawer]': new FakeElement(),
@@ -178,6 +177,7 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.match(html, /Builds Agent Browser fixtures/);
   assert.match(html, /Overview/);
   assert.match(html, /Recent Activity/);
+  assert.doesNotMatch(html, /browser-proof-icon/);
   assert.doesNotMatch(html, /<section class="browser-document-section browser-bot-buzzes">/);
   assert.match(html, /<h3>MetaApps<\/h3>/);
   assert.match(html, /Fixture Review/);

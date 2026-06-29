@@ -55,7 +55,6 @@ function elements() {
     '[data-browser-menu]': new FakeElement(),
     '[data-browser-viewport]': new FakeElement(),
     '[data-browser-status-state]': new FakeElement(),
-    '[data-browser-status-proof]': new FakeElement(),
     '[data-browser-status-renderer]': new FakeElement(),
     '[data-browser-status-txid]': new FakeElement(),
     '[data-browser-drawer]': new FakeElement(),
@@ -184,7 +183,7 @@ test('Drawer opens from drawer button and shows bookmarks, recents, and visit hi
   assert.match(html, /metaid:\/\/idq1fixturebot/);
 });
 
-test('resource chip opens creator Bot Page while proof and TXID controls still open Inspector', async () => {
+test('resource chip opens creator Bot Page while TXID control still opens Inspector', async () => {
   const { context, nodes } = createContext();
   await waitFor(() => context.state.current, 'initial resource');
   await context.navigateTo('metaapp://pin');
@@ -197,12 +196,9 @@ test('resource chip opens creator Bot Page while proof and TXID controls still o
   assert.equal(nodes['[data-browser-inspector]'].innerHTML, '');
 
   nodes['[data-browser-inspector]'].innerHTML = '';
-  nodes['[data-browser-status-proof]'].click();
+  nodes['[data-browser-status-txid]'].click();
   assert.equal(nodes['[data-browser-inspector]'].hidden, false);
   assert.match(nodes['[data-browser-inspector]'].innerHTML, /<h3>Proof<\/h3>/);
-
-  nodes['[data-browser-inspector]'].innerHTML = '';
-  nodes['[data-browser-status-txid]'].click();
   assert.match(nodes['[data-browser-inspector]'].innerHTML, /txid-fixture/);
 
   const defaultHtml = buildBrowserPageDefinition().contentHtml;
@@ -227,6 +223,9 @@ test('Inspector proof labels use TXID and include proof details', async () => {
   assert.match(html, /publisher GlobalMetaId/);
   assert.match(html, /block explorer action/);
   assert.match(html, /View on Block Explorer/);
+  assert.doesNotMatch(html, /browser-proof-icon/);
+  assert.doesNotMatch(html, /browser-proof-summary/);
+  assert.doesNotMatch(html, /<dt>verification<\/dt>/);
 });
 
 test('Inspector summarizes homepage v3 sections', async () => {
@@ -293,14 +292,14 @@ test('Inspector renders ENS alias metadata from source raw nameAlias', async () 
   await waitFor(() => context.state.current, 'initial resource');
   await context.navigateTo(aliasUri);
   await waitFor(() => context.state.current && context.state.current.uri === aliasUri, 'alias resource');
-  nodes['[data-browser-status-proof]'].click();
+  nodes['[data-browser-status-txid]'].click();
   const html = nodes['[data-browser-inspector]'].innerHTML;
 
   assert.match(html, /<h3>Name Alias<\/h3>/);
   assert.match(html, /sunny\.eth/);
   assert.match(html, /org\.openagentinternet\.uri/);
   assert.match(html, /metaid:\/\/idq1target/);
-  assert.match(html, /partial/);
+  assert.doesNotMatch(html, /<dt>verification<\/dt>/);
 });
 
 test('Inspector renders ENS alias failure context after resolve error', async () => {
@@ -325,7 +324,7 @@ test('Inspector renders ENS alias failure context after resolve error', async ()
   await waitFor(() => context.state.current, 'initial resource');
   await context.navigateTo(aliasUri);
   await waitFor(() => context.state.lastResolveError, 'alias failure');
-  nodes['[data-browser-status-proof]'].click();
+  nodes['[data-browser-status-txid]'].click();
   const html = nodes['[data-browser-inspector]'].innerHTML;
 
   assert.match(html, /<h3>Name Alias Error<\/h3>/);
@@ -410,7 +409,7 @@ test('Inspector refreshes from ENS alias error to successful alias evidence', as
   });
 
   await waitFor(() => context.state.current, 'initial resource');
-  nodes['[data-browser-status-proof]'].click();
+  nodes['[data-browser-status-txid]'].click();
 
   await context.navigateTo(badAliasUri);
   await waitFor(() => context.state.lastResolveError, 'bad alias failure');
@@ -446,7 +445,7 @@ test('Inspector renders generic resolve failure context for non-alias errors', a
   await waitFor(() => context.state.current, 'initial resource');
   await context.navigateTo(failedUri);
   await waitFor(() => context.state.lastResolveError, 'generic failure');
-  nodes['[data-browser-status-proof]'].click();
+  nodes['[data-browser-status-txid]'].click();
   const html = nodes['[data-browser-inspector]'].innerHTML;
 
   assert.match(html, /<h3>Resolve Error<\/h3>/);
