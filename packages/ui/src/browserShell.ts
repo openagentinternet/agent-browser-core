@@ -26,7 +26,6 @@ export function buildBrowserShellHtml(input: BrowserShellInput): string {
       </div>
       <footer class="browser-status-strip" data-browser-status-strip>
         <button type="button" data-browser-status-state>ready</button>
-        <button type="button" data-browser-status-proof>unverified</button>
         <span data-browser-status-renderer>renderer</span>
         <button type="button" data-browser-status-txid>TXID: -</button>
       </footer>

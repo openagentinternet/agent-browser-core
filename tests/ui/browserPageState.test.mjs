@@ -121,7 +121,6 @@ function createElements() {
     '[data-browser-viewport]': new FakeElement(),
     '[data-browser-status-strip]': new FakeElement(),
     '[data-browser-status-state]': new FakeElement(),
-    '[data-browser-status-proof]': new FakeElement(),
     '[data-browser-status-renderer]': new FakeElement(),
     '[data-browser-status-txid]': new FakeElement(),
     '[data-browser-drawer]': new FakeElement(),

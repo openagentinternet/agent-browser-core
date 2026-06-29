@@ -158,8 +158,7 @@ test('Responsive Browser status strip stays single-line at narrow widths', async
     await page.setContent(await renderBrowserPageHtml(buildBrowserPageDefinition()), { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
       document.querySelector('[data-browser-status-state]').textContent = 'resolved';
-      document.querySelector('[data-browser-status-proof]').textContent = 'partial';
-      document.querySelector('[data-browser-status-renderer]').textContent = 'renderer: pin-inspector';
+      document.querySelector('[data-browser-status-renderer]').textContent = 'renderer: pin-inspector with a deliberately long renderer label';
       document.querySelector('[data-browser-status-txid]').textContent = 'TXID: 47bd23df82d4f5f30ef8d3b43ee05983188571ac328c4de156ee80a1ed5e7ab2';
     });
 

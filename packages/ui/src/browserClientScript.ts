@@ -46,7 +46,6 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   const reloadButton = document.querySelector('[data-browser-reload]');
   const viewport = document.querySelector('[data-browser-viewport]');
   const status = document.querySelector('[data-browser-status-state]');
-  const statusProof = document.querySelector('[data-browser-status-proof]');
   const statusRenderer = document.querySelector('[data-browser-status-renderer]');
   const statusTxid = document.querySelector('[data-browser-status-txid]');
   const actor = document.querySelector('[data-browser-using-selector]');
@@ -128,8 +127,6 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   function updateResourceStatus(resource) {
     const proof = resource && resource.proof || {};
     const renderer = resource && resource.renderer || {};
-    const statusData = resource && resource.status || {};
-    if (statusProof) statusProof.textContent = proof.verificationState || statusData.verificationState || 'unverified';
     if (statusRenderer) statusRenderer.textContent = renderer.type || 'renderer';
     if (statusTxid) statusTxid.textContent = 'TXID: ' + (proof.txid || '-');
   }
@@ -138,7 +135,6 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       const chipTitle = resourceChip.querySelector('.browser-chip-title');
       if (chipTitle) chipTitle.textContent = 'Resource';
     }
-    if (statusProof) statusProof.textContent = 'unverified';
     if (statusTxid) statusTxid.textContent = 'TXID: -';
     if (drawer && !drawer.hidden) renderDrawer();
     if (inspector && !inspector.hidden) renderInspector();
@@ -328,12 +324,10 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     const proof = resource.proof || {};
     const source = resource.source || {};
     const renderer = resource.renderer || {};
-    const statusData = resource.status || {};
     inspector.innerHTML = '<header class="browser-panel-header"><h2>Inspector</h2><button type="button" data-browser-inspector-close aria-label="Close inspector">Close</button></header>' +
       '<dl class="browser-inspector-list">' +
       '<dt>uri</dt><dd>' + escapeHtml(resource.uri || '-') + '</dd>' +
       '<dt>renderer</dt><dd>' + escapeHtml(renderer.type || '-') + '</dd>' +
-      '<dt>verification</dt><dd>' + escapeHtml(proof.verificationState || statusData.verificationState || 'unverified') + '</dd>' +
       '<dt>txid</dt><dd>' + escapeHtml(proof.txid || '-') + '</dd>' +
       '<dt>pin id</dt><dd>' + escapeHtml(proof.pinId || '-') + '</dd>' +
       '<dt>resolver</dt><dd>' + escapeHtml(source.resolver || '-') + '</dd>' +
@@ -1422,12 +1416,6 @@ function openPinRawRecord(trigger) {
     }
     const statusStateButton = closestWithAttribute(target, 'data-browser-status-state');
     if (statusStateButton) {
-      event.preventDefault();
-      toggleInspector(true);
-      return;
-    }
-    const statusProofButton = closestWithAttribute(target, 'data-browser-status-proof');
-    if (statusProofButton) {
       event.preventDefault();
       toggleInspector(true);
       return;

@@ -39,6 +39,7 @@ test('shared shell exposes menu and modal roots used by client script', async ()
   assert.match(html, /data-browser-menu role="menu"/);
   assert.match(html, /data-browser-modal-root/);
   assert.match(html, /data-browser-using-selector/);
+  assert.doesNotMatch(html, /data-browser-status-proof/);
 });
 
 test('generated client script compiles', () => {
@@ -86,7 +87,7 @@ test('browser chrome navigation and status buttons are wired or disabled', () =>
   assert.match(definition.script, /elements\.reload\.addEventListener\('click', reloadCurrent\)/);
   assert.match(definition.script, /function openCreatorFromChip\(/);
   assert.match(definition.script, /elements\.resourceChip\.addEventListener\('click'[\s\S]*toggleOwnerPanel\(\)/);
-  assert.match(definition.script, /elements\.statusProof\.addEventListener\('click', openInspector\)/);
+  assert.doesNotMatch(definition.script, /elements\.statusProof\.addEventListener\('click', openInspector\)/);
   assert.match(definition.script, /elements\.statusTxid\.addEventListener\('click', openInspector\)/);
 });
 
@@ -123,7 +124,7 @@ test('resolve failures clear stale resource chrome and keep URI history coherent
 
   assert.match(script, /function clearResourceChrome\(/);
   assert.match(script, /resourceChip[\s\S]*browser-chip-title[\s\S]*Resource/);
-  assert.match(script, /statusProof\) statusProof\.textContent = 'unverified'/);
+  assert.doesNotMatch(script, /statusProof\) statusProof\.textContent = 'unverified'/);
   assert.match(script, /statusTxid\) statusTxid\.textContent = 'TXID: -'/);
   assert.match(script, /if \(drawer && !drawer\.hidden\) renderDrawer\(\);/);
   assert.match(script, /if \(inspector && !inspector\.hidden\) renderInspector\(\);/);
