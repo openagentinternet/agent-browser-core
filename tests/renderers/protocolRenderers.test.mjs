@@ -205,6 +205,24 @@ test('Pin inspector renders prototype-style JSON payload with media, links, and 
   assert.doesNotMatch(html, /why-this-direction/);
 });
 
+test('Pin inspector treats extensionless metafile references as image previews', () => {
+  const imagePinId = '320179c814f9a6048add5fb773b231ff79057f0b388dd1f6988d28fdb5b93c46i0';
+  const archivePinId = 'f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0';
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource('application/vnd.metaid+json; charset=utf-8', {
+    title: 'Extensionless media',
+    attachments: [
+      `metafile://${imagePinId}`,
+      `metafile://${archivePinId}.zip`,
+    ],
+  }));
+
+  assert.match(html, new RegExp(`data-browser-media-preview-ref="metafile://${imagePinId}"`));
+  assert.match(html, new RegExp(`data-browser-download-ref="metafile://${imagePinId}"`));
+  assert.doesNotMatch(html, new RegExp(`data-browser-media-preview-ref="metafile://${archivePinId}\\.zip"`));
+  assert.match(html, new RegExp(`data-browser-download-ref="metafile://${archivePinId}\\.zip"`));
+  assert.match(html, /browser-pin-file-list/);
+});
+
 test('Pin inspector renders related entities from creator and payload Global Meta IDs', () => {
   const payload = {
     content: 'Entity scan should not depend on content type.',

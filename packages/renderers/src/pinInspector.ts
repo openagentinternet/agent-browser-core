@@ -603,9 +603,18 @@ function renderRawPayload(resource: BrowserResourceEnvelope): string {
 
 type PinMediaItem = { uri: string; label: string; kind: 'image' | 'video' | 'audio' | 'file'; description?: string };
 
+function isExtensionlessMetafileImageReference(uri: string): boolean {
+  const value = text(uri);
+  if (!value.startsWith('metafile://')) return false;
+  let path = value.slice('metafile://'.length).split(/[?#]/, 1)[0];
+  if (path.startsWith('image/')) path = path.slice('image/'.length);
+  return /^[0-9a-f]{64}i[0-9]+$/i.test(path);
+}
+
 function isImageReference(uri: string, sourceKey = ''): boolean {
   if (IMAGE_MEDIA_KEYS.has(sourceKey)) return true;
-  return /\.(png|jpe?g|gif|webp|avif|svg)(?:[?#].*)?$/iu.test(uri);
+  return /\.(png|jpe?g|gif|webp|avif|svg)(?:[?#].*)?$/iu.test(uri)
+    || isExtensionlessMetafileImageReference(uri);
 }
 
 function isVideoReference(uri: string, sourceKey = ''): boolean {

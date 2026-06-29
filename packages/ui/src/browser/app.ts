@@ -3660,9 +3660,18 @@ function pinInspectorRenderRawPayload(current) {
   return '<div class="browser-pin-pre-wrap"><button type="button" class="browser-pin-copy-btn" title="Copy" aria-label="Copy" data-browser-copy-value="' + escapeHtml(copyValue || '') + '">' + iconHtml('copy') + '</button>' + body + '</div>';
 }
 
+function pinInspectorIsExtensionlessMetafileImageReference(uri) {
+  var value = textValue(uri);
+  if (value.indexOf('metafile://') !== 0) return false;
+  var path = value.slice('metafile://'.length).split(/[?#]/, 1)[0];
+  if (path.indexOf('image/') === 0) path = path.slice('image/'.length);
+  return isBrowserPinId(path);
+}
+
 function pinInspectorIsImageReference(uri, sourceKey) {
   if (PIN_INSPECTOR_IMAGE_MEDIA_KEYS[sourceKey || '']) return true;
-  return /\\.(png|jpe?g|gif|webp|avif|svg)(?:[?#].*)?$/i.test(uri);
+  return /\\.(png|jpe?g|gif|webp|avif|svg)(?:[?#].*)?$/i.test(uri)
+    || pinInspectorIsExtensionlessMetafileImageReference(uri);
 }
 
 function pinInspectorIsVideoReference(uri, sourceKey) {
@@ -3990,6 +3999,19 @@ function enhanceAudioSlot(slot, reference) {
   slot.innerHTML = '<audio controls preload="metadata" src="' + escapeHtml(href) + '"></audio>';
 }
 
+function enhanceImageSlot(slot, href) {
+  if (!slot || !href) return;
+  slot.classList.remove('is-loading');
+  slot.classList.remove('is-error');
+  slot.innerHTML = '<img src="' + escapeHtml(href) + '" alt="">';
+  var image = slot.querySelector ? slot.querySelector('img') : null;
+  if (image && image.addEventListener) {
+    image.addEventListener('error', function() {
+      setMediaSlotError(slot, 'Image unavailable.');
+    }, { once: true });
+  }
+}
+
 function enhancePinMediaPreviews(root) {
   if (!root || !root.querySelectorAll) return;
   // Image previews: inject an <img> into the image slot of each card.
@@ -3998,7 +4020,7 @@ function enhancePinMediaPreviews(root) {
     var href = resolveMediaPreviewHref(reference);
     var slot = card.querySelector ? card.querySelector('[data-browser-media-preview-slot]') : null;
     if (!href || !slot) return;
-    slot.innerHTML = '<img src="' + escapeHtml(href) + '" alt="">';
+    enhanceImageSlot(slot, href);
   });
   // Video previews.
   Array.prototype.forEach.call(root.querySelectorAll('[data-browser-video-preview]'), function(slot) {

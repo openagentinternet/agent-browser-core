@@ -783,9 +783,17 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       : (typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2));
     return '<pre class="browser-protocol-raw">' + escapeHtml(source || '') + '</pre>';
   }
+  function pinInspectorIsExtensionlessMetafileImageReference(uri) {
+    const value = textValue(uri);
+    if (value.indexOf('metafile://') !== 0) return false;
+    let path = value.slice('metafile://'.length).split(/[?#]/, 1)[0];
+    if (path.indexOf('image/') === 0) path = path.slice('image/'.length);
+    return /^[0-9a-f]{64}i[0-9]+$/i.test(path);
+  }
   function pinInspectorIsImageReference(uri, sourceKey) {
     if (PIN_INSPECTOR_IMAGE_MEDIA_KEYS.has(sourceKey || '')) return true;
-    return new RegExp('\\\\.(png|jpe?g|gif|webp|avif|svg)(?:[?#].*)?$', 'i').test(uri);
+    return new RegExp('\\\\.(png|jpe?g|gif|webp|avif|svg)(?:[?#].*)?$', 'i').test(uri)
+      || pinInspectorIsExtensionlessMetafileImageReference(uri);
   }
   function pinInspectorIsMediaReferenceUri(uri) {
     return /^https?:\\/\\//i.test(uri) || uri.indexOf('metafile://') === 0;
@@ -985,6 +993,24 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     if (selector === 'history-index') return 'history version ' + (textValue(version.historyIndex) || '0');
     return textValue(pin.version) ? 'version ' + textValue(pin.version) : selector;
   }
+  function setMediaSlotError(slot, message) {
+    if (!slot) return;
+    slot.classList.remove('is-loading');
+    slot.classList.add('is-error');
+    slot.innerHTML = '<span class="browser-pin-media-pending">' + escapeHtml(message) + '</span>';
+  }
+  function enhanceImageSlot(slot, href) {
+    if (!slot || !href) return;
+    slot.classList.remove('is-loading');
+    slot.classList.remove('is-error');
+    slot.innerHTML = '<img src="' + escapeHtml(href) + '" alt="">';
+    const image = slot.querySelector ? slot.querySelector('img') : null;
+    if (image && image.addEventListener) {
+      image.addEventListener('error', () => {
+        setMediaSlotError(slot, 'Image unavailable.');
+      }, { once: true });
+    }
+  }
   function enhancePinMediaPreviews(root) {
     if (!root || !root.querySelectorAll) return;
     root.querySelectorAll('[data-browser-media-preview-ref]').forEach((card) => {
@@ -992,7 +1018,7 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
       const href = resolveMediaPreviewHref(reference);
       const slot = card.querySelector ? card.querySelector('[data-browser-media-preview-slot]') : null;
       if (!href || !slot) return;
-      slot.innerHTML = '<img src="' + escapeHtml(href) + '" alt="">';
+      enhanceImageSlot(slot, href);
     });
   }
 function openPinRawRecord(trigger) {

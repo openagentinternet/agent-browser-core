@@ -998,6 +998,61 @@ test('pin-inspector renderer uses payload-first mature shell sections', async ()
   assert.doesNotMatch(html, /data-browser-pin-raw-record/);
 });
 
+test('pin-inspector renderer treats extensionless metafile references as image previews', async () => {
+  const imagePinId = '320179c814f9a6048add5fb773b231ff79057f0b388dd1f6988d28fdb5b93c46i0';
+  const archivePinId = 'f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0';
+  const { nodes } = runWithResolve(result({
+    type: 'pin-inspector',
+    contentType: 'application/vnd.metaid+json; charset=utf-8',
+    data: {
+      rendererId: 'generic.pin-inspector',
+      version: {
+        requestedPinId: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        resolvedPinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        versionSelector: 'latest',
+      },
+      pin: {
+        pinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        path: '/protocols/simplebuzz',
+        contentType: 'application/vnd.metaid+json; charset=utf-8',
+        operation: 'create',
+        chainName: 'btc',
+        encryption: 'public',
+        version: '1',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+      payload: {
+        title: 'Extensionless media',
+        attachments: [
+          `metafile://${imagePinId}`,
+          `metafile://${archivePinId}.zip`,
+        ],
+      },
+      rawPayload: '{}',
+      rawPinRecord: {
+        path: '/protocols/simplebuzz',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+    },
+  }, {
+    uri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    normalizedUri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    resourceType: 'pin',
+    title: 'Pin 6ea8a0bd...',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-pin-page'), 'pin page render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, new RegExp(`data-browser-media-preview-ref="metafile://${imagePinId}"`));
+  assert.match(html, new RegExp(`data-browser-download-ref="metafile://${imagePinId}"`));
+  assert.doesNotMatch(html, new RegExp(`data-browser-media-preview-ref="metafile://${archivePinId}\\.zip"`));
+  assert.match(html, new RegExp(`data-browser-download-ref="metafile://${archivePinId}\\.zip"`));
+  assert.match(html, /browser-pin-file-list/);
+});
+
 test('pin-inspector renders related entities and hydrates creator and peer profiles', async () => {
   const rawPayload = JSON.stringify({
     content: 'Plain payload with peer identity.',

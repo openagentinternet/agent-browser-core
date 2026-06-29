@@ -220,6 +220,51 @@ test('resolveMediaPreviewHref maps image-capable references and rejects navigati
   assert.equal(context.resolveMediaPreviewHref('metaid://idq1fixturebot'), '');
 });
 
+test('enhancePinMediaPreviews replaces failed image previews with a fallback placeholder', () => {
+  const { context } = createContext();
+  let errorHandler = null;
+  const image = {
+    addEventListener(eventName, handler) {
+      if (eventName === 'error') errorHandler = handler;
+    },
+  };
+  const slotClasses = new Set();
+  const slot = {
+    innerHTML: 'Image preview',
+    classList: {
+      add(name) { slotClasses.add(name); },
+      remove(name) { slotClasses.delete(name); },
+    },
+    querySelector(selector) {
+      return selector === 'img' ? image : null;
+    },
+  };
+  const card = {
+    getAttribute(name) {
+      return name === 'data-browser-media-preview-ref'
+        ? 'metafile://f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0'
+        : '';
+    },
+    querySelector(selector) {
+      return selector === '[data-browser-media-preview-slot]' ? slot : null;
+    },
+  };
+  const root = {
+    querySelectorAll(selector) {
+      return selector === '[data-browser-media-preview-ref]' ? [card] : [];
+    },
+  };
+
+  context.enhancePinMediaPreviews(root);
+  assert.match(slot.innerHTML, /<img /);
+  assert.equal(typeof errorHandler, 'function');
+
+  errorHandler();
+  assert.equal(slotClasses.has('is-error'), true);
+  assert.match(slot.innerHTML, /Image unavailable\./);
+  assert.doesNotMatch(slot.innerHTML, /<img /);
+});
+
 test('openPinRawRecord opens the raw MAN record modal', () => {
   const { context, nodes } = createContext();
   const trigger = {
