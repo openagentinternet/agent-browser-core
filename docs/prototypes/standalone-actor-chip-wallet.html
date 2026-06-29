@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Standalone Actor Chip Wallet Prototype</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --browser-bg: #f4f6f9;
+        --browser-window: #f8fafc;
+        --browser-surface: #ffffff;
+        --browser-surface2: #f7f9fc;
+        --browser-panel: #fbfcfe;
+        --browser-border: #d9dee8;
+        --browser-border-strong: #c6cedd;
+        --browser-text: #16202f;
+        --browser-muted: #667085;
+        --browser-dim: #8a94a6;
+        --browser-accent: #2f6fed;
+        --browser-accent-strong: #1f5fd8;
+        --browser-accent-soft: #eaf1ff;
+        --browser-danger: #9b2c2c;
+        --browser-shadow: 0 18px 44px rgba(31, 41, 55, .12), 0 2px 10px rgba(31, 41, 55, .06);
+        --browser-radius: 8px;
+        --sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        overflow: hidden;
+        background: var(--browser-bg);
+        color: var(--browser-text);
+        font: 14px/1.45 var(--sans);
+      }
+
+      button {
+        font: inherit;
+      }
+
+      svg {
+        width: 16px;
+        height: 16px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.8;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .browser-shell {
+        height: 100%;
+        min-height: 0;
+        display: grid;
+        grid-template-rows: 34px 58px minmax(0, 1fr) 32px;
+        background: var(--browser-bg);
+        overflow: hidden;
+      }
+
+      .browser-titlebar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 0 14px;
+        border-bottom: 1px solid var(--browser-border);
+        background: linear-gradient(#fbfcfe, #eef2f7);
+        color: var(--browser-muted);
+        user-select: none;
+      }
+
+      .browser-window-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        color: #263548;
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .browser-brand-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        color: var(--browser-accent);
+      }
+
+      .browser-brand-icon svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      .browser-window-actions {
+        display: inline-flex;
+        gap: 6px;
+      }
+
+      .browser-window-actions span {
+        width: 9px;
+        height: 9px;
+        border: 1px solid #c6cedd;
+        border-radius: 999px;
+        background: #fff;
+      }
+
+      .browser-topbar {
+        position: relative;
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto auto auto auto;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--browser-border);
+        background: var(--browser-window);
+      }
+
+      .browser-nav {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        min-width: 0;
+      }
+
+      .browser-icon-button,
+      .browser-address-form button,
+      .browser-resource-chip,
+      .browser-using-chip,
+      .browser-menu-trigger,
+      .browser-wallet-option,
+      .browser-owner-panel-item {
+        border: 1px solid var(--browser-border);
+        background: var(--browser-surface);
+        color: var(--browser-text);
+        cursor: pointer;
+        text-decoration: none;
+        transition: border-color .14s ease, background-color .14s ease, color .14s ease, box-shadow .14s ease, transform .14s ease;
+      }
+
+      .browser-icon-button,
+      .browser-menu-trigger {
+        width: 34px;
+        height: 34px;
+        border-radius: 7px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        color: #344054;
+      }
+
+      .browser-icon-button:hover,
+      .browser-address-form button:hover,
+      .browser-resource-chip:hover,
+      .browser-menu-trigger:hover,
+      .browser-wallet-option:hover {
+        border-color: #a9b7cf;
+        background: #f8fbff;
+        color: var(--browser-accent);
+      }
+
+      .browser-address-form {
+        position: relative;
+        display: grid;
+        grid-template-columns: 30px minmax(0, 1fr) 34px;
+        align-items: center;
+        min-width: 0;
+        height: 38px;
+        border: 1px solid var(--browser-border-strong);
+        border-radius: 8px;
+        background: var(--browser-surface);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8), 0 1px 2px rgba(31, 41, 55, .04);
+      }
+
+      .browser-address-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--browser-dim);
+      }
+
+      .browser-address-form input {
+        width: 100%;
+        min-width: 0;
+        height: 36px;
+        border: 0;
+        outline: none;
+        background: transparent;
+        color: #111827;
+        padding: 0 8px 0 0;
+        font: 13px/1.2 var(--mono);
+      }
+
+      .browser-address-form button {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-right: 4px;
+        padding: 0;
+        background: #f3f6fb;
+      }
+
+      .browser-resource-chip,
+      .browser-using-chip {
+        min-width: 0;
+        height: 38px;
+        border-radius: 8px;
+        display: inline-grid;
+        grid-template-columns: 30px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 8px;
+        padding: 3px 8px 3px 4px;
+        text-align: left;
+        white-space: nowrap;
+      }
+
+      .browser-resource-chip.browser-owner-avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 3px;
+        max-width: none;
+        gap: 0;
+      }
+
+      .browser-resource-chip.browser-owner-avatar .browser-chip-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+      }
+
+      .browser-using-chip {
+        max-width: 212px;
+        color: #344054;
+        background: #fbfcfe;
+      }
+
+      .browser-using-chip.connect-only {
+        min-width: 142px;
+        max-width: none;
+        grid-template-columns: minmax(0, 1fr);
+        justify-items: center;
+        padding: 0 16px;
+        border-color: var(--browser-accent);
+        background: var(--browser-accent);
+        color: #fff;
+        box-shadow: 0 7px 16px rgba(47, 111, 237, .18);
+      }
+
+      .browser-using-chip.connect-only:hover {
+        border-color: var(--browser-accent-strong);
+        background: var(--browser-accent-strong);
+        color: #fff;
+      }
+
+      .browser-connect-text {
+        color: inherit;
+        font-size: 12px;
+        font-weight: 720;
+      }
+
+      .browser-chip-avatar,
+      .browser-avatar-fallback {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #344054;
+        font-size: 11px;
+        font-weight: 700;
+      }
+
+      .browser-chip-avatar {
+        width: 30px;
+        height: 30px;
+        flex: 0 0 auto;
+        overflow: hidden;
+        border-radius: 7px;
+        background: #e9eef6;
+      }
+
+      .browser-avatar-image {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+      }
+
+      .browser-chip-copy {
+        min-width: 0;
+        display: grid;
+        gap: 1px;
+      }
+
+      .browser-chip-title,
+      .browser-chip-subtitle {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .browser-chip-title {
+        color: var(--browser-text);
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .browser-chip-subtitle {
+        color: var(--browser-muted);
+        font: 11px/1.1 var(--mono);
+      }
+
+      .browser-chip-caret {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--browser-muted);
+      }
+
+      .browser-actor-wrap,
+      .browser-owner-chip-wrap,
+      .browser-menu-wrap {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        min-width: 0;
+      }
+
+      .browser-owner-panel {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        z-index: 37;
+        min-width: 248px;
+        border: 1px solid var(--browser-border);
+        border-radius: var(--browser-radius);
+        background: var(--browser-surface);
+        box-shadow: var(--browser-shadow);
+        padding: 12px;
+        display: grid;
+        gap: 8px;
+      }
+
+      .browser-owner-panel[hidden] {
+        display: none;
+      }
+
+      .browser-owner-panel-head {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--browser-border);
+      }
+
+      .browser-owner-panel-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 8px;
+        flex: 0 0 auto;
+        overflow: hidden;
+        background: #e9eef6;
+      }
+
+      .browser-owner-panel-id {
+        min-width: 0;
+        display: grid;
+        gap: 2px;
+      }
+
+      .browser-owner-panel-name {
+        color: var(--browser-text);
+        font-size: 13px;
+        font-weight: 600;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .browser-owner-panel-meta {
+        color: var(--browser-muted);
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .browser-owner-panel-menu {
+        display: grid;
+        gap: 2px;
+      }
+
+      .browser-owner-panel-item {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 8px 10px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--browser-text);
+        font-size: 13px;
+        text-align: left;
+      }
+
+      .browser-owner-panel-item:not(:disabled):hover {
+        background: rgba(15, 23, 42, .06);
+      }
+
+      .browser-owner-panel-item.logout {
+        color: var(--browser-danger);
+      }
+
+      .browser-viewport {
+        min-width: 0;
+        min-height: 0;
+        overflow: auto;
+        background:
+          radial-gradient(circle at 25% 15%, rgba(47, 111, 237, .08), transparent 28%),
+          var(--browser-bg);
+      }
+
+      .browser-bot-page {
+        width: min(100% - 32px, 900px);
+        margin: 16px auto 32px;
+        padding: 24px;
+        border: 1px solid var(--browser-border);
+        border-radius: 8px;
+        background: var(--browser-surface);
+        box-shadow: 0 1px 2px rgba(31, 41, 55, .04);
+        display: grid;
+        gap: 22px;
+      }
+
+      .browser-bot-header {
+        display: grid;
+        grid-template-columns: 76px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 16px;
+      }
+
+      .browser-bot-avatar {
+        width: 76px;
+        height: 76px;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #eaf1ff, #ffffff);
+        border: 1px solid #d9e5ff;
+        display: grid;
+        place-items: center;
+        color: var(--browser-accent);
+        font-weight: 800;
+        font-size: 22px;
+      }
+
+      .browser-bot-title h1 {
+        margin: 0;
+        color: #16202f;
+        font-size: 30px;
+        line-height: 1.1;
+        letter-spacing: 0;
+      }
+
+      .browser-bot-title p {
+        margin: 8px 0 0;
+        max-width: 620px;
+        color: var(--browser-muted);
+      }
+
+      .browser-action-row {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .browser-action-row button {
+        min-height: 34px;
+        padding: 0 12px;
+        border: 1px solid var(--browser-border);
+        border-radius: 7px;
+        background: var(--browser-surface2);
+        color: #344054;
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .browser-card-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .browser-card {
+        min-height: 116px;
+        border: 1px solid var(--browser-border);
+        border-radius: 8px;
+        background: #fbfcfe;
+        padding: 14px;
+        display: grid;
+        align-content: start;
+        gap: 8px;
+      }
+
+      .browser-card strong {
+        color: #263548;
+        font-size: 13px;
+      }
+
+      .browser-card span {
+        color: var(--browser-muted);
+        font-size: 12px;
+      }
+
+      .browser-status-strip {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        min-height: 32px;
+        padding: 0 12px;
+        border-top: 1px solid var(--browser-border);
+        background: #fbfcfe;
+        color: var(--browser-muted);
+        font: 11px/1.25 var(--mono);
+        overflow: hidden;
+      }
+
+      .browser-status-strip span {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .browser-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 40;
+        display: grid;
+        place-items: center;
+        padding: 16px;
+        background: rgba(15, 23, 42, .28);
+      }
+
+      .browser-modal[hidden] {
+        display: none;
+      }
+
+      .browser-modal-panel {
+        width: min(480px, 100%);
+        max-height: min(640px, 92vh);
+        display: grid;
+        grid-template-rows: auto minmax(0, 1fr);
+        overflow: hidden;
+        border: 1px solid var(--browser-border);
+        border-radius: var(--browser-radius);
+        background: var(--browser-surface);
+        box-shadow: var(--browser-shadow);
+      }
+
+      .browser-modal-panel header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 13px 14px;
+        border-bottom: 1px solid var(--browser-border);
+      }
+
+      .browser-modal-panel h2 {
+        margin: 0;
+        color: var(--browser-text);
+        font-size: 15px;
+      }
+
+      .browser-modal-close {
+        min-width: 32px;
+        min-height: 32px;
+        border: 1px solid var(--browser-border);
+        border-radius: 7px;
+        background: var(--browser-surface);
+        color: var(--browser-muted);
+        cursor: pointer;
+      }
+
+      .browser-modal-body {
+        overflow: auto;
+        padding: 14px;
+      }
+
+      .browser-wallet-options {
+        display: grid;
+        gap: 10px;
+      }
+
+      .browser-wallet-option {
+        width: 100%;
+        min-height: 72px;
+        display: grid;
+        grid-template-columns: 44px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 14px;
+        border-color: var(--browser-border-strong);
+        border-radius: 8px;
+        background: #fff;
+        text-align: left;
+      }
+
+      .browser-wallet-option:active {
+        transform: translateY(1px);
+      }
+
+      .wallet-icon {
+        width: 42px;
+        height: 42px;
+        display: grid;
+        place-items: center;
+        overflow: hidden;
+        border-radius: 8px;
+        background: #f7f9fc;
+      }
+
+      .wallet-icon img {
+        display: block;
+        width: 32px;
+        height: 32px;
+        object-fit: contain;
+      }
+
+      .wallet-option-copy {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+
+      .wallet-option-copy strong {
+        color: var(--browser-text);
+        font-size: 14px;
+        font-weight: 700;
+      }
+
+      .wallet-option-copy span {
+        color: var(--browser-muted);
+        font-size: 12px;
+      }
+
+      .browser-toast {
+        position: fixed;
+        bottom: 48px;
+        left: 50%;
+        z-index: 60;
+        max-width: 80vw;
+        padding: 8px 14px;
+        border-radius: 8px;
+        background: #1f2937;
+        color: #fff;
+        box-shadow: 0 10px 30px rgba(31, 41, 55, .28);
+        font-size: 13px;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateX(-50%) translateY(8px);
+        transition: opacity .18s ease, transform .18s ease;
+      }
+
+      .browser-toast.is-visible {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+      }
+
+      @media (max-width: 760px) {
+        .browser-shell {
+          grid-template-rows: 34px auto minmax(0, 1fr) 32px;
+        }
+
+        .browser-topbar {
+          grid-template-columns: auto minmax(180px, 1fr) auto;
+          overflow-x: auto;
+        }
+
+        .browser-owner-chip-wrap,
+        .browser-menu-wrap {
+          display: none;
+        }
+
+        .browser-using-chip.connect-only {
+          min-width: 128px;
+        }
+
+        .browser-bot-page {
+          width: calc(100% - 20px);
+          padding: 18px 16px;
+        }
+
+        .browser-bot-header,
+        .browser-card-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+
+        .browser-action-row {
+          justify-content: flex-start;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="browser-shell">
+      <section class="browser-titlebar" aria-label="Browser window title">
+        <div class="browser-window-brand">
+          <span class="browser-brand-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0 1 8-8h4v4h-4a4 4 0 0 0 0 8h4v4h-4a8 8 0 0 1-8-8Z"></path><path d="M15 8l5 4-5 4"></path></svg>
+          </span>
+          <span>Agent Browser</span>
+        </div>
+        <div class="browser-window-actions" aria-hidden="true"><span></span><span></span><span></span></div>
+      </section>
+
+      <section class="browser-topbar" aria-label="Browser controls">
+        <nav class="browser-nav" aria-label="Navigation">
+          <button class="browser-icon-button" type="button" aria-label="Back">
+            <svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"></path></svg>
+          </button>
+          <button class="browser-icon-button" type="button" aria-label="Forward">
+            <svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg>
+          </button>
+        </nav>
+
+        <form class="browser-address-form">
+          <span class="browser-address-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l2-2a5 5 0 0 0-7.07-7.07l-1.15 1.15"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-2 2a5 5 0 0 0 7.07 7.07l1.15-1.15"></path></svg>
+          </span>
+          <input value="metaid://owner.example" aria-label="Browser URI" />
+          <button type="button" aria-label="Go">
+            <svg viewBox="0 0 24 24"><path d="M5 12h14"></path><path d="m13 6 6 6-6 6"></path></svg>
+          </button>
+        </form>
+
+        <div class="browser-owner-chip-wrap">
+          <button class="browser-resource-chip browser-owner-avatar" type="button" aria-label="Owner Bot">
+            <span class="browser-chip-avatar"><span class="browser-avatar-fallback">OB</span></span>
+          </button>
+        </div>
+
+        <button class="browser-icon-button" type="button" aria-label="Bookmark">
+          <svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.2 6.4 20.2 7.5 14 3 9.6l6.2-.9L12 3Z"></path></svg>
+        </button>
+
+        <div class="browser-actor-wrap">
+          <button id="actorChip" class="browser-using-chip connect-only" type="button" aria-haspopup="menu" aria-expanded="false">
+            <span class="browser-connect-text">Connect Wallet</span>
+          </button>
+          <section id="actorMenu" class="browser-owner-panel" role="menu" hidden></section>
+        </div>
+
+        <div class="browser-menu-wrap">
+          <button class="browser-menu-trigger" type="button" aria-label="Browser menu">
+            <svg viewBox="0 0 24 24"><path d="M12 5h.01"></path><path d="M12 12h.01"></path><path d="M12 19h.01"></path></svg>
+          </button>
+        </div>
+      </section>
+
+      <section class="browser-viewport" aria-label="Browser page">
+        <article class="browser-bot-page">
+          <header class="browser-bot-header">
+            <div class="browser-bot-avatar">AI</div>
+            <div class="browser-bot-title">
+              <h1>Owner Bot</h1>
+              <p>A shared Browser page rendered in standalone mode. The top-right actor area is scoped to the wallet login flow.</p>
+            </div>
+            <div class="browser-action-row">
+              <button type="button">Run</button>
+              <button type="button">Open</button>
+            </div>
+          </header>
+          <section class="browser-card-grid">
+            <div class="browser-card"><strong>Profile</strong><span>Homepage and identity metadata stay resource-scoped.</span></div>
+            <div class="browser-card"><strong>Services</strong><span>Trusted actions remain host mediated.</span></div>
+            <div class="browser-card"><strong>MetaApps</strong><span>Standalone previews keep wallet APIs outside iframe content.</span></div>
+          </section>
+        </article>
+      </section>
+
+      <section class="browser-status-strip" aria-live="polite">
+        <span id="statusText">ready</span>
+      </section>
+    </main>
+
+    <section id="walletModal" class="browser-modal" hidden></section>
+    <div id="toast" class="browser-toast" role="status" aria-live="polite"></div>
+
+    <script>
+      const metaletIcon = "https://www.idchat.io/chat/metalet-logo-v3.4c11a0b7.svg";
+      const metamaskIcon = "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg";
+      const actorChip = document.getElementById("actorChip");
+      const actorMenu = document.getElementById("actorMenu");
+      const walletModal = document.getElementById("walletModal");
+      const toast = document.getElementById("toast");
+      const statusText = document.getElementById("statusText");
+
+      const actor = {
+        name: "Alice Wallet",
+        globalMetaId: "b1f1b3c8a4d2e9f7c6a5b8d0e4f2a1c9b7d6e5f4",
+        avatar: "https://api.dicebear.com/9.x/shapes/svg?seed=alice-wallet"
+      };
+
+      let connected = false;
+      let toastTimer = null;
+
+      function iconExternal() {
+        return '<svg viewBox="0 0 24 24"><path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"></path></svg>';
+      }
+
+      function iconLogout() {
+        return '<svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><path d="M16 17l5-5-5-5"></path><path d="M21 12H9"></path></svg>';
+      }
+
+      function iconChevronRight() {
+        return '<svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"></path></svg>';
+      }
+
+      function iconChevronDown() {
+        return '<svg viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg>';
+      }
+
+      function shortId(value) {
+        if (!value || value.length <= 16) return value || "";
+        return value.slice(0, 8) + "..." + value.slice(-6);
+      }
+
+      function setStatus(value) {
+        statusText.textContent = value;
+      }
+
+      function showToast(message) {
+        toast.textContent = message;
+        toast.classList.add("is-visible");
+        window.clearTimeout(toastTimer);
+        toastTimer = window.setTimeout(() => toast.classList.remove("is-visible"), 1900);
+      }
+
+      function closeWalletModal() {
+        walletModal.hidden = true;
+        walletModal.innerHTML = "";
+        actorChip.setAttribute("aria-expanded", "false");
+      }
+
+      function openWalletModal() {
+        closeActorMenu();
+        actorChip.setAttribute("aria-expanded", "true");
+        walletModal.hidden = false;
+        walletModal.innerHTML = `
+          <section class="browser-modal-panel" role="dialog" aria-modal="true" aria-labelledby="walletTitle">
+            <header>
+              <h2 id="walletTitle">请选择连接钱包</h2>
+              <button class="browser-modal-close" type="button" data-close-wallet aria-label="Close">Close</button>
+            </header>
+            <div class="browser-modal-body">
+              <div class="browser-wallet-options">
+                <button class="browser-wallet-option" type="button" data-wallet="metalet">
+                  <span class="wallet-icon"><img src="${metaletIcon}" alt="" /></span>
+                  <span class="wallet-option-copy">
+                    <strong>Connect to Metalet</strong>
+                    <span>MetaID wallet extension</span>
+                  </span>
+                  <span aria-hidden="true">${iconChevronRight()}</span>
+                </button>
+                <button class="browser-wallet-option" type="button" data-wallet="metamask">
+                  <span class="wallet-icon"><img src="${metamaskIcon}" alt="" /></span>
+                  <span class="wallet-option-copy">
+                    <strong>Connect to MetaMask</strong>
+                    <span>Ethereum wallet</span>
+                  </span>
+                  <span aria-hidden="true">${iconChevronRight()}</span>
+                </button>
+              </div>
+            </div>
+          </section>
+        `;
+      }
+
+      function renderActorChip() {
+        if (!connected) {
+          actorChip.className = "browser-using-chip connect-only";
+          actorChip.innerHTML = '<span class="browser-connect-text">Connect Wallet</span>';
+          actorChip.setAttribute("aria-expanded", "false");
+          return;
+        }
+        actorChip.className = "browser-using-chip";
+        actorChip.innerHTML = `
+          <span class="browser-chip-avatar"><img class="browser-avatar-image" src="${actor.avatar}" alt="" /></span>
+          <span class="browser-chip-copy">
+            <span class="browser-chip-title">Wallet: ${actor.name}</span>
+            <span class="browser-chip-subtitle">${shortId(actor.globalMetaId)}</span>
+          </span>
+          <span class="browser-chip-caret" aria-hidden="true">${iconChevronDown()}</span>
+        `;
+      }
+
+      function renderActorMenu() {
+        actorMenu.innerHTML = `
+          <div class="browser-owner-panel-head">
+            <span class="browser-owner-panel-avatar"><img class="browser-avatar-image" src="${actor.avatar}" alt="" /></span>
+            <div class="browser-owner-panel-id">
+              <span class="browser-owner-panel-name">${actor.name}</span>
+              <span class="browser-owner-panel-meta">${shortId(actor.globalMetaId)}</span>
+            </div>
+          </div>
+          <div class="browser-owner-panel-menu" role="none">
+            <button type="button" role="menuitem" class="browser-owner-panel-item" data-action="visit-home">
+              ${iconExternal()}<span>Visit homepage</span>
+            </button>
+            <button type="button" role="menuitem" class="browser-owner-panel-item logout" data-action="logout">
+              ${iconLogout()}<span>Logout</span>
+            </button>
+          </div>
+        `;
+      }
+
+      function openActorMenu() {
+        closeWalletModal();
+        renderActorMenu();
+        actorMenu.hidden = false;
+        actorChip.setAttribute("aria-expanded", "true");
+      }
+
+      function closeActorMenu() {
+        actorMenu.hidden = true;
+        actorChip.setAttribute("aria-expanded", "false");
+      }
+
+      function connectMetalet() {
+        connected = true;
+        closeWalletModal();
+        renderActorChip();
+        setStatus("wallet connected");
+        showToast("Metalet wallet connected");
+      }
+
+      function logout() {
+        connected = false;
+        closeActorMenu();
+        renderActorChip();
+        setStatus("wallet logged out");
+        showToast("Logged out");
+      }
+
+      actorChip.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (!connected) {
+          openWalletModal();
+          return;
+        }
+        if (actorMenu.hidden) {
+          openActorMenu();
+        } else {
+          closeActorMenu();
+        }
+      });
+
+      actorMenu.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const target = event.target.closest("[data-action]");
+        if (!target) return;
+        const action = target.getAttribute("data-action");
+        if (action === "visit-home") {
+          closeActorMenu();
+          setStatus("visit wallet homepage");
+          showToast("Visit homepage");
+        }
+        if (action === "logout") logout();
+      });
+
+      walletModal.addEventListener("click", (event) => {
+        const closeTarget = event.target.closest("[data-close-wallet]");
+        if (closeTarget || event.target === walletModal) {
+          closeWalletModal();
+          return;
+        }
+        const walletTarget = event.target.closest("[data-wallet]");
+        if (!walletTarget) return;
+        const wallet = walletTarget.getAttribute("data-wallet");
+        if (wallet === "metalet") connectMetalet();
+        if (wallet === "metamask") showToast("MetaMask 即将支持");
+      });
+
+      document.addEventListener("click", () => {
+        if (!actorMenu.hidden) closeActorMenu();
+      });
+
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeWalletModal();
+          closeActorMenu();
+        }
+      });
+
+      renderActorChip();
+    </script>
+  </body>
+</html>
