@@ -662,7 +662,11 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.match(BROWSER_INDEX_HTML, /\.browser-bot-inline-link:hover,\s+\.browser-bot-inline-link:focus \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
   assert.doesNotMatch(BROWSER_INDEX_HTML, /\.browser-metaapp-name\.browser-bot-inline-link \{/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-actions \{/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-card \{\n        display: grid;\n        grid-template-columns: 44px minmax\(0, 1fr\) minmax\(96px, auto\);\n        align-items: start;/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-card \{\n        display: grid;\n        grid-template-columns: 88px minmax\(0, 1fr\) auto;\n        align-items: start;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-icon,\s+\.browser-metaapp-icon,\s+\.browser-metaapp-cover \{\n        display: inline-flex;[\s\S]*?overflow: hidden;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-icon \{\n        align-self: start;\n        width: 44px;\n        height: 44px;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-icon-image,\s+\.browser-metaapp-icon-image,\s+\.browser-metaapp-cover-image \{\n        width: 100%;\n        height: 100%;\n        display: block;\n        object-fit: cover;/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-actions \{\n        display: inline-grid;\n        grid-auto-flow: column;\n        grid-auto-columns: max-content;\n        gap: 6px;\n        justify-self: end;\n        align-self: center;\n        width: auto;/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-card,\s+\.browser-metaapp-card \{/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-actions \{/);
