@@ -115,6 +115,7 @@ function createElements() {
     '[data-browser-resource-chip]': new FakeElement(),
     '[data-browser-owner-panel]': new FakeElement(),
     '[data-browser-using-selector]': new FakeElement(),
+    '[data-browser-actor-panel]': new FakeElement(),
     '[data-browser-menu-trigger]': new FakeElement(),
     '[data-browser-menu]': new FakeElement(),
     '[data-browser-owner-toolbar]': new FakeElement(),
@@ -126,6 +127,7 @@ function createElements() {
     '[data-browser-drawer]': new FakeElement(),
     '[data-browser-inspector]': new FakeElement(),
     '[data-browser-modal-root]': new FakeElement(),
+    '[data-browser-toast]': new FakeElement(),
   };
 }
 
@@ -182,6 +184,18 @@ function runtimePayload(overrides = {}) {
   };
 }
 
+function eventTargetWithAttribute(attribute, value = '') {
+  return {
+    parentElement: null,
+    getAttribute(name) {
+      return name === attribute ? value : null;
+    },
+    hasAttribute(name) {
+      return name === attribute;
+    },
+  };
+}
+
 const standaloneWalletActor = {
   id: 'standalone-wallet',
   label: 'Standalone Wallet',
@@ -208,6 +222,14 @@ function standaloneWalletRuntimePayload(overrides = {}) {
       noActorTitle: 'No Wallet',
       noActorBody: 'Connect Metalet to use standalone Browser.',
       walletConnect: 'Connect Wallet',
+      walletSelectTitle: '请选择连接钱包',
+      walletPrimaryProviderId: 'metalet',
+      walletPrimaryProviderLabel: 'Connect to Metalet',
+      walletPrimaryProviderIconUrl: 'https://www.idchat.io/chat/metalet-logo-v3.4c11a0b7.svg',
+      walletSecondaryProviderId: 'metamask',
+      walletSecondaryProviderLabel: 'Connect to MetaMask',
+      walletSecondaryProviderIconUrl: 'https://cdn.jsdelivr.net/gh/MetaMask/metamask-extension@develop/app/images/logo/metamask-fox.svg',
+      walletUnsupportedProviderMessage: '即将支持',
       walletInstallTitle: 'Install Metalet',
       walletInstallBody: 'Please install Metalet wallet first.',
       walletInstallAction: 'Install',
@@ -789,7 +811,7 @@ test('Browser safeUrl keeps data and blob avatar URLs', async () => {
   assert.equal(context.safeUrl('javascript:alert(1)'), '');
 });
 
-test('standalone wallet chip opens Metalet install modal when extension is missing', async () => {
+test('standalone wallet chip opens wallet picker before provider-specific connect', async () => {
   const { context, elements } = createBrowserContext({
     runtimeResponse: standaloneWalletRuntimePayload(),
   });
@@ -797,8 +819,51 @@ test('standalone wallet chip opens Metalet install modal when extension is missi
   await waitFor(() => context.state.runtime, 'standalone runtime load');
 
   assert.match(elements['[data-browser-using-selector]'].innerHTML, /Connect Wallet/);
+  assert.doesNotMatch(elements['[data-browser-using-selector]'].innerHTML, /browser-chip-avatar/);
+  assert.doesNotMatch(elements['[data-browser-using-selector]'].innerHTML, /Wallet:/);
 
   elements['[data-browser-using-selector]'].click();
+
+  assert.equal(elements['[data-browser-modal-root]'].hidden, false);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /请选择连接钱包/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /Connect to Metalet/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /Connect to MetaMask/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /data-browser-wallet-provider="metalet"/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /data-browser-wallet-provider="metamask"/);
+  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, /Install Metalet/);
+  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, /data-browser-actor-id/);
+});
+
+test('standalone MetaMask wallet option reports coming soon', async () => {
+  const { context, elements } = createBrowserContext({
+    runtimeResponse: standaloneWalletRuntimePayload(),
+  });
+
+  await waitFor(() => context.state.runtime, 'standalone runtime load');
+
+  elements['[data-browser-using-selector]'].click();
+  const modalClick = elements['[data-browser-modal-root]'].listeners.get('click');
+  assert.equal(typeof modalClick, 'function');
+  modalClick({
+    target: eventTargetWithAttribute('data-browser-wallet-provider', 'metamask'),
+  });
+
+  assert.match(elements['[data-browser-toast]'].textContent, /即将支持/);
+});
+
+test('standalone Metalet wallet option opens install modal when extension is missing', async () => {
+  const { context, elements } = createBrowserContext({
+    runtimeResponse: standaloneWalletRuntimePayload(),
+  });
+
+  await waitFor(() => context.state.runtime, 'standalone runtime load');
+
+  elements['[data-browser-using-selector]'].click();
+  const modalClick = elements['[data-browser-modal-root]'].listeners.get('click');
+  assert.equal(typeof modalClick, 'function');
+  modalClick({
+    target: eventTargetWithAttribute('data-browser-wallet-provider', 'metalet'),
+  });
 
   assert.equal(elements['[data-browser-modal-root]'].hidden, false);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /Install Metalet/);
@@ -817,15 +882,10 @@ test('standalone Metalet install action opens the wallet site in a new window', 
   const modalClick = elements['[data-browser-modal-root]'].listeners.get('click');
   assert.equal(typeof modalClick, 'function');
   modalClick({
-    target: {
-      parentElement: null,
-      getAttribute(name) {
-        return name === 'data-browser-wallet-install' ? '' : null;
-      },
-      hasAttribute(name) {
-        return name === 'data-browser-wallet-install';
-      },
-    },
+    target: eventTargetWithAttribute('data-browser-wallet-provider', 'metalet'),
+  });
+  modalClick({
+    target: eventTargetWithAttribute('data-browser-wallet-install'),
   });
 
   assert.deepEqual(openCalls, [
@@ -833,7 +893,7 @@ test('standalone Metalet install action opens the wallet site in a new window', 
   ]);
 });
 
-test('standalone Metalet connect updates the single wallet actor and keeps chip inert', async () => {
+test('standalone Metalet connect updates the single wallet actor and opens wallet actor menu', async () => {
   let connectCalls = 0;
   const metaidwallet = {
     isConnected: async () => ({ status: connectCalls ? 'connected' : 'not-connected' }),
@@ -865,6 +925,11 @@ test('standalone Metalet connect updates the single wallet actor and keeps chip 
   await waitFor(() => context.state.runtime, 'standalone runtime load');
 
   elements['[data-browser-using-selector]'].click();
+  const modalClick = elements['[data-browser-modal-root]'].listeners.get('click');
+  assert.equal(typeof modalClick, 'function');
+  modalClick({
+    target: eventTargetWithAttribute('data-browser-wallet-provider', 'metalet'),
+  });
   await waitFor(() => context.state.actorId === 'wallet:mvc-address-1234567890', 'wallet actor selection');
 
   assert.equal(connectCalls, 1);
@@ -873,14 +938,77 @@ test('standalone Metalet connect updates the single wallet actor and keeps chip 
   assert.equal(context.state.runtime.actors[0].globalMetaId, 'idq1walletuser');
   assert.equal(context.state.runtime.actors[0].wallet.btcAddress, 'btc-address-1234567890');
   assert.ok(fetchCalls.includes('https://file.metaid.io/metafile-indexer/api/v1/users/address/mvc-address-1234567890'));
-  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Wallet: Sunny Fung/);
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Sunny Fung/);
   assert.match(elements['[data-browser-using-selector]'].innerHTML, /idq1walletuser/);
   assert.match(elements['[data-browser-using-selector]'].innerHTML, /https:\/\/file\.metaid\.io\/metafile-indexer\/avatar\.png/);
 
   elements['[data-browser-modal-root]'].innerHTML = 'unchanged';
   elements['[data-browser-using-selector]'].click();
+  assert.equal(elements['[data-browser-actor-panel]'].hidden, false);
+  assert.match(elements['[data-browser-actor-panel]'].innerHTML, /Visit homepage/);
+  assert.match(elements['[data-browser-actor-panel]'].innerHTML, /Logout/);
   assert.equal(elements['[data-browser-modal-root]'].innerHTML, 'unchanged');
   assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, /data-browser-actor-id/);
+});
+
+test('standalone wallet actor menu visits homepage and logs out', async () => {
+  const metaidwallet = {
+    isConnected: async () => ({ status: 'not-connected' }),
+    connect: async () => ({ status: 'connected' }),
+    getNetwork: async () => ({ network: 'livenet' }),
+    getAddress: async () => 'mvc-address-1234567890',
+    getPublicKey: async () => 'mvc-public-key',
+    btc: {
+      getAddress: async () => 'btc-address-1234567890',
+      getPublicKey: async () => 'btc-public-key',
+    },
+  };
+  const { context, elements, fetchCalls } = createBrowserContext({
+    runtimeResponse: standaloneWalletRuntimePayload(),
+    metaidwallet,
+    walletProfileResponse: {
+      code: 0,
+      data: {
+        name: 'Sunny Fung',
+        globalMetaId: 'idq1walletuser',
+        avatar: '/avatar.png',
+      },
+    },
+  });
+
+  await waitFor(() => context.state.runtime, 'standalone runtime load');
+
+  elements['[data-browser-using-selector]'].click();
+  const modalClick = elements['[data-browser-modal-root]'].listeners.get('click');
+  assert.equal(typeof modalClick, 'function');
+  modalClick({
+    target: eventTargetWithAttribute('data-browser-wallet-provider', 'metalet'),
+  });
+  await waitFor(() => context.state.actorId === 'wallet:mvc-address-1234567890', 'wallet actor selection');
+
+  elements['[data-browser-using-selector]'].click();
+  const actorPanelClick = elements['[data-browser-actor-panel]'].listeners.get('click');
+  assert.equal(typeof actorPanelClick, 'function');
+  actorPanelClick({
+    stopPropagation() {},
+    target: eventTargetWithAttribute('data-browser-actor-panel-action', 'visit-home'),
+  });
+  await waitFor(
+    () => fetchCalls.some((url) => url.startsWith('/api/browser/resolve?uri=metaid%3A%2F%2Fidq1walletuser')),
+    'wallet homepage visit',
+  );
+  assert.equal(elements['[data-browser-uri-input]'].value, 'metaid://idq1walletuser');
+
+  elements['[data-browser-using-selector]'].click();
+  actorPanelClick({
+    stopPropagation() {},
+    target: eventTargetWithAttribute('data-browser-actor-panel-action', 'logout'),
+  });
+
+  assert.equal(context.state.actorId, 'standalone-wallet');
+  assert.equal(context.state.runtime.defaultActor.id, 'standalone-wallet');
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Connect Wallet/);
+  assert.doesNotMatch(elements['[data-browser-using-selector]'].innerHTML, /browser-chip-avatar/);
 });
 
 test('Browser menu is data-driven and opens cache management settings', async () => {
