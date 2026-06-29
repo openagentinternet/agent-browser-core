@@ -7,6 +7,7 @@
     "esModuleInterop": true
   },
   "include": [
+    "src/assets.ts",
     "src/adapter.ts",
     "src/http.ts",
     "src/index.ts",

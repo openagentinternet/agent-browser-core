@@ -15,6 +15,10 @@
     "agent-browser-standalone": "dist/main.js"
   },
   "files": [
+    "dist/assets.d.ts",
+    "dist/assets.d.ts.map",
+    "dist/assets.js",
+    "dist/assets.js.map",
     "dist/adapter.d.ts",
     "dist/adapter.d.ts.map",
     "dist/adapter.js",
@@ -48,6 +52,8 @@
     "dist/server.js",
     "dist/server.js.map",
     "dist-cjs/package.json",
+    "dist-cjs/assets.js",
+    "dist-cjs/assets.js.map",
     "dist-cjs/adapter.js",
     "dist-cjs/adapter.js.map",
     "dist-cjs/http.js",
@@ -61,7 +67,9 @@
     "dist-cjs/metaapp/zipArchive.js",
     "dist-cjs/metaapp/zipArchive.js.map",
     "dist-cjs/server.js",
-    "dist-cjs/server.js.map"
+    "dist-cjs/server.js.map",
+    "assets/metalet-logo-v3.4c11a0b7.svg",
+    "assets/metamask-fox.svg"
   ],
   "exports": {
     ".": {

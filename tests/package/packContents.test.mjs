@@ -144,12 +144,16 @@ test('published Browser packages include declared entrypoints', async () => {
     }
 
     if (workspace.name === '@openagentinternet/agent-browser-host-standalone') {
+      assertPackIncludes(files, 'dist/assets.js', workspace.name);
       assertPackIncludes(files, 'dist/adapter.js', workspace.name);
       assertPackIncludes(files, 'dist/server.js', workspace.name);
       assertPackIncludes(files, 'dist/metaapp/artifactCache.js', workspace.name);
       assertPackIncludes(files, 'dist/metaapp/zipArchive.js', workspace.name);
+      assertPackIncludes(files, 'dist-cjs/assets.js', workspace.name);
       assertPackIncludes(files, 'dist-cjs/metaapp/artifactCache.js', workspace.name);
       assertPackIncludes(files, 'dist-cjs/metaapp/zipArchive.js', workspace.name);
+      assertPackIncludes(files, 'assets/metalet-logo-v3.4c11a0b7.svg', workspace.name);
+      assertPackIncludes(files, 'assets/metamask-fox.svg', workspace.name);
     }
   }
 });

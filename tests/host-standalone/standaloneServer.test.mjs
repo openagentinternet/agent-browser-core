@@ -51,6 +51,9 @@ test('standalone Browser server serves Browser shell and health route', async (t
     isDefault: true,
     capabilities: ['template-settings'],
   });
+  const metaletIcon = await fetch(`${baseUrl}/assets/metalet-logo-v3.4c11a0b7.svg`);
+  assert.equal(metaletIcon.status, 200);
+  assert.match(metaletIcon.headers.get('content-type'), /image\/svg\+xml/);
   assert.equal(runtime.data.defaultUri, null);
   assert.deepEqual(runtime.data.labels, {
     actorChip: 'Wallet',
@@ -60,10 +63,10 @@ test('standalone Browser server serves Browser shell and health route', async (t
     walletSelectTitle: '请选择连接钱包',
     walletPrimaryProviderId: 'metalet',
     walletPrimaryProviderLabel: 'Connect to Metalet',
-    walletPrimaryProviderIconUrl: 'https://www.idchat.io/chat/metalet-logo-v3.4c11a0b7.svg',
+    walletPrimaryProviderIconUrl: '/assets/metalet-logo-v3.4c11a0b7.svg',
     walletSecondaryProviderId: 'metamask',
     walletSecondaryProviderLabel: 'Connect to MetaMask',
-    walletSecondaryProviderIconUrl: 'https://cdn.jsdelivr.net/gh/MetaMask/metamask-extension@develop/app/images/logo/metamask-fox.svg',
+    walletSecondaryProviderIconUrl: '/assets/metamask-fox.svg',
     walletUnsupportedProviderMessage: '即将支持',
     walletInstallTitle: 'Install Metalet',
     walletInstallBody: 'Please install Metalet wallet first.',

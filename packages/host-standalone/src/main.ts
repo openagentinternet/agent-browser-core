@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { realpathSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createStandaloneBrowserServer } from './server.js';
 
@@ -34,7 +35,8 @@ function isDirectCliInvocation(): boolean {
 export async function main(argv: string[] = process.argv.slice(2), env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const host = readOption(argv, '--host') ?? env.BROWSER_HOST ?? '127.0.0.1';
   const port = parsePort(readOption(argv, '--port') ?? env.BROWSER_PORT ?? '8787');
-  const server = createStandaloneBrowserServer({ env });
+  const assetsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'assets');
+  const server = createStandaloneBrowserServer({ env, assetsRoot });
 
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => {

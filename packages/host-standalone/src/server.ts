@@ -1,4 +1,6 @@
 import http from 'node:http';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { browserFailure } from '@openagentinternet/agent-browser-host-contract';
 import { renderBrowserPageHtml } from '@openagentinternet/agent-browser-ui';
 import {
@@ -9,6 +11,11 @@ import {
   statusForBrowserResult,
 } from './http.js';
 import {
+  contentTypeForPath,
+  resolveStandaloneAssetPath,
+  resolveStandaloneAssetsRoot,
+} from './assets.js';
+import {
   createStandaloneBrowserHostAdapter,
   type CreateStandaloneBrowserHostAdapterInput,
   type StandaloneBrowserHostAdapter,
@@ -16,6 +23,7 @@ import {
 
 export interface CreateStandaloneBrowserServerInput extends CreateStandaloneBrowserHostAdapterInput {
   adapter?: StandaloneBrowserHostAdapter;
+  assetsRoot?: string;
 }
 
 async function loadInitialPage(): Promise<string> {
@@ -31,6 +39,7 @@ function isBrowserPage(pathname: string): boolean {
 }
 
 const PREVIEW_ASSET_PREFIX = '/api/browser/preview-assets/';
+const STATIC_ASSET_PREFIX = '/assets/';
 const FALLBACK_SHARED_CSS = '/* MetaBot UI shared development styles */\n';
 
 function parsePreviewAssetPath(pathname: string): { previewId: string; assetPath: string } | null {
@@ -58,8 +67,31 @@ async function serveSharedCss(res: http.ServerResponse): Promise<boolean> {
   return true;
 }
 
+async function serveStandaloneAsset(
+  res: http.ServerResponse,
+  pathname: string,
+  assetsRoot: string,
+): Promise<boolean> {
+  if (!pathname.startsWith(STATIC_ASSET_PREFIX)) {
+    return false;
+  }
+  const assetPath = pathname.slice(STATIC_ASSET_PREFIX.length);
+  const filePath = resolveStandaloneAssetPath(assetPath, assetsRoot);
+  if (!filePath) {
+    return false;
+  }
+  try {
+    const body = await readFile(filePath);
+    sendText(res, 200, body, contentTypeForPath(filePath));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function createStandaloneBrowserServer(input: CreateStandaloneBrowserServerInput = {}): http.Server {
   const adapter = input.adapter ?? createStandaloneBrowserHostAdapter(input);
+  const assetsRoot = input.assetsRoot ?? resolveStandaloneAssetsRoot();
 
   return http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
@@ -82,6 +114,18 @@ export function createStandaloneBrowserServer(input: CreateStandaloneBrowserServ
           return;
         }
         await serveSharedCss(res);
+        return;
+      }
+      if (url.pathname.startsWith(STATIC_ASSET_PREFIX)) {
+        if ((req.method ?? 'GET') !== 'GET') {
+          sendJson(res, 405, browserFailure('method_not_allowed', 'Expected GET.'));
+          return;
+        }
+        const served = await serveStandaloneAsset(res, url.pathname, assetsRoot);
+        if (served) {
+          return;
+        }
+        sendJson(res, 404, browserFailure('not_found', `No route matched ${url.pathname}.`));
         return;
       }
       const previewAsset = parsePreviewAssetPath(url.pathname);

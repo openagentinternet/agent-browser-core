@@ -806,8 +806,8 @@
     <div id="toast" class="browser-toast" role="status" aria-live="polite"></div>
 
     <script>
-      const metaletIcon = "https://www.idchat.io/chat/metalet-logo-v3.4c11a0b7.svg";
-      const metamaskIcon = "https://upload.wikimedia.org/wikipedia/commons/3/36/MetaMask_Fox.svg";
+      const metaletIcon = "../../packages/host-standalone/assets/metalet-logo-v3.4c11a0b7.svg";
+      const metamaskIcon = "../../packages/host-standalone/assets/metamask-fox.svg";
       const actorChip = document.getElementById("actorChip");
       const actorMenu = document.getElementById("actorMenu");
       const walletModal = document.getElementById("walletModal");
@@ -817,7 +817,7 @@
       const actor = {
         name: "Alice Wallet",
         globalMetaId: "b1f1b3c8a4d2e9f7c6a5b8d0e4f2a1c9b7d6e5f4",
-        avatar: "https://api.dicebear.com/9.x/shapes/svg?seed=alice-wallet"
+        avatar: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='12' fill='%23e9eef6'/%3E%3Cpath d='M24 14c-5.2 0-9 3.8-9 9s3.8 9 9 9 9-3.8 9-9-3.8-9-9-9Zm0 22c-6.7 0-14 3.3-14 7.2V46h28v-2.8C38 39.3 30.7 36 24 36Z' fill='%23344054'/%3E%3C/svg%3E"
       };
 
       let connected = false;
