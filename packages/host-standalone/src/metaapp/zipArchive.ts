@@ -226,9 +226,6 @@ function assertSupportedGeneralPurposeFlags(entryName: string, flags: number): v
   if ((flags & ENCRYPTED_FLAG) !== 0) {
     throw new Error(`Encrypted ZIP entries are not supported: ${entryName}`);
   }
-  if ((flags & DATA_DESCRIPTOR_FLAG) !== 0) {
-    throw new Error(`ZIP data descriptor entries are not supported: ${entryName}`);
-  }
 }
 
 function inflateRawBounded(input: {
@@ -332,6 +329,7 @@ export async function extractMetaAppZipArchive(input: {
     centralOffset = centralEntryEnd;
     assertSafeEntryName(entryName);
     assertSupportedGeneralPurposeFlags(entryName, generalPurposeFlags);
+    const usesDataDescriptor = (generalPurposeFlags & DATA_DESCRIPTOR_FLAG) !== 0;
 
     totalUncompressedBytes += uncompressedSize;
     if (totalUncompressedBytes > maxUncompressedBytes) {
@@ -363,13 +361,13 @@ export async function extractMetaAppZipArchive(input: {
     if (localCompressionMethod !== compressionMethod) {
       throw new Error(`ZIP local header compression method mismatch for ${entryName}.`);
     }
-    if (localCrc !== crc) {
+    if (!usesDataDescriptor && localCrc !== crc) {
       throw new Error(`ZIP local header CRC mismatch for ${entryName}.`);
     }
-    if (localCompressedSize !== compressedSize) {
+    if (!usesDataDescriptor && localCompressedSize !== compressedSize) {
       throw new Error(`ZIP local header compressed size mismatch for ${entryName}.`);
     }
-    if (localUncompressedSize !== uncompressedSize) {
+    if (!usesDataDescriptor && localUncompressedSize !== uncompressedSize) {
       throw new Error(`ZIP local header uncompressed size mismatch for ${entryName}.`);
     }
     if (entryName.endsWith('/')) {

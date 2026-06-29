@@ -17,6 +17,7 @@ const LOCAL_FILE_HEADER_SIGNATURE = 0x04034b50;
 const CENTRAL_DIRECTORY_HEADER_SIGNATURE = 0x02014b50;
 const END_OF_CENTRAL_DIRECTORY_SIGNATURE = 0x06054b50;
 const DEFLATE_COMPRESSION_METHOD = 8;
+const DATA_DESCRIPTOR_FLAG = 0x0008;
 
 function buildCrcTable() {
   const table = new Uint32Array(256);
@@ -80,6 +81,51 @@ function createDeflateZipWithDeclaredSize({ entryName, body, declaredUncompresse
   return Buffer.concat([localHeader, compressedBody, centralHeader, endOfCentralDirectory]);
 }
 
+function createDeflateZipWithDataDescriptor({ entryName, body }) {
+  const nameBuffer = Buffer.from(entryName, 'utf8');
+  const compressedBody = deflateRawSync(body);
+  const bodyCrc = crc32(body);
+  const localHeader = Buffer.alloc(30 + nameBuffer.length);
+  localHeader.writeUInt32LE(LOCAL_FILE_HEADER_SIGNATURE, 0);
+  localHeader.writeUInt16LE(20, 4);
+  localHeader.writeUInt16LE(DATA_DESCRIPTOR_FLAG, 6);
+  localHeader.writeUInt16LE(DEFLATE_COMPRESSION_METHOD, 8);
+  localHeader.writeUInt32LE(0, 14);
+  localHeader.writeUInt32LE(0, 18);
+  localHeader.writeUInt32LE(0, 22);
+  localHeader.writeUInt16LE(nameBuffer.length, 26);
+  nameBuffer.copy(localHeader, 30);
+
+  const dataDescriptor = Buffer.alloc(16);
+  dataDescriptor.writeUInt32LE(0x08074b50, 0);
+  dataDescriptor.writeUInt32LE(bodyCrc, 4);
+  dataDescriptor.writeUInt32LE(compressedBody.byteLength, 8);
+  dataDescriptor.writeUInt32LE(body.byteLength, 12);
+
+  const centralDirectoryOffset = localHeader.byteLength + compressedBody.byteLength + dataDescriptor.byteLength;
+  const centralHeader = Buffer.alloc(46 + nameBuffer.length);
+  centralHeader.writeUInt32LE(CENTRAL_DIRECTORY_HEADER_SIGNATURE, 0);
+  centralHeader.writeUInt16LE(20, 4);
+  centralHeader.writeUInt16LE(20, 6);
+  centralHeader.writeUInt16LE(DATA_DESCRIPTOR_FLAG, 8);
+  centralHeader.writeUInt16LE(DEFLATE_COMPRESSION_METHOD, 10);
+  centralHeader.writeUInt32LE(bodyCrc, 16);
+  centralHeader.writeUInt32LE(compressedBody.byteLength, 20);
+  centralHeader.writeUInt32LE(body.byteLength, 24);
+  centralHeader.writeUInt16LE(nameBuffer.length, 28);
+  centralHeader.writeUInt32LE(0, 42);
+  nameBuffer.copy(centralHeader, 46);
+
+  const endOfCentralDirectory = Buffer.alloc(22);
+  endOfCentralDirectory.writeUInt32LE(END_OF_CENTRAL_DIRECTORY_SIGNATURE, 0);
+  endOfCentralDirectory.writeUInt16LE(1, 8);
+  endOfCentralDirectory.writeUInt16LE(1, 10);
+  endOfCentralDirectory.writeUInt32LE(centralHeader.byteLength, 12);
+  endOfCentralDirectory.writeUInt32LE(centralDirectoryOffset, 16);
+
+  return Buffer.concat([localHeader, compressedBody, dataDescriptor, centralHeader, endOfCentralDirectory]);
+}
+
 test('extractMetaAppZipArchive extracts browser files and preserves relative paths', async (t) => {
   const outDir = await mkdtemp(path.join(tmpdir(), 'abc-zip-extract-'));
   t.after(() => rm(outDir, { recursive: true, force: true }));
@@ -93,6 +139,20 @@ test('extractMetaAppZipArchive extracts browser files and preserves relative pat
   assert.deepEqual(result.entries, ['assets/app.js', 'index.html']);
   assert.match(await readFile(path.join(outDir, 'index.html'), 'utf8'), /Extracted/);
   assert.match(await readFile(path.join(outDir, 'assets', 'app.js'), 'utf8'), /__zipExtracted/);
+});
+
+test('extractMetaAppZipArchive accepts deflate entries that use data descriptors', async (t) => {
+  const outDir = await mkdtemp(path.join(tmpdir(), 'abc-zip-descriptor-'));
+  t.after(() => rm(outDir, { recursive: true, force: true }));
+
+  const archive = createDeflateZipWithDataDescriptor({
+    entryName: 'index.html',
+    body: Buffer.from('<!doctype html><title>Descriptor</title>', 'utf8'),
+  });
+  const result = await extractMetaAppZipArchive({ archive, outDir });
+
+  assert.deepEqual(result.entries, ['index.html']);
+  assert.match(await readFile(path.join(outDir, 'index.html'), 'utf8'), /Descriptor/);
 });
 
 test('extractMetaAppZipArchive rejects path traversal entries', async (t) => {
