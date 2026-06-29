@@ -76,13 +76,16 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
             </button>
             <div class="browser-owner-panel" data-browser-owner-panel role="menu" hidden></div>
           </div>
-          <button type="button" class="browser-using-chip" data-browser-using-selector title="Switch identity" aria-expanded="false">
-            <span class="browser-chip-avatar browser-avatar-fallback" aria-hidden="true">M</span>
-            <span class="browser-chip-copy"><span class="browser-chip-title">Using: My Bot</span></span>
-            <span class="browser-chip-caret" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false"><path d="M6 9l6 6 6-6"></path></svg>
-            </span>
-          </button>
+          <div class="browser-owner-chip-wrap browser-actor-chip-wrap">
+            <button type="button" class="browser-using-chip" data-browser-using-selector title="Switch identity" aria-expanded="false">
+              <span class="browser-chip-avatar browser-avatar-fallback" aria-hidden="true">M</span>
+              <span class="browser-chip-copy"><span class="browser-chip-title">Using: My Bot</span></span>
+              <span class="browser-chip-caret" aria-hidden="true">
+                <svg viewBox="0 0 24 24" focusable="false"><path d="M6 9l6 6 6-6"></path></svg>
+              </span>
+            </button>
+            <div class="browser-owner-panel browser-actor-panel" data-browser-actor-panel role="menu" hidden></div>
+          </div>
           <div class="browser-menu-wrap">
             <button type="button" class="browser-icon-button browser-menu-trigger" data-browser-menu-trigger aria-label="Browser menu" title="Customize and control" aria-haspopup="menu" aria-expanded="false">
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M12 5.5h.01M12 12h.01M12 18.5h.01"></path></svg>
@@ -147,6 +150,9 @@ var browserLaunchCopy = {
     'modal.ok': '确定',
     'modal.usingActorTitle': '选择当前 Bot',
     'wallet.connect': '连接钱包',
+    'wallet.selectTitle': '请选择连接钱包',
+    'wallet.unsupportedProvider': '即将支持',
+    'wallet.logout': 'Logout',
     'wallet.installTitle': '安装钱包',
     'wallet.installBody': '请先安装钱包扩展。',
     'wallet.installAction': '安装',
@@ -176,6 +182,7 @@ var state = {
   inspectorOpen: false,
   menuOpen: false,
   ownerPanelOpen: false,
+  actorPanelOpen: false,
   settingsTab: 'baseUrls',
   settingsData: null,
   cacheData: null,
@@ -190,7 +197,8 @@ var state = {
   toastTimer: null,
   pinEntityProfiles: {},
   pinEntityProfilePending: {},
-  enrichToken: 0
+  enrichToken: 0,
+  standaloneWalletPlaceholderActor: null
 };
 
 var elements = {};
@@ -497,6 +505,7 @@ function bindElements() {
     resourceChip: document.querySelector('[data-browser-resource-chip]'),
     ownerPanel: document.querySelector('[data-browser-owner-panel]'),
     usingChip: document.querySelector('[data-browser-using-selector]'),
+    actorPanel: document.querySelector('[data-browser-actor-panel]'),
     menuTrigger: document.querySelector('[data-browser-menu-trigger]'),
     menu: document.querySelector('[data-browser-menu]'),
     viewport: document.querySelector('[data-browser-viewport]'),
@@ -1245,6 +1254,138 @@ function actorDefaultUri(actor) {
   return globalMetaId ? 'metaid://' + globalMetaId : '';
 }
 
+function setUsingChipWalletState(stateName) {
+  if (!elements.usingChip) return;
+  if (typeof elements.usingChip.setAttribute === 'function') {
+    elements.usingChip.setAttribute('data-browser-wallet-state', stateName);
+  }
+  if (!elements.usingChip.style) return;
+  if (stateName === 'disconnected') {
+    elements.usingChip.style.gridTemplateColumns = 'minmax(0, 1fr)';
+    elements.usingChip.style.justifyItems = 'center';
+    elements.usingChip.style.textAlign = 'center';
+    elements.usingChip.style.padding = '3px 12px';
+  } else {
+    elements.usingChip.style.gridTemplateColumns = '';
+    elements.usingChip.style.justifyItems = '';
+    elements.usingChip.style.textAlign = '';
+    elements.usingChip.style.padding = '';
+  }
+}
+
+function cloneActor(actor) {
+  if (!actor || typeof actor !== 'object') return null;
+  var next = {};
+  Object.keys(actor).forEach(function (key) {
+    next[key] = actor[key];
+  });
+  return next;
+}
+
+function fallbackStandaloneWalletActor() {
+  return {
+    id: 'standalone-wallet',
+    label: runtimeLabelValue('walletFallbackName', 'Wallet'),
+    kind: 'wallet',
+    isDefault: true,
+    capabilities: ['template-settings']
+  };
+}
+
+function rememberStandaloneWalletPlaceholder() {
+  if (!isStandaloneWalletRuntime() || state.standaloneWalletPlaceholderActor) return;
+  var actor = state.runtime && state.runtime.defaultActor ? state.runtime.defaultActor : runtimeActors()[0];
+  if (actor && !isConnectedWalletActor(actor)) {
+    state.standaloneWalletPlaceholderActor = cloneActor(actor);
+  }
+}
+
+function renderStandaloneActorPanel() {
+  if (!elements.actorPanel) return;
+  var actor = selectedStandaloneWalletActor();
+  if (!actor) {
+    elements.actorPanel.innerHTML = '';
+    return;
+  }
+  var name = textValue(actor.label) || shortAddress(actor.address) || runtimeLabelValue('walletFallbackName', 'Wallet');
+  var globalMetaId = textValue(actor.globalMetaId);
+  var visitHomeText = browserText('ownerPanel.visitHome', 'Visit homepage');
+  var logoutText = browserText('wallet.logout', 'Logout');
+  elements.actorPanel.innerHTML =
+    '<div class="browser-owner-panel-head">' +
+      avatarHtml(actor.avatar, name, 'browser-owner-panel-avatar') +
+      '<div class="browser-owner-panel-id">' +
+        '<span class="browser-owner-panel-name">' + escapeHtml(name) + '</span>' +
+        (globalMetaId ? '<span class="browser-owner-panel-meta">' + escapeHtml(shortId(globalMetaId)) + '</span>' : '') +
+      '</div>' +
+    '</div>' +
+    '<div class="browser-owner-panel-menu" role="none">' +
+      '<button type="button" role="menuitem" class="browser-owner-panel-item" data-browser-actor-panel-action="visit-home">' +
+        iconHtml('external') + '<span>' + escapeHtml(visitHomeText) + '</span>' +
+      '</button>' +
+      '<button type="button" role="menuitem" class="browser-owner-panel-item" data-browser-actor-panel-action="logout">' +
+        iconHtml('close') + '<span>' + escapeHtml(logoutText) + '</span>' +
+      '</button>' +
+    '</div>';
+}
+
+function closeStandaloneActorPanel() {
+  state.actorPanelOpen = false;
+  if (elements.actorPanel) elements.actorPanel.hidden = true;
+  if (elements.usingChip && typeof elements.usingChip.setAttribute === 'function') {
+    elements.usingChip.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function openStandaloneActorPanel() {
+  if (!elements.actorPanel || !selectedStandaloneWalletActor()) return;
+  state.actorPanelOpen = true;
+  renderStandaloneActorPanel();
+  elements.actorPanel.hidden = false;
+  if (elements.usingChip && typeof elements.usingChip.setAttribute === 'function') {
+    elements.usingChip.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function toggleStandaloneActorPanel() {
+  if (state.actorPanelOpen) {
+    closeStandaloneActorPanel();
+  } else {
+    openStandaloneActorPanel();
+  }
+}
+
+function logoutStandaloneWalletActor() {
+  var placeholder = cloneActor(state.standaloneWalletPlaceholderActor) || fallbackStandaloneWalletActor();
+  placeholder.isDefault = true;
+  if (!state.runtime) state.runtime = {};
+  state.runtime.actors = [placeholder];
+  state.runtime.defaultActor = placeholder;
+  state.runtime.defaultUri = null;
+  state.actorId = textValue(placeholder.id);
+  closeStandaloneActorPanel();
+  renderUsingIdentity();
+  setStatus('wallet logged out', '');
+}
+
+function handleStandaloneActorPanelAction(action) {
+  if (action === 'visit-home') {
+    var actor = selectedStandaloneWalletActor();
+    var uri = actorDefaultUri(actor);
+    closeStandaloneActorPanel();
+    if (uri) {
+      closeInspector();
+      return navigateTo(uri);
+    }
+    setStatus('error', 'Wallet Global MetaID is missing.');
+    return Promise.resolve();
+  }
+  if (action === 'logout') {
+    logoutStandaloneWalletActor();
+  }
+  return Promise.resolve();
+}
+
 function currentResourceUri() {
   return textValue(state.current && (state.current.normalizedUri || state.current.uri)) ||
     textValue(elements.input && elements.input.value);
@@ -1290,22 +1431,24 @@ function renderUsingIdentity() {
         '<span class="browser-chip-copy"><span class="browser-chip-title">' +
         escapeHtml(runtimeLabel('actorChip', 'Wallet')) + ': ' + escapeHtml(walletName) + '</span>' +
         (walletMetaId ? '<span class="browser-chip-subtitle">' + escapeHtml(walletMetaId) + '</span>' : '') +
-        '</span>';
+        '</span>' +
+        '<span class="browser-chip-caret" aria-hidden="true">' + iconHtml('chevronDown') + '</span>';
       if (typeof elements.usingChip.setAttribute === 'function') {
-        elements.usingChip.setAttribute('aria-expanded', 'false');
+        elements.usingChip.setAttribute('aria-expanded', state.actorPanelOpen ? 'true' : 'false');
       }
+      setUsingChipWalletState('connected');
       elements.usingChip.disabled = false;
       return;
     }
     if (isStandaloneWalletRuntime()) {
       var connectLabel = runtimeLabelValue('walletConnect', browserText('wallet.connect', 'Connect Wallet'));
-      elements.usingChip.innerHTML = avatarHtml('', connectLabel, 'browser-chip-avatar') +
-        '<span class="browser-chip-copy"><span class="browser-chip-title">' +
-        escapeHtml(runtimeLabel('actorChip', 'Wallet')) + ': ' + escapeHtml(connectLabel) +
+      elements.usingChip.innerHTML = '<span class="browser-chip-copy"><span class="browser-chip-title">' +
+        escapeHtml(connectLabel) +
         '</span></span>';
       if (typeof elements.usingChip.setAttribute === 'function') {
         elements.usingChip.setAttribute('aria-expanded', 'false');
       }
+      setUsingChipWalletState('disconnected');
       elements.usingChip.disabled = false;
       return;
     }
@@ -1317,6 +1460,7 @@ function renderUsingIdentity() {
     if (typeof elements.usingChip.setAttribute === 'function') {
       elements.usingChip.setAttribute('aria-expanded', 'false');
     }
+    setUsingChipWalletState('host-actor');
     elements.usingChip.disabled = !runtimeActors().length;
   }
 }
@@ -1687,6 +1831,7 @@ function syncPanelState() {
     elements.drawerToggle.setAttribute('aria-expanded', state.drawerOpen ? 'true' : 'false');
   }
   if (state.ownerPanelOpen) closeOwnerPanel();
+  if (state.actorPanelOpen) closeStandaloneActorPanel();
   if (elements.resourceChip && typeof elements.resourceChip.setAttribute === 'function') {
     elements.resourceChip.setAttribute('aria-expanded', 'false');
   }
@@ -2423,6 +2568,49 @@ function closeModal() {
   }
 }
 
+function walletProviderButton(provider, iconUrl, label) {
+  return '<button type="button" data-browser-wallet-provider="' + escapeHtml(provider) + '">' +
+    '<span style="display:inline-flex;align-items:center;gap:12px;min-width:0;">' +
+      (iconUrl ? '<img src="' + escapeHtml(iconUrl) + '" alt="" style="width:30px;height:30px;object-fit:contain;flex:0 0 auto;" />' : '') +
+      '<span class="browser-chip-title">' + escapeHtml(label) + '</span>' +
+    '</span>' +
+  '</button>';
+}
+
+function openStandaloneWalletSelector() {
+  if (!elements.modalRoot) return;
+  closeStandaloneActorPanel();
+  if (elements.usingChip && typeof elements.usingChip.setAttribute === 'function') {
+    elements.usingChip.setAttribute('aria-expanded', 'true');
+  }
+  var primaryProviderId = runtimeLabelValue('walletPrimaryProviderId', runtimeLabelValue('walletProviderId', 'wallet-extension'));
+  var secondaryProviderId = runtimeLabelValue('walletSecondaryProviderId', 'secondary-wallet');
+  var primaryProviderLabel = runtimeLabelValue('walletPrimaryProviderLabel', 'Connect to Wallet');
+  var secondaryProviderLabel = runtimeLabelValue('walletSecondaryProviderLabel', 'Connect to Wallet');
+  var primaryProviderIconUrl = runtimeLabelValue('walletPrimaryProviderIconUrl', '');
+  var secondaryProviderIconUrl = runtimeLabelValue('walletSecondaryProviderIconUrl', '');
+  elements.modalRoot.hidden = false;
+  elements.modalRoot.innerHTML = '<section class="browser-modal-panel" role="dialog" aria-modal="true">' +
+    '<header><h2>' + escapeHtml(runtimeLabelValue('walletSelectTitle', browserText('wallet.selectTitle', '请选择连接钱包'))) + '</h2><button type="button" data-browser-modal-close aria-label="' + escapeHtml(browserText('modal.close', 'Close')) + '">' + escapeHtml(browserText('modal.close', 'Close')) + '</button></header>' +
+    '<div class="browser-modal-body"><div class="browser-using-options">' +
+      walletProviderButton(primaryProviderId, primaryProviderIconUrl, primaryProviderLabel) +
+      walletProviderButton(secondaryProviderId, secondaryProviderIconUrl, secondaryProviderLabel) +
+    '</div></div></section>';
+}
+
+function handleWalletProviderSelection(provider) {
+  var providerId = textValue(provider).toLowerCase();
+  var primaryProviderId = runtimeLabelValue('walletPrimaryProviderId', runtimeLabelValue('walletProviderId', 'wallet-extension')).toLowerCase();
+  if (providerId === primaryProviderId) {
+    closeModal();
+    connectStandaloneWalletActor().catch(function (error) {
+      setStatus('error', error && error.message ? error.message : 'Wallet connection failed.');
+    });
+    return;
+  }
+  showToast(runtimeLabelValue('walletUnsupportedProviderMessage', browserText('wallet.unsupportedProvider', '即将支持')));
+}
+
 function openWalletInstallModal() {
   if (!elements.modalRoot) return;
   if (elements.usingChip && typeof elements.usingChip.setAttribute === 'function') {
@@ -2450,6 +2638,7 @@ async function connectStandaloneWalletActor() {
     openUsingIdentitySelector();
     return null;
   }
+  rememberStandaloneWalletPlaceholder();
   if (typeof window === 'undefined' || !window.metaidwallet) {
     openWalletInstallModal();
     return null;
@@ -2500,6 +2689,7 @@ async function connectStandaloneWalletActor() {
     state.runtime.actors = [actor];
     state.runtime.defaultActor = actor;
     state.actorId = actor.id;
+    closeStandaloneActorPanel();
     renderUsingIdentity();
     setStatus('wallet connected', '');
     return actor;
@@ -2509,12 +2699,14 @@ async function connectStandaloneWalletActor() {
   }
 }
 
-function handleUsingIdentityClick() {
+function handleUsingIdentityClick(event) {
+  if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
   if (isStandaloneWalletRuntime()) {
-    if (selectedStandaloneWalletActor()) return;
-    connectStandaloneWalletActor().catch(function (error) {
-      setStatus('error', error && error.message ? error.message : 'Wallet connection failed.');
-    });
+    if (selectedStandaloneWalletActor()) {
+      toggleStandaloneActorPanel();
+      return;
+    }
+    openStandaloneWalletSelector();
     return;
   }
   openUsingIdentitySelector();
@@ -4023,6 +4215,9 @@ async function loadRuntime() {
   state.runtime = data || {};
   var actor = data && data.defaultActor;
   state.actorId = actor && actor.id ? textValue(actor.id) : '';
+  if (isStandaloneWalletRuntime() && actor && !isConnectedWalletActor(actor)) {
+    state.standaloneWalletPlaceholderActor = cloneActor(actor);
+  }
   renderUsingIdentity();
   return data;
 }
@@ -4140,6 +4335,11 @@ async function initialize() {
         clearBrowserCache(cacheClear.getAttribute('data-browser-cache-clear')).catch(function (error) {
           setStatus('error', error && error.message ? error.message : 'Cache clear failed.');
         });
+        return;
+      }
+      var walletProvider = closestWithAttribute(event && event.target, 'data-browser-wallet-provider');
+      if (walletProvider) {
+        handleWalletProviderSelection(walletProvider.getAttribute('data-browser-wallet-provider'));
         return;
       }
       if (closestWithAttribute(event && event.target, 'data-browser-wallet-install')) {
@@ -4267,8 +4467,20 @@ async function initialize() {
       handleOwnerPanelAction(target.getAttribute('data-browser-owner-panel-action'));
     });
   }
+  if (elements.actorPanel) {
+    elements.actorPanel.addEventListener('click', function (event) {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      var target = closestWithAttribute(event && event.target, 'data-browser-actor-panel-action');
+      if (!target) return;
+      if (target.disabled) return;
+      handleStandaloneActorPanelAction(target.getAttribute('data-browser-actor-panel-action')).catch(function (error) {
+        setStatus('error', error && error.message ? error.message : 'Wallet action failed.');
+      });
+    });
+  }
   document.addEventListener('click', function () {
     if (state.ownerPanelOpen) closeOwnerPanel();
+    if (state.actorPanelOpen) closeStandaloneActorPanel();
   });
   if (elements.statusTxid) elements.statusTxid.addEventListener('click', openInspector);
 
@@ -4320,9 +4532,14 @@ globalThis.closeInspector = closeInspector;
 globalThis.renderInspector = renderInspector;
 globalThis.openUsingIdentitySelector = openUsingIdentitySelector;
 globalThis.selectUsingIdentity = selectUsingIdentity;
+globalThis.openStandaloneWalletSelector = openStandaloneWalletSelector;
+globalThis.handleWalletProviderSelection = handleWalletProviderSelection;
 globalThis.openWalletInstallModal = openWalletInstallModal;
 globalThis.installWalletProvider = installWalletProvider;
 globalThis.connectStandaloneWalletActor = connectStandaloneWalletActor;
+globalThis.toggleStandaloneActorPanel = toggleStandaloneActorPanel;
+globalThis.handleStandaloneActorPanelAction = handleStandaloneActorPanelAction;
+globalThis.logoutStandaloneWalletActor = logoutStandaloneWalletActor;
 globalThis.handleUsingIdentityClick = handleUsingIdentityClick;
 globalThis.openBrowserMenu = openBrowserMenu;
 globalThis.closeBrowserMenu = closeBrowserMenu;

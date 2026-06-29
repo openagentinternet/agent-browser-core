@@ -21,6 +21,10 @@ const STANDALONE_ACTOR_ID = 'standalone-wallet';
 const STANDALONE_WALLET_ACTOR_PREFIX = 'wallet:';
 const WALLET_PROVIDER_NAME = 'Meta' + 'let';
 const WALLET_PROVIDER_ID = WALLET_PROVIDER_NAME.toLowerCase();
+const WALLET_PROVIDER_ICON_URL = 'https://www.idchat.io/chat/metalet-logo-v3.4c11a0b7.svg';
+const SECONDARY_WALLET_PROVIDER_NAME = 'Meta' + 'Mask';
+const SECONDARY_WALLET_PROVIDER_ID = SECONDARY_WALLET_PROVIDER_NAME.toLowerCase();
+const SECONDARY_WALLET_PROVIDER_ICON_URL = 'https://cdn.jsdelivr.net/gh/MetaMask/metamask-extension@develop/app/images/logo/metamask-fox.svg';
 
 export interface MemoryStandaloneHostInput {
   now?: () => number;
@@ -55,6 +59,14 @@ function runtime(): BrowserRuntimeSnapshot {
       noActorTitle: 'No Wallet',
       noActorBody: 'Standalone Browser is running with an in-memory development actor.',
       walletConnect: 'Connect Wallet',
+      walletSelectTitle: '请选择连接钱包',
+      walletPrimaryProviderId: WALLET_PROVIDER_ID,
+      walletPrimaryProviderLabel: `Connect to ${WALLET_PROVIDER_NAME}`,
+      walletPrimaryProviderIconUrl: WALLET_PROVIDER_ICON_URL,
+      walletSecondaryProviderId: SECONDARY_WALLET_PROVIDER_ID,
+      walletSecondaryProviderLabel: `Connect to ${SECONDARY_WALLET_PROVIDER_NAME}`,
+      walletSecondaryProviderIconUrl: SECONDARY_WALLET_PROVIDER_ICON_URL,
+      walletUnsupportedProviderMessage: '即将支持',
       walletInstallTitle: `Install ${WALLET_PROVIDER_NAME}`,
       walletInstallBody: `Please install ${WALLET_PROVIDER_NAME} wallet first.`,
       walletInstallAction: 'Install',

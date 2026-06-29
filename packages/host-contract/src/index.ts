@@ -116,6 +116,14 @@ export interface BrowserRuntimeLabels {
   noActorTitle: string;
   noActorBody: string;
   walletConnect?: string;
+  walletSelectTitle?: string;
+  walletPrimaryProviderId?: string;
+  walletPrimaryProviderLabel?: string;
+  walletPrimaryProviderIconUrl?: string;
+  walletSecondaryProviderId?: string;
+  walletSecondaryProviderLabel?: string;
+  walletSecondaryProviderIconUrl?: string;
+  walletUnsupportedProviderMessage?: string;
   walletInstallTitle?: string;
   walletInstallBody?: string;
   walletInstallAction?: string;
