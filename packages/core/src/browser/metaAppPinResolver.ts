@@ -251,6 +251,9 @@ export async function resolveMetaAppPinToRecord(
     if (!protocol) {
       return browserCommandFailed('browser_resolve_failed', 'MetaApp protocol contentSummary is not valid JSON.');
     }
+    if (protocol.disabled === true) {
+      return browserCommandFailed('browser_resource_disabled', 'MetaApp disabled by owner');
+    }
 
     const contentReference = extractContentReference(protocol.content ?? protocol.code ?? protocol.metafile ?? protocol.file);
     const sourceContentType = normalizeText(protocol.contentType ?? protocol.content_type ?? protocol.codeType ?? protocol.code_type)

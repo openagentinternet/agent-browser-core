@@ -263,6 +263,7 @@ export interface MetaAppGalleryRecord {
   icon?: string;
   coverImg?: string;
   intro?: string;
+  disabled?: boolean;
   version: string;
   runtime: string;
   indexFile: string;

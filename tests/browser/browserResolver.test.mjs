@@ -346,6 +346,24 @@ test('resolveBrowserResource enriches direct metaapp owners with bot profile nam
   );
 });
 
+test('resolveBrowserResource fails disabled MetaApps before rendering', async () => {
+  const result = await resolveBrowserResource({
+    uri: `metaapp://${customMetaAppPinId}`,
+    config: browserConfig(),
+    fetch: async () => {
+      throw new Error('disabled MetaApp should not fetch owner profile');
+    },
+    metaAppLookup: async (pinId) => ({
+      ...metaAppRecord(pinId),
+      disabled: true,
+    }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'browser_resource_disabled');
+  assert.equal(result.message, 'MetaApp disabled by owner');
+});
+
 test('resolveBrowserResource enriches direct pin owners with bot profile name and avatar', async () => {
   const pinId = '8ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
   const ownerAvatarId = '9'.repeat(64) + 'i0';

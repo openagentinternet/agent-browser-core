@@ -434,6 +434,30 @@ test('Browser MetaApp deep link path is decoded into the address bar and resolve
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metaapp%3A%2F%2F${pinId}&actorId=worker`);
 });
 
+test('Browser displays disabled MetaApp resolver failures in the centered failure state', async () => {
+  const pinId = 'b6bfe1ab3b605c03bbe27b8bd8fe4f7874552e9020f207b677ab9ea89a424cedi0';
+  const { context, elements, fetchCalls } = createBrowserContext({
+    pathname: `/browser/metaapp/${pinId}`,
+    resolveResponse: () => ({
+      ok: false,
+      state: 'failed',
+      code: 'browser_resource_disabled',
+      message: 'MetaApp disabled by owner',
+    }),
+  });
+
+  await waitFor(
+    () => context.state.lastResolveError && elements['[data-browser-viewport]'].innerHTML.includes('MetaApp disabled by owner'),
+    'disabled MetaApp failure state',
+  );
+
+  assert.equal(context.state.current, null);
+  assert.equal(context.state.lastResolveError.code, 'browser_resource_disabled');
+  assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metaapp%3A%2F%2F${pinId}&actorId=worker`);
+  assert.match(elements['[data-browser-viewport]'].innerHTML, /<h2>Resolve failed<\/h2>/);
+  assert.match(elements['[data-browser-viewport]'].innerHTML, /MetaApp disabled by owner/);
+});
+
 test('Browser pin deep link path is decoded into the address bar and preserves version query', async () => {
   const pinId = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
   const uri = `pin://${pinId}?version=0`;

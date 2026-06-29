@@ -116,6 +116,71 @@ test('resolveMetaAppPinToRecord renders metafile content URL instead of ManAPI m
   assert.notEqual(result.renderer.url, `${manApiBaseUrl}/pin/${pinId}`);
 });
 
+test('resolveMetaAppPinToRecord only treats literal true disabled as unavailable', async () => {
+  const pinId = 'd1'.repeat(32) + 'i0';
+  const contentPinId = 'd2'.repeat(32) + 'i0';
+  const manApiBaseUrl = 'https://man.example.test';
+  let previewCalls = 0;
+
+  async function resolveWithDisabled(disabledValue) {
+    return resolveMetaAppPinToRecord({
+      pinId,
+      manApiBaseUrl,
+      metafileContentBaseUrl: 'https://content.example.test/files',
+      fetch: async (url) => {
+        assert.equal(String(url), `${manApiBaseUrl}/pin/${pinId}`);
+        const protocol = {
+          title: 'Disabled Contract MetaApp',
+          appName: 'disabled-contract-metaapp',
+          version: '1.0.0',
+          content: `metafile://${contentPinId}.zip`,
+          contentType: 'application/zip',
+          codeType: 'application/zip',
+          indexFile: 'index.html',
+        };
+        if (disabledValue !== undefined) {
+          protocol.disabled = disabledValue;
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            data: {
+              pin: {
+                path: '/protocols/metaapp',
+                ownerGlobalMetaId: 'idq1publisher',
+                timestamp: 1781450015,
+                contentSummary: JSON.stringify(protocol),
+              },
+            },
+          }),
+        };
+      },
+      createPreviewSession: () => {
+        previewCalls += 1;
+        return {
+          previewId: 'enabled-preview',
+          localPreviewUrl: '/api/browser/preview-assets/enabled-preview/index.html',
+        };
+      },
+      now: () => 1781450015615,
+    });
+  }
+
+  const disabled = await resolveWithDisabled(true);
+  assert.equal(disabled.ok, false);
+  assert.equal(disabled.code, 'browser_resource_disabled');
+  assert.equal(disabled.message, 'MetaApp disabled by owner');
+  assert.equal(previewCalls, 0);
+
+  for (const enabledValue of [false, null, undefined]) {
+    const enabled = await resolveWithDisabled(enabledValue);
+    assert.equal(enabled.ok, true);
+    assert.equal(enabled.data.localUiUrl, '/api/browser/preview-assets/enabled-preview/index.html');
+  }
+  assert.equal(previewCalls, 3);
+});
+
 test('resolveMetaAppPinToRecord returns HTML content when the host creates a ZIP preview URL', async () => {
   const pinId = 'e1'.repeat(32) + 'i0';
   const contentPinId = 'f2'.repeat(32) + 'i0';
