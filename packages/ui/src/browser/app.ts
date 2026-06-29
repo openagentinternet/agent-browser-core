@@ -145,6 +145,9 @@ var browserLaunchCopy = {
     'ownerPanel.follow': '关注该 Bot',
     'ownerPanel.copied': '已复制',
     'ownerPanel.copyMetaId': '复制 GlobalMetaId',
+    'privateChat.messageSentTitle': '信息已发送',
+    'privateChat.messageSentBody': '信息已发送。',
+    'privateChat.viewConversation': '查看对话',
     'modal.close': '关闭',
     'modal.cancel': '取消',
     'modal.ok': '确定',
@@ -187,6 +190,7 @@ var state = {
   settingsData: null,
   cacheData: null,
   pendingPrivateChat: null,
+  pendingConversationHref: '',
   pendingServiceCall: null,
   pendingBookmarkRemoval: '',
   bookmarks: [],
@@ -2549,19 +2553,21 @@ function findService(serviceId) {
 
 function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
   if (!elements.modalRoot) return;
+  var modalOptions = arguments[4] || {};
   elements.modalRoot.hidden = false;
   elements.modalRoot.innerHTML = '<section class="browser-modal-panel" role="dialog" aria-modal="true">' +
     '<header><h2>' + escapeHtml(title) + '</h2>' + modalCloseButtonHtml(browserText('modal.close', 'Close')) + '</header>' +
     '<div class="browser-modal-body">' + bodyHtml + '</div>' +
     '<footer class="browser-modal-footer">' +
-      '<div class="browser-modal-footer-start">' + (arguments[4] && arguments[4].secondaryButtonHtml ? arguments[4].secondaryButtonHtml : '') + '</div>' +
-      '<div class="browser-modal-footer-end"><button type="button" data-browser-modal-close>' + escapeHtml(browserText('modal.cancel', 'Cancel')) + '</button>' +
+      '<div class="browser-modal-footer-start">' + (modalOptions.secondaryButtonHtml || '') + '</div>' +
+      '<div class="browser-modal-footer-end"><button type="button" data-browser-modal-close>' + escapeHtml(modalOptions.cancelLabel || browserText('modal.cancel', 'Cancel')) + '</button>' +
       '<button type="button" data-browser-modal-confirm data-browser-modal-action="' + escapeHtml(confirmAction) + '">' + escapeHtml(confirmLabel) + '</button></div>' +
     '</footer></section>';
 }
 
 function closeModal() {
   state.pendingPrivateChat = null;
+  state.pendingConversationHref = '';
   state.pendingServiceCall = null;
   if (elements.usingChip && typeof elements.usingChip.setAttribute === 'function') {
     elements.usingChip.setAttribute('aria-expanded', 'false');
@@ -2920,6 +2926,23 @@ function openPrivateChatModal() {
   );
 }
 
+function trustedActionHref(result) {
+  return safeTrustedActionHref(result && result.data && result.data.href);
+}
+
+function showPrivateChatSentModal(result) {
+  state.pendingConversationHref = trustedActionHref(result);
+  renderModal(
+    browserText('privateChat.messageSentTitle', 'Message sent'),
+    '<p>' + escapeHtml(browserText('privateChat.messageSentBody', 'Your message has been sent.')) + '</p>',
+    browserText('privateChat.viewConversation', 'View conversation'),
+    'view-conversation',
+    {
+      cancelLabel: browserText('modal.close', 'Close')
+    }
+  );
+}
+
 async function confirmPrivateChat(messageText) {
   var pending = state.pendingPrivateChat;
   var content = textValue(messageText);
@@ -2939,13 +2962,18 @@ async function confirmPrivateChat(messageText) {
       }
     })
   });
-  closeModal();
   setStatus('sent', '');
-  openTrustedActionHref(result);
+  showPrivateChatSentModal(result);
   return result;
 }
 
 async function openPendingConversation() {
+  var href = textValue(state.pendingConversationHref);
+  if (href) {
+    closeModal();
+    window.location.href = href;
+    return { href: href };
+  }
   var pending = state.pendingPrivateChat;
   var payload = objectValue(pending && pending.conversationPayload);
   if (!payload.conversationUri && !payload.peerGlobalMetaId) {

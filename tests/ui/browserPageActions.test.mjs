@@ -345,6 +345,43 @@ test('private-chat sends only after modal confirmation with Browser action contr
   assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body.payload, 'message'), false);
 });
 
+test('private-chat success shows a confirmation modal with a conversation link', async () => {
+  const { context, nodes, requests } = createContext({
+    actionResponse: {
+      ok: true,
+      data: {
+        kind: 'private-chat',
+        handled: true,
+        data: { href: '/ui/conversations?local=idq1worker&peer=idq1target' },
+      },
+    },
+  });
+
+  await context.initialize();
+  await context.handleTrustedAction({ id: 'message', kind: 'private-chat' });
+  await context.confirmPrivateChat('Hello from Browser');
+
+  assert.equal(requests.length, 1);
+  assert.equal(context.window.location.href, 'http://127.0.0.1:3000/ui/browser');
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Message sent/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, />Close<\/button>/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /View conversation/);
+
+  nodes['[data-browser-modal-root]'].listeners.get('click')({
+    preventDefault() {},
+    target: browserActionTarget({
+      'data-browser-modal-action': 'view-conversation',
+    }),
+  });
+
+  await waitFor(
+    () => context.window.location.href === '/ui/conversations?local=idq1worker&peer=idq1target',
+    'sent message conversation href navigation',
+  );
+  assert.equal(requests.length, 1);
+});
+
 test('private-chat modal view conversation button posts open-conversation and follows returned href', async () => {
   const { context, nodes, requests } = createContext({
     actionResponse: {
