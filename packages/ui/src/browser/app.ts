@@ -323,27 +323,6 @@ function buildMetafileContentHref(reference) {
     : baseUrl + '/' + encodedPinId;
 }
 
-var DEFAULT_MANAPI_BASE_URL = 'https://manapi.metaid.io';
-
-// ManAPI's /content/{pinId} endpoint is not intended for image rendering. The Bot
-// homepage API (v3) still returns service icons and MetaApp covers/icons under that
-// path, so rewrite such URLs to the accelerated Metafile content path that pin:// page
-// attachments already use. Other https image URLs pass through unchanged.
-function rewriteManApiContentUrl(rawValue) {
-  var value = textValue(rawValue);
-  if (!value) return '';
-  var manApiBase = textValue(settingValue('manApiBaseUrl') || DEFAULT_MANAPI_BASE_URL).replace(/\\/+$/, '') || DEFAULT_MANAPI_BASE_URL;
-  var prefix = manApiBase + '/content/';
-  if (value.slice(0, prefix.length).toLowerCase() !== prefix.toLowerCase()) return safeUrl(value);
-  var pinId = value.slice(prefix.length).split(/[/?#]/, 1)[0];
-  if (!isBrowserPinId(pinId)) return safeUrl(value);
-  var baseUrl = normalizeMetafileContentBaseUrl(settingValue('metafileContentBaseUrl') || DEFAULT_METAFILE_CONTENT_BASE_URL);
-  var encodedPinId = encodeURIComponent(pinId.toLowerCase());
-  return isMetafileIndexerRoot(baseUrl)
-    ? baseUrl + '/api/v1/files/accelerate/content/' + encodedPinId
-    : baseUrl + '/' + encodedPinId;
-}
-
 function isBrowserInternalHref(value) {
   return /^(metaid|metaapp|metafile|map|pin):\\/\\//i.test(textValue(value));
 }
@@ -2012,7 +1991,7 @@ function normalizeBotHomepageServices(items) {
     normalized.price = textValue(fields.price);
     normalized.currency = textValue(fields.currency);
     normalized.output = textValue(fields.output || fields.outputType);
-    normalized.serviceIcon = rewriteManApiContentUrl(fields.serviceIcon || fields.icon);
+    normalized.serviceIcon = buildMetafileDownloadHref(fields.serviceIcon || fields.icon);
     normalized.serviceId = textValue(fields.serviceId || fields.id || fields.currentPinId || fields.servicePinId || fields.pinId) || normalized.id;
     normalized.protocolPath = normalized.protocolPath || textValue(fields.protocolPath) || '/protocols/skill-service';
     normalized.mapHref = pinHref(normalized.pinId);
@@ -2032,8 +2011,8 @@ function normalizeBotHomepageMetaApps(items) {
     normalized.appName = textValue(fields.appName || fields.serviceName || fields.name);
     normalized.title = textValue(fields.title || fields.displayName || fields.label || normalized.appName || fields.pinId) || normalized.title;
     normalized.detail = metaAppSummaryText(fields);
-    normalized.coverImg = rewriteManApiContentUrl(fields.coverImg || fields.coverImage || fields.cover || fields.image);
-    normalized.icon = rewriteManApiContentUrl(fields.icon || fields.appIcon);
+    normalized.coverImg = buildMetafileDownloadHref(fields.coverImg || fields.coverImage || fields.cover || fields.image);
+    normalized.icon = buildMetafileDownloadHref(fields.icon || fields.appIcon);
     normalized.version = textValue(fields.version);
     normalized.contentType = textValue(fields.contentType || fields.codeType || fields.runtime);
     normalized.updatedDate = formatActivityDate(normalized.timestamp);
