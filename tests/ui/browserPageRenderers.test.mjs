@@ -145,6 +145,13 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   const fixture = JSON.parse(await readFile(new URL('../fixtures/browser/botHomepage.v3.json', import.meta.url), 'utf8'));
   fixture.sections[0].items[0].pinId = servicePinId;
   fixture.sections[1].items[0].pinId = buzzPinId;
+  const serviceIconPinId = '2ef06f1c4f5a3b9d8e7c6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5ai0';
+  const metaappCoverPinId = '3ef06f1c4f5a3b9d8e7c6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5ai0';
+  const metaappIconPinId = '4ef06f1c4f5a3b9d8e7c6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5ai0';
+  fixture.sections[0].items[0].data.payload.serviceIcon = `https://manapi.metaid.io/content/${serviceIconPinId}`;
+  const metaappsSection = fixture.sections.find((section) => section.id === 'metaapps');
+  metaappsSection.items[0].data.payload.coverImg = `https://manapi.metaid.io/content/${metaappCoverPinId}`;
+  metaappsSection.items[0].data.payload.icon = `https://manapi.metaid.io/content/${metaappIconPinId}`;
   const avatarUrl = 'https://file.metaid.io/metafile-indexer/content/avatar-pin';
   const { nodes, fetchCalls } = runWithResolve(result({
     type: 'bot-page',
@@ -199,6 +206,11 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.match(html, new RegExp(`href="pin://${servicePinId}" data-browser-map-link class="browser-service-title browser-bot-inline-link"`));
   assert.doesNotMatch(html, new RegExp(`href="map://simplebuzz/pin/${buzzPinId}"`));
   assert.match(html, /https:\/\/file\.metaid\.io\/metafile-indexer\/content\/avatar-pin/);
+  // ManAPI `/content/{pinId}` image URLs must be rewritten to the accelerated Metafile path.
+  assert.doesNotMatch(html, /manapi\.metaid\.io/);
+  assert.match(html, new RegExp(`https:\\/\\/file\\.metaid\\.io\\/metafile-indexer\\/api\\/v1\\/files\\/accelerate\\/content\\/${serviceIconPinId}`));
+  assert.match(html, new RegExp(`https:\\/\\/file\\.metaid\\.io\\/metafile-indexer\\/api\\/v1\\/files\\/accelerate\\/content\\/${metaappCoverPinId}`));
+  assert.match(html, new RegExp(`https:\\/\\/file\\.metaid\\.io\\/metafile-indexer\\/api\\/v1\\/files\\/accelerate\\/content\\/${metaappIconPinId}`));
 });
 
 test('bot-page renderer does not create pin detail links from non-pin service ids', async () => {
