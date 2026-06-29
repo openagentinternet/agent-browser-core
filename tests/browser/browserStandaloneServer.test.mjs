@@ -678,7 +678,9 @@ test('standalone Browser server downloads ZIP MetaApp content into artifact cach
   assert.equal(htmlResponse.status, 200);
   assert.match(htmlResponse.headers.get('content-type'), /text\/html/);
   assert.equal(htmlResponse.headers.get('access-control-allow-origin'), '*');
-  assert.match(await htmlResponse.text(), /ZIP Preview/);
+  const html = await htmlResponse.text();
+  assert.match(html, /__agentBrowserPreviewStorageShim/);
+  assert.match(html, /ZIP Preview/);
 
   const scriptUrl = first.data.renderer.url.replace(/index\.html$/, 'assets/app.js');
   const scriptResponse = await fetch(`${baseUrl}${scriptUrl}`);

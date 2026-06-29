@@ -174,6 +174,88 @@ function contentTypeForPath(filePath: string): string {
   return 'application/octet-stream';
 }
 
+const METAAPP_PREVIEW_STORAGE_SHIM = `<script>
+(function __agentBrowserPreviewStorageShim() {
+  function storageIsAvailable(name) {
+    try {
+      var storage = window[name];
+      var key = '__agent_browser_preview_storage_probe__';
+      storage.setItem(key, key);
+      storage.removeItem(key);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function createMemoryStorage() {
+    var values = Object.create(null);
+    return {
+      get length() {
+        return Object.keys(values).length;
+      },
+      key: function key(index) {
+        var keys = Object.keys(values);
+        return keys[index] || null;
+      },
+      getItem: function getItem(key) {
+        key = String(key);
+        return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null;
+      },
+      setItem: function setItem(key, value) {
+        values[String(key)] = String(value);
+      },
+      removeItem: function removeItem(key) {
+        delete values[String(key)];
+      },
+      clear: function clear() {
+        values = Object.create(null);
+      }
+    };
+  }
+
+  function installFallback(name) {
+    if (storageIsAvailable(name)) return;
+    try {
+      Object.defineProperty(window, name, {
+        value: createMemoryStorage(),
+        configurable: true
+      });
+    } catch (_) {}
+  }
+
+  installFallback('localStorage');
+  installFallback('sessionStorage');
+}());
+</script>`;
+
+function injectMetaAppPreviewStorageShim(input: {
+  body: Buffer;
+  contentType: string;
+}): Buffer | string {
+  if (!/^text\/html\b/iu.test(input.contentType)) {
+    return input.body;
+  }
+
+  const html = input.body.toString('utf8');
+  if (html.includes('__agentBrowserPreviewStorageShim')) {
+    return html;
+  }
+
+  const headMatch = html.match(/<head\b[^>]*>/iu);
+  if (headMatch?.index !== undefined) {
+    const insertAt = headMatch.index + headMatch[0].length;
+    return `${html.slice(0, insertAt)}${METAAPP_PREVIEW_STORAGE_SHIM}${html.slice(insertAt)}`;
+  }
+
+  const firstScriptIndex = html.search(/<script\b/iu);
+  if (firstScriptIndex >= 0) {
+    return `${html.slice(0, firstScriptIndex)}${METAAPP_PREVIEW_STORAGE_SHIM}${html.slice(firstScriptIndex)}`;
+  }
+
+  return `${METAAPP_PREVIEW_STORAGE_SHIM}${html}`;
+}
+
 function normalizePreviewAssetPath(value: unknown): string | null {
   const text = normalizeText(value).replace(/\\/g, '/');
   if (!text || text.startsWith('/') || text.includes('\0')) {
@@ -595,9 +677,10 @@ export function createStandaloneBrowserHostAdapter(
     }
     try {
       const body = await fs.readFile(filePath);
+      const contentType = contentTypeForPath(filePath);
       return browserSuccess({
-        body,
-        contentType: contentTypeForPath(filePath),
+        body: injectMetaAppPreviewStorageShim({ body, contentType }),
+        contentType,
       });
     } catch {
       return browserFailure('browser_resource_not_found', 'Preview asset was not found.');
