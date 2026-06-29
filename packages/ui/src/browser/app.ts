@@ -2384,13 +2384,13 @@ function renderMetaAppRows(items, emptyText) {
       ].filter(Boolean).join('');
       return '<article class="browser-metaapp-card"><div class="browser-metaapp-media">' +
         renderCardImage(item.coverImg, item.title, 'browser-metaapp-cover', 'browser-metaapp-cover-image', 'layout') +
-        '<div class="browser-metaapp-actions">' + runHtml + downloadHtml + '</div></div>' +
-        '<div class="browser-metaapp-main"><div class="browser-metaapp-heading">' +
+        '</div><div class="browser-metaapp-main"><div class="browser-metaapp-heading">' +
         renderCardImage(item.icon, item.title, 'browser-metaapp-icon', 'browser-metaapp-icon-image', 'layout') +
         '<div class="browser-metaapp-title-block">' + titleHtml +
         appNameHtml + '</div></div>' +
         (item.detail ? '<p class="browser-metaapp-intro">' + escapeHtml(item.detail) + '</p>' : '') +
-        (facts ? '<div class="browser-metaapp-facts">' + facts + '</div>' : '') + '</div></article>';
+        (facts ? '<div class="browser-metaapp-facts">' + facts + '</div>' : '') + '</div>' +
+        '<div class="browser-metaapp-actions">' + runHtml + downloadHtml + '</div></article>';
     }).join('')
     : '<p class="browser-muted-row">' + escapeHtml(emptyText) + '</p>';
 }

@@ -652,25 +652,26 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.match(metaAppsSection[1], new RegExp(`class="browser-metaapp-run" href="metaapp://${metaAppPinId}" data-browser-map-link`));
   assert.match(metaAppsSection[1], /class="browser-metaapp-cover-image"/);
   assert.match(metaAppsSection[1], /class="browser-metaapp-icon-image"/);
+  assert.match(metaAppsSection[1], /<div class="browser-metaapp-actions">[\s\S]*class="browser-metaapp-run"[\s\S]*class="browser-metaapp-download"/);
+  assert.match(metaAppsSection[1], /<div class="browser-metaapp-main">/);
   assert.doesNotMatch(metaAppsSection[1], /class="browser-pin-badge"/);
   assert.match(metaAppsSection[1], new RegExp(`href="https://file\\.metaid\\.io/metafile-indexer/api/v1/files/accelerate/content/${metaAppCodePinId}"`));
 
   assert.match(html, /href="metaid:\/\/idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz"[^>]*style="[^"]*text-decoration:none;color:#3558c8;"/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-bot-inline-link \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-bot-inline-link:hover,\s+\.browser-bot-inline-link:focus \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
-  assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-title\.browser-bot-inline-link \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
   assert.doesNotMatch(BROWSER_INDEX_HTML, /\.browser-metaapp-name\.browser-bot-inline-link \{/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-actions \{/);
-  assert.match(BROWSER_INDEX_HTML, /\.browser-service-card \{/);
-  assert.match(BROWSER_INDEX_HTML, /\.browser-service-icon \{\s+align-self: start;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-card \{\n        display: grid;\n        grid-template-columns: 88px minmax\(0, 1fr\) auto;\n        align-items: start;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-actions \{\n        display: inline-grid;\n        grid-auto-flow: column;\n        grid-auto-columns: max-content;\n        gap: 6px;\n        justify-self: end;\n        align-self: center;\n        width: auto;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-card,\s+\.browser-metaapp-card \{/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-actions \{/);
-  assert.match(BROWSER_INDEX_HTML, /\.browser-service-price \{\s+color: var\(--browser-muted\);\s+text-align: right;\s+font-size: 14px;\s+font-weight: 400;\s+line-height: 1\.55;/);
-  assert.doesNotMatch(BROWSER_INDEX_HTML, /\.browser-service-price \{\s+color: var\(--browser-accent\);/);
   const narrowCss = BROWSER_INDEX_HTML.match(/@media \(max-width: 520px\) \{[\s\S]*?\.browser-icon-button\.is-loading/);
   assert.ok(narrowCss, 'narrow viewport CSS should be present');
   assert.doesNotMatch(narrowCss[0], /\.browser-service-card,\s+\.browser-metaapp-card,/);
   assert.doesNotMatch(narrowCss[0], /\.browser-service-card button/);
   assert.match(narrowCss[0], /\.browser-service-actions \{\s+justify-items: end;/);
+  assert.match(BROWSER_INDEX_HTML, /@media \(max-width: 520px\) \{[\s\S]*?\.browser-metaapp-media,\n        \.browser-metaapp-actions \{\n          width: 88px;\n          justify-self: start;/);
   assert.match(html, /<path d="M12 3v12"><\/path>/);
 });
 
