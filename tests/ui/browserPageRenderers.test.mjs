@@ -667,7 +667,14 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-icon,\s+\.browser-metaapp-icon,\s+\.browser-metaapp-cover \{\n        display: inline-flex;[\s\S]*?overflow: hidden;/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-icon \{\n        align-self: start;\n        width: 44px;\n        height: 44px;/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-icon-image,\s+\.browser-metaapp-icon-image,\s+\.browser-metaapp-cover-image \{\n        width: 100%;\n        height: 100%;\n        display: block;\n        object-fit: cover;/);
-  assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-actions \{\n        display: inline-grid;\n        grid-auto-flow: column;\n        grid-auto-columns: max-content;\n        gap: 6px;\n        justify-self: end;\n        align-self: center;\n        width: auto;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-main,\s+\.browser-metaapp-main,\s+\.browser-metaapp-title-block \{\n        min-width: 0;\n        display: grid;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-heading \{\n        min-width: 0;\n        display: flex;\n        align-items: baseline;\n        gap: 10px;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-price \{\n        color: var\(--browser-muted\);\n        text-align: right;[\s\S]*?white-space: nowrap;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-actions \{\n        min-width: 0;\n        display: grid;\n        justify-items: end;\n        align-content: start;\n        gap: 8px;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-card button \{\n        justify-self: end;\n        white-space: nowrap;\n        border-color: #cfe0ff;\n        background: #eaf1ff;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-meta,\s+\.browser-metaapp-facts \{\n        display: flex;\n        flex-wrap: wrap;\n        gap: 6px;\n        min-width: 0;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-service-provider,\s+\.browser-card-chip,\s+\.browser-metaapp-fact \{\n        min-width: 0;\n        display: inline-flex;[\s\S]*?border-radius: 999px;[\s\S]*?font-size: 11px;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-actions \{\n        display: grid;\n        grid-template-columns: 64px 30px;\n        gap: 6px;\n        justify-self: end;\n        align-self: center;\n        width: 100px;/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-card,\s+\.browser-metaapp-card \{/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-actions \{/);
   const narrowCss = BROWSER_INDEX_HTML.match(/@media \(max-width: 520px\) \{[\s\S]*?\.browser-icon-button\.is-loading/);
@@ -675,7 +682,7 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.doesNotMatch(narrowCss[0], /\.browser-service-card,\s+\.browser-metaapp-card,/);
   assert.doesNotMatch(narrowCss[0], /\.browser-service-card button/);
   assert.match(narrowCss[0], /\.browser-service-actions \{\s+justify-items: end;/);
-  assert.match(BROWSER_INDEX_HTML, /@media \(max-width: 520px\) \{[\s\S]*?\.browser-metaapp-media,\n        \.browser-metaapp-actions \{\n          width: 88px;\n          justify-self: start;/);
+  assert.match(BROWSER_INDEX_HTML, /@media \(max-width: 520px\) \{[\s\S]*?\.browser-metaapp-media \{\n          width: 88px;\n          justify-self: start;\n        \}\n        \.browser-metaapp-actions \{\n          width: 100px;\n          justify-self: start;/);
   assert.match(html, /<path d="M12 3v12"><\/path>/);
 });
 
