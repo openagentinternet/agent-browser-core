@@ -222,14 +222,14 @@ function standaloneWalletRuntimePayload(overrides = {}) {
       noActorTitle: 'No Wallet',
       noActorBody: 'Connect Metalet to use standalone Browser.',
       walletConnect: 'Connect Wallet',
-      walletSelectTitle: '请选择连接钱包',
+      walletSelectTitle: 'Select a wallet to connect',
       walletPrimaryProviderId: 'metalet',
       walletPrimaryProviderLabel: 'Connect to Metalet',
       walletPrimaryProviderIconUrl: '/assets/metalet-logo-v3.4c11a0b7.svg',
       walletSecondaryProviderId: 'metamask',
       walletSecondaryProviderLabel: 'Connect to MetaMask',
       walletSecondaryProviderIconUrl: '/assets/metamask-fox.svg',
-      walletUnsupportedProviderMessage: '即将支持',
+      walletUnsupportedProviderMessage: 'Coming soon',
       walletInstallTitle: 'Install Metalet',
       walletInstallBody: 'Please install Metalet wallet first.',
       walletInstallAction: 'Install',
@@ -825,7 +825,9 @@ test('standalone wallet chip opens wallet picker before provider-specific connec
   elements['[data-browser-using-selector]'].click();
 
   assert.equal(elements['[data-browser-modal-root]'].hidden, false);
-  assert.match(elements['[data-browser-modal-root]'].innerHTML, /请选择连接钱包/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /Select a wallet to connect/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /class="browser-icon-button" data-browser-modal-close/);
+  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, />Close<\/button>/);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /Connect to Metalet/);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /Connect to MetaMask/);
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /data-browser-wallet-provider="metalet"/);
@@ -848,7 +850,7 @@ test('standalone MetaMask wallet option reports coming soon', async () => {
     target: eventTargetWithAttribute('data-browser-wallet-provider', 'metamask'),
   });
 
-  assert.match(elements['[data-browser-toast]'].textContent, /即将支持/);
+  assert.match(elements['[data-browser-toast]'].textContent, /Coming soon/);
 });
 
 test('standalone Metalet wallet option opens install modal when extension is missing', async () => {

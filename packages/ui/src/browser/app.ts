@@ -150,8 +150,8 @@ var browserLaunchCopy = {
     'modal.ok': '确定',
     'modal.usingActorTitle': '选择当前 Bot',
     'wallet.connect': '连接钱包',
-    'wallet.selectTitle': '请选择连接钱包',
-    'wallet.unsupportedProvider': '即将支持',
+    'wallet.selectTitle': 'Select a wallet to connect',
+    'wallet.unsupportedProvider': 'Coming soon',
     'wallet.logout': 'Logout',
     'wallet.installTitle': '安装钱包',
     'wallet.installBody': '请先安装钱包扩展。',
@@ -461,6 +461,10 @@ function avatarHtml(rawUrl, label, className) {
     return '<span class="' + classValue + ' browser-avatar-image-wrap" aria-hidden="true"><img class="browser-avatar-image" src="' + escapeHtml(url) + '" alt="" /></span>';
   }
   return '<span class="' + classValue + ' browser-avatar-fallback" aria-hidden="true">' + escapeHtml(initials(label)) + '</span>';
+}
+
+function modalCloseButtonHtml(ariaLabel) {
+  return '<button type="button" class="browser-icon-button" data-browser-modal-close aria-label="' + escapeHtml(ariaLabel) + '">' + iconHtml('close') + '</button>';
 }
 
 function actionIconName(kind) {
@@ -2547,7 +2551,7 @@ function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
   if (!elements.modalRoot) return;
   elements.modalRoot.hidden = false;
   elements.modalRoot.innerHTML = '<section class="browser-modal-panel" role="dialog" aria-modal="true">' +
-    '<header><h2>' + escapeHtml(title) + '</h2><button type="button" data-browser-modal-close aria-label="' + escapeHtml(browserText('modal.close', 'Close')) + '">' + escapeHtml(browserText('modal.close', 'Close')) + '</button></header>' +
+    '<header><h2>' + escapeHtml(title) + '</h2>' + modalCloseButtonHtml(browserText('modal.close', 'Close')) + '</header>' +
     '<div class="browser-modal-body">' + bodyHtml + '</div>' +
     '<footer class="browser-modal-footer">' +
       '<div class="browser-modal-footer-start">' + (arguments[4] && arguments[4].secondaryButtonHtml ? arguments[4].secondaryButtonHtml : '') + '</div>' +
@@ -2591,7 +2595,7 @@ function openStandaloneWalletSelector() {
   var secondaryProviderIconUrl = runtimeLabelValue('walletSecondaryProviderIconUrl', '');
   elements.modalRoot.hidden = false;
   elements.modalRoot.innerHTML = '<section class="browser-modal-panel" role="dialog" aria-modal="true">' +
-    '<header><h2>' + escapeHtml(runtimeLabelValue('walletSelectTitle', browserText('wallet.selectTitle', '请选择连接钱包'))) + '</h2><button type="button" data-browser-modal-close aria-label="' + escapeHtml(browserText('modal.close', 'Close')) + '">' + escapeHtml(browserText('modal.close', 'Close')) + '</button></header>' +
+    '<header><h2>' + escapeHtml(runtimeLabelValue('walletSelectTitle', browserText('wallet.selectTitle', 'Select a wallet to connect'))) + '</h2>' + modalCloseButtonHtml(browserText('modal.close', 'Close')) + '</header>' +
     '<div class="browser-modal-body"><div class="browser-using-options">' +
       walletProviderButton(primaryProviderId, primaryProviderIconUrl, primaryProviderLabel) +
       walletProviderButton(secondaryProviderId, secondaryProviderIconUrl, secondaryProviderLabel) +
@@ -2608,7 +2612,7 @@ function handleWalletProviderSelection(provider) {
     });
     return;
   }
-  showToast(runtimeLabelValue('walletUnsupportedProviderMessage', browserText('wallet.unsupportedProvider', '即将支持')));
+  showToast(runtimeLabelValue('walletUnsupportedProviderMessage', browserText('wallet.unsupportedProvider', 'Coming soon')));
 }
 
 function openWalletInstallModal() {
@@ -2618,7 +2622,7 @@ function openWalletInstallModal() {
   }
   elements.modalRoot.hidden = false;
   elements.modalRoot.innerHTML = '<section class="browser-modal-panel" role="dialog" aria-modal="true">' +
-    '<header><h2>' + escapeHtml(runtimeLabelValue('walletInstallTitle', browserText('wallet.installTitle', 'Install Wallet'))) + '</h2><button type="button" data-browser-modal-close aria-label="' + escapeHtml(browserText('modal.close', 'Close')) + '">' + escapeHtml(browserText('modal.close', 'Close')) + '</button></header>' +
+    '<header><h2>' + escapeHtml(runtimeLabelValue('walletInstallTitle', browserText('wallet.installTitle', 'Install Wallet'))) + '</h2>' + modalCloseButtonHtml(browserText('modal.close', 'Close')) + '</header>' +
     '<div class="browser-modal-body"><p>' + escapeHtml(runtimeLabelValue('walletInstallBody', browserText('wallet.installBody', 'Please install a wallet extension first.'))) + '</p></div>' +
     '<footer class="browser-modal-footer"><div class="browser-modal-footer-start"></div><div class="browser-modal-footer-end">' +
       '<button type="button" data-browser-modal-close>' + escapeHtml(browserText('modal.cancel', 'Cancel')) + '</button>' +
@@ -4046,7 +4050,7 @@ function openPinRawRecord(trigger) {
   elements.modalRoot.hidden = false;
   elements.modalRoot.innerHTML = '<div class="browser-modal-backdrop" data-browser-modal-close></div>' +
     '<section class="browser-modal-panel browser-pin-raw-modal" role="document">' +
-      '<header class="browser-modal-header"><h2>Raw PIN record</h2><button type="button" class="browser-modal-close" data-browser-modal-close aria-label="Close">x</button></header>' +
+      '<header class="browser-modal-header"><h2>Raw PIN record</h2>' + modalCloseButtonHtml('Close') + '</header>' +
       '<div class="browser-modal-body">' +
         '<div class="browser-pin-pre-wrap"><button type="button" class="browser-pin-copy-btn" title="Copy" aria-label="Copy" data-browser-copy-value="' + escapeHtml(rawRecordJson) + '">' + iconHtml('copy') + '</button><pre class="browser-protocol-json">' + escapeHtml(rawRecordJson) + '</pre></div>' +
       '</div>' +

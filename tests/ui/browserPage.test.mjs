@@ -3,6 +3,10 @@ import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 
 const ui = await import('../../packages/ui/dist/index.js');
+const stylesSource = readFileSync(new URL('../../packages/ui/src/browserStyles.ts', import.meta.url), 'utf8');
+const stylesMatch = stylesSource.match(/export const BROWSER_PAGE_STYLES = `([\s\S]*)`;\n?$/);
+assert.ok(stylesMatch, 'missing BROWSER_PAGE_STYLES export');
+const stylesTemplate = stylesMatch[1];
 
 const templateSource = readFileSync(new URL('../../packages/ui/src/browser/indexHtml.ts', import.meta.url), 'utf8');
 const templateMatch = templateSource.match(/export const BROWSER_INDEX_HTML = (.*);\n?$/s);
@@ -150,4 +154,15 @@ test('Browser client script exposes chat peer metadata markers', () => {
   assert.match(definition.script, /partnerHref: partnerGlobalMetaId \? \('metaid:\/\/' \+ partnerGlobalMetaId\) : ''/);
   assert.match(definition.script, /data-chat-peer/);
   assert.match(definition.script, /data-chat-partner/);
+});
+
+test('Browser modal templates use icon close buttons and dedicated footer action groups', () => {
+  const definition = ui.buildBrowserPageDefinition();
+
+  assert.match(definition.script, /class="browser-icon-button" data-browser-modal-close aria-label="/);
+  assert.doesNotMatch(definition.script, /data-browser-modal-close aria-label="[^"]*">Close<\/button>/);
+  assert.match(definition.script, /browser-modal-footer-end/);
+  assert.match(definition.script, /data-browser-modal-close>\s*' \+ escapeHtml\(browserText\('modal\.cancel', 'Cancel'\)\)/);
+  assert.match(definition.script, /data-browser-modal-confirm data-browser-modal-action=/);
+  assert.match(stylesTemplate, /\.browser-modal-footer-start, \.browser-modal-footer-end \{ display: inline-flex; align-items: center; gap: 12px; \}/);
 });

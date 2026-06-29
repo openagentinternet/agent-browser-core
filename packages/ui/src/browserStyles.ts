@@ -118,9 +118,9 @@ export const BROWSER_PAGE_STYLES = `
     .browser-modal-panel { position: relative; width: min(720px, 100%); max-height: min(760px, calc(100vh - 36px)); display: grid; grid-template-rows: auto minmax(0, 1fr); overflow: hidden; border: 1px solid #d1d5db; background: #fff; box-shadow: 0 24px 80px rgb(17 24 39 / 24%); }
     .browser-modal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid #d1d5db; }
     .browser-modal-header h2 { margin: 0; font-size: 16px; }
-    .browser-modal-close { width: 30px; height: 30px; border: 1px solid #d1d5db; background: #fff; }
     .browser-modal-body { min-height: 0; overflow: auto; padding: 16px; }
     .browser-modal-panel > footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-top: 1px solid #d1d5db; background: #f9fafb; }
+    .browser-modal-panel .browser-icon-button { width: 32px; min-width: 32px; height: 32px; padding: 0; }
     .browser-pin-raw-modal { width: min(60vw, calc(100vw - 48px)); max-height: min(86vh, calc(100vh - 48px)); }
     .browser-pin-raw-modal .browser-modal-body { padding: 14px 16px; }
     .browser-pin-primary-action { cursor: pointer; min-height: 34px; border: 1px solid #2563eb; border-radius: 8px; background: #2563eb; color: #fff; padding: 7px 14px; font-size: 12px; font-weight: 700; }
@@ -131,7 +131,7 @@ export const BROWSER_PAGE_STYLES = `
     .browser-pin-pre-wrap { position: relative; }
     .browser-pin-pre-wrap > .browser-pin-copy-btn { position: absolute; top: 8px; left: 8px; z-index: 2; margin: 0; }
     .browser-pin-pre-wrap > .browser-pin-copy-btn .browser-icon { display: block; }
-    .browser-modal-footer-start, .browser-modal-footer-end { display: inline-flex; align-items: center; gap: 8px; }
+    .browser-modal-footer-start, .browser-modal-footer-end { display: inline-flex; align-items: center; gap: 12px; }
     .browser-loading, .browser-settings-error { padding: 12px; border: 1px solid #d1d5db; background: #f9fafb; }
     .browser-settings-error { border-color: #fca5a5; color: #991b1b; }
     .browser-settings-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
