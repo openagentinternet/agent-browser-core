@@ -468,7 +468,7 @@ test('viewport open-conversation action posts payload and follows returned href'
   assert.equal(context.window.location.href, '/ui/conversations?local=idq1worker&peer=idq1peer');
 });
 
-test('browser renders the no-Bot launch chrome in Simplified Chinese', () => {
+test('browser keeps the no-Bot launch chrome in English when the page language is zh-CN', () => {
   const empty = createContext({ language: 'zh-CN' });
   empty.context.state.runtime = {
     host: { kind: 'oac', name: 'Open Agent Connect', localMode: true },
@@ -492,9 +492,10 @@ test('browser renders the no-Bot launch chrome in Simplified Chinese', () => {
 
   empty.context.renderNoLocalBot();
 
-  assert.match(empty.nodes['[data-browser-viewport]'].innerHTML, /创建你的第一个 Bot/);
-  assert.match(empty.nodes['[data-browser-viewport]'].innerHTML, /本地 Agent 需要先拥有一个 Bot 身份/);
-  assert.match(empty.nodes['[data-browser-viewport]'].innerHTML, /创建 Bot/);
+  assert.match(empty.nodes['[data-browser-viewport]'].innerHTML, /Create your first Bot/);
+  assert.match(empty.nodes['[data-browser-viewport]'].innerHTML, /Your local Agent needs a Bot identity/);
+  assert.match(empty.nodes['[data-browser-viewport]'].innerHTML, /Create Bot/);
+  assert.doesNotMatch(empty.nodes['[data-browser-viewport]'].innerHTML, /[\u4e00-\u9fff]/);
 });
 
 test('service-call sends only after modal confirmation with Browser action contract', async () => {

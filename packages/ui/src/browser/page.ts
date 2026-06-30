@@ -12,7 +12,7 @@ function escapeHtml(value: string): string {
 
 function normalizedLanguage(languagePreference?: string | null): string {
   const language = String(languagePreference ?? '').trim();
-  return language || 'en';
+  return /^en(?:-|$)/i.test(language) ? language : 'en';
 }
 
 function replaceTemplateValue(template: string, placeholder: string, replacement: string): string {

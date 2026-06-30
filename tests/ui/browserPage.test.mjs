@@ -105,6 +105,16 @@ test('Browser page HTML preserves inline script text containing dollar signs', a
   assert.doesNotMatch(html, /<body>[\s\S]*<script>\s*const marker = '\$\'';\s*<\/script>[\s\S]*<\/body>/);
 });
 
+test('Browser page HTML remains English-only when a host passes zh-CN', async () => {
+  const definition = ui.buildBrowserPageDefinition();
+  const html = await ui.renderBrowserPageHtml(definition, 'zh-CN');
+
+  assert.match(html, /<html lang="en">/);
+  assert.doesNotMatch(html, /<html lang="zh-CN">/);
+  assert.doesNotMatch(html, /[\u4e00-\u9fff]/);
+  assert.doesNotMatch(definition.script, /[\u4e00-\u9fff]/);
+});
+
 test('Browser loading feedback renders reload spinner and fade-in CSS', async () => {
   const html = await ui.renderBrowserPageHtml();
 
