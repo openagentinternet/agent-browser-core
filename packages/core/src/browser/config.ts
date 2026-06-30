@@ -7,7 +7,6 @@ import type { BrowserBaseConfig, BrowserConfigContainer } from './types.js';
 
 export const DEFAULT_METASO_P2P_BASE_URL = 'https://so.metaid.io';
 export const DEFAULT_MANAPI_BASE_URL = 'https://manapi.metaid.io';
-export const DEFAULT_BLOCK_EXPLORER_BASE_URL = 'https://www.mvcscan.com/tx';
 const DEFAULT_ENS_TEXT_KEY = 'org.openagentinternet.uri';
 const DEFAULT_ENS_RPC_URLS = ['https://ethereum-rpc.publicnode.com'];
 
@@ -42,8 +41,6 @@ export function createDefaultBrowserConfig(): BrowserBaseConfig {
     metasoP2PBaseUrl: DEFAULT_METASO_P2P_BASE_URL,
     metafileContentBaseUrl: DEFAULT_METAFILE_CONTENT_BASE_URL,
     manApiBaseUrl: DEFAULT_MANAPI_BASE_URL,
-    blockExplorerBaseUrl: DEFAULT_BLOCK_EXPLORER_BASE_URL,
-    walletApiBaseUrl: '',
     botHomepageTemplateId: DEFAULT_BOT_HOMEPAGE_TEMPLATE_ID,
     renderCustomBotPages: true,
     nameResolution: {
@@ -91,12 +88,6 @@ export function resolveBrowserConfig(
     manApiBaseUrl: normalizeUrl(env.METABOT_BROWSER_MANAPI_BASE_URL)
       || normalizeUrl(browser.manApiBaseUrl)
       || defaults.manApiBaseUrl,
-    blockExplorerBaseUrl: normalizeUrl(env.METABOT_BROWSER_BLOCK_EXPLORER_BASE_URL)
-      || normalizeUrl(browser.blockExplorerBaseUrl)
-      || defaults.blockExplorerBaseUrl,
-    walletApiBaseUrl: normalizeUrl(env.METABOT_BROWSER_WALLET_API_BASE_URL)
-      || normalizeUrl(browser.walletApiBaseUrl)
-      || defaults.walletApiBaseUrl,
     botHomepageTemplateId: normalizeBotHomepageTemplateId(browser.botHomepageTemplateId),
     renderCustomBotPages: typeof browser.renderCustomBotPages === 'boolean'
       ? browser.renderCustomBotPages

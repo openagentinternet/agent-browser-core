@@ -55,10 +55,10 @@ host support for local/public Browser previews.
   which `replace` treats as special substitution patterns, silently truncating the emitted `<script>`
   and breaking all Browser UI (buttons/input/links stop responding with no console error).
 - Browser infrastructure URL defaults (`metasoP2PBaseUrl`, `metafileContentBaseUrl`,
-  `manApiBaseUrl`, `blockExplorerBaseUrl`) have a single source of truth in core:
+  `manApiBaseUrl`) have a single source of truth in core:
   `createDefaultBrowserConfig()` and the exported `DEFAULT_*` constants
-  (`DEFAULT_METASO_P2P_BASE_URL`, `DEFAULT_METAFILE_CONTENT_BASE_URL`, `DEFAULT_MANAPI_BASE_URL`,
-  `DEFAULT_BLOCK_EXPLORER_BASE_URL`). When a host needs its own defaults it MUST derive them from
+  (`DEFAULT_METASO_P2P_BASE_URL`, `DEFAULT_METAFILE_CONTENT_BASE_URL`, `DEFAULT_MANAPI_BASE_URL`).
+  When a host needs its own defaults it MUST derive them from
   core (spread `createDefaultBrowserConfig()` as a base, then override only the fields that differ),
   and MUST NOT hardcode URL literals that silently drift from core. Hosts and end users remain free
   to override these URLs at runtime (via config or the Browser Settings UI); the rule is about where

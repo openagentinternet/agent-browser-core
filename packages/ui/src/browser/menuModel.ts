@@ -111,14 +111,4 @@ export const BROWSER_BASE_URL_FIELDS: BrowserBaseUrlFieldDefinition[] = [
     label: 'ManAPI Base URL',
     placeholder: 'https://manapi.metaid.io',
   },
-  {
-    key: 'blockExplorerBaseUrl',
-    label: 'Block Explorer Base URL',
-    placeholder: 'https://www.mvcscan.com/tx',
-  },
-  {
-    key: 'walletApiBaseUrl',
-    label: 'Wallet API Base URL',
-    placeholder: 'https://...',
-  },
 ];

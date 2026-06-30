@@ -202,7 +202,6 @@ function browserConfig(overrides = {}) {
     metasoP2PBaseUrl: 'https://so.example.test',
     manApiBaseUrl: 'https://man.example.test',
     metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
-    blockExplorerBaseUrl: 'https://explorer.example.test/tx',
     botHomepageTemplateId: 'document',
     defaultChainName: 'mvc',
     renderCustomBotPages: true,

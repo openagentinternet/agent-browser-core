@@ -13,8 +13,6 @@ export const BROWSER_BASE_URL_KEYS = [
   'metasoP2PBaseUrl',
   'metafileContentBaseUrl',
   'manApiBaseUrl',
-  'blockExplorerBaseUrl',
-  'walletApiBaseUrl',
 ] as const;
 
 export type BrowserBaseUrlKey = typeof BROWSER_BASE_URL_KEYS[number];

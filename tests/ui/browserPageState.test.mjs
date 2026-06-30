@@ -255,7 +255,6 @@ function createBrowserContext(options = {}) {
       metasoP2PBaseUrl: 'https://so.metaid.io',
       metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
       manApiBaseUrl: 'https://manapi.metaid.io',
-      blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
       renderCustomBotPages: true,
       nameResolution: {
@@ -274,7 +273,6 @@ function createBrowserContext(options = {}) {
       metasoP2PBaseUrl: 'https://so.metaid.io',
       metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
       manApiBaseUrl: 'https://manapi.metaid.io',
-      blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
       renderCustomBotPages: true,
       nameResolution: {
@@ -293,7 +291,6 @@ function createBrowserContext(options = {}) {
       metasoP2PBaseUrl: 'https://so.metaid.io',
       metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
       manApiBaseUrl: 'https://manapi.metaid.io',
-      blockExplorerBaseUrl: 'https://www.mvcscan.com/tx',
       botHomepageTemplateId: 'document',
       renderCustomBotPages: true,
       nameResolution: {
@@ -1066,6 +1063,25 @@ test('Browser menu is data-driven and opens cache management settings', async ()
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /2 artifacts/);
   assert.equal(fetchCalls.at(-2), '/api/browser/settings');
   assert.equal(fetchCalls.at(-1), '/api/browser/cache?actorId=worker');
+});
+
+test('Browser base URL settings show only resolver base URL fields', async () => {
+  const { context, elements } = createBrowserContext();
+
+  await waitFor(() => context.state.current, 'initial Browser load');
+  await context.openBrowserSettings('baseUrls');
+
+  assert.deepEqual(JSON.parse(JSON.stringify(context.browserBaseUrlFields.map((field) => field.key))), [
+    'metasoP2PBaseUrl',
+    'metafileContentBaseUrl',
+    'manApiBaseUrl',
+  ]);
+  const html = elements['[data-browser-modal-root]'].innerHTML;
+  assert.match(html, /Metaso P2P Base URL/);
+  assert.match(html, /Metafile Content Base URL/);
+  assert.match(html, /ManAPI Base URL/);
+  assert.doesNotMatch(html, /Block Explorer Base URL/);
+  assert.doesNotMatch(html, /Wallet API Base URL/);
 });
 
 test('Browser name resolution settings save ENS fields globally', async () => {

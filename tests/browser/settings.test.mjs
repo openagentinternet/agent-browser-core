@@ -5,10 +5,38 @@ import test from 'node:test';
 const require = createRequire(import.meta.url);
 const {
   applyBrowserSettingsUpdate,
+  BROWSER_BASE_URL_KEYS,
   createBrowserSettingsSnapshot,
   createDefaultBrowserConfig,
   resolveBrowserConfig,
 } = require('../../packages/core/dist/index.js');
+
+test('Browser settings expose only resolver base URLs', () => {
+  const defaults = createDefaultBrowserConfig();
+
+  assert.deepEqual(BROWSER_BASE_URL_KEYS, [
+    'metasoP2PBaseUrl',
+    'metafileContentBaseUrl',
+    'manApiBaseUrl',
+  ]);
+  assert.equal(Object.prototype.hasOwnProperty.call(defaults, 'blockExplorerBaseUrl'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(defaults, 'walletApiBaseUrl'), false);
+});
+
+test('Browser settings ignore legacy non-resolver base URL inputs', () => {
+  const updated = applyBrowserSettingsUpdate({}, {
+    metasoP2PBaseUrl: 'https://so.example.test',
+    blockExplorerBaseUrl: 'https://explorer.example.test/tx',
+    walletApiBaseUrl: 'https://wallet.example.test',
+  });
+  const snapshot = createBrowserSettingsSnapshot({ config: updated });
+
+  assert.equal(updated.browser.metasoP2PBaseUrl, 'https://so.example.test');
+  assert.equal(Object.prototype.hasOwnProperty.call(updated.browser, 'blockExplorerBaseUrl'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(updated.browser, 'walletApiBaseUrl'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(snapshot.effectiveBrowser, 'blockExplorerBaseUrl'), false);
+  assert.equal(Object.prototype.hasOwnProperty.call(snapshot.effectiveBrowser, 'walletApiBaseUrl'), false);
+});
 
 test('Browser settings default to rendering custom Bot Pages globally', () => {
   const defaults = createDefaultBrowserConfig();
