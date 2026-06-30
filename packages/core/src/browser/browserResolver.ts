@@ -150,11 +150,13 @@ function aliasCustomHomepageResult(input: {
   customHomepageUri: string;
   botHomepageSourceUrl: string;
   botHomepageRaw: Record<string, unknown>;
+  botOwner: BrowserResolveResult['owner'];
 }): BrowserResolveResult {
   return {
     ...input.result,
     uri: input.aliasUri,
     normalizedUri: input.aliasUri,
+    owner: input.botOwner,
     actions: aliasCopyActions(input.result.actions, input.aliasUri),
     source: {
       ...input.result.source,
@@ -343,6 +345,14 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
 
     const visibleMetaIdUri = normalizedMetaIdBotPageUri(parsed.normalizedUri, botPageOverride.forceDefaultBotPage);
     const aliasUri = visibleMetaIdUri;
+    const botPageResult = buildBotPageResolveResult({
+      uri: visibleMetaIdUri,
+      normalizedUri: visibleMetaIdUri,
+      homepage: homepage.data,
+      resolverUrl: homepage.url,
+      templateId: input.config.botHomepageTemplateId,
+      metafileContentBaseUrl: input.config.metafileContentBaseUrl,
+    });
     const customHomepageUri = readCustomHomepageUri(homepage.data);
     if (!botPageOverride.forceDefaultBotPage && input.config.renderCustomBotPages !== false && customHomepageUri) {
       let customParsed;
@@ -376,17 +386,11 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
         customHomepageUri,
         botHomepageSourceUrl: homepage.url,
         botHomepageRaw: homepage.data,
+        botOwner: botPageResult.owner,
       }));
     }
 
-    return browserCommandSuccess(buildBotPageResolveResult({
-      uri: visibleMetaIdUri,
-      normalizedUri: visibleMetaIdUri,
-      homepage: homepage.data,
-      resolverUrl: homepage.url,
-      templateId: input.config.botHomepageTemplateId,
-      metafileContentBaseUrl: input.config.metafileContentBaseUrl,
-    }));
+    return browserCommandSuccess(botPageResult);
   }
 
   if (parsed.scheme === 'metafile') {
