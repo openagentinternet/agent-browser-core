@@ -347,14 +347,68 @@ function currentBrowserHtmlFrameWindow() {
   return frame && frame.contentWindow ? frame.contentWindow : null;
 }
 
+function bridgePostMessage(targetWindow, message) {
+  if (!targetWindow || typeof targetWindow.postMessage !== 'function') return;
+  targetWindow.postMessage(message, '*');
+}
+
+function bridgeResponse(id, ok, payload) {
+  var response = {
+    type: 'agent-browser:response',
+    version: 1,
+    id: textValue(id),
+    ok: !!ok
+  };
+  if (ok) response.result = payload || {};
+  else response.error = payload || { code: 'invalid_request', message: 'Invalid bridge request.' };
+  return response;
+}
+
+function extractPinId(value) {
+  var text = textValue(value);
+  if (!text) return '';
+  if (/^metafile:\\/\\//i.test(text)) text = text.slice('metafile://'.length);
+  if (/^pin:\\/\\//i.test(text)) text = text.slice('pin://'.length);
+  text = text.split(/[?#]/, 1)[0].replace(/\\.[A-Za-z0-9]+$/u, '').toLowerCase();
+  return isBrowserPinId(text) ? text : '';
+}
+
+function sanitizedActorSnapshot(actor) {
+  var data = effectiveActor(actor);
+  var globalMetaId = textValue(data && data.globalMetaId);
+  if (!globalMetaId) return null;
+  var snapshot = {
+    uri: 'metaid://' + globalMetaId,
+    globalMetaId: globalMetaId,
+    name: textValue(data && data.label) || globalMetaId
+  };
+  var avatarPinId = extractPinId(textValue(data && data.avatarPinId));
+  if (avatarPinId) snapshot.avatarPinId = avatarPinId;
+  return snapshot;
+}
+
 function handleBrowserBridgeMessage(event) {
   var data = event && event.data && typeof event.data === 'object' ? event.data : null;
-  if (!data || data.type !== 'agent-browser:navigate' || data.version !== 1) return;
-  var uri = textValue(data.uri);
-  if (!isBrowserInternalHref(uri)) return;
+  if (!data || data.version !== 1) return;
   var sourceWindow = currentBrowserHtmlFrameWindow();
   if (!sourceWindow || event.source !== sourceWindow) return;
-  navigateTo(uri);
+  if (data.type === 'agent-browser:navigate') {
+    var uri = textValue(data.uri);
+    if (!isBrowserInternalHref(uri)) return;
+    navigateTo(uri);
+    return;
+  }
+  if (data.type !== 'agent-browser:request') return;
+  var id = textValue(data.id);
+  if (!id) return;
+  if (textValue(data.method) === 'browser.actor.current') {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, true, { actor: sanitizedActorSnapshot(selectedActor()) }));
+    return;
+  }
+  bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+    code: 'unsupported_method',
+    message: 'Unsupported AgentBrowser bridge method.'
+  }));
 }
 
 function resolveDownloadHref(reference) {

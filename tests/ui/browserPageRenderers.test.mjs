@@ -92,6 +92,7 @@ function runWithResolve(resolvePayload, options = {}) {
   const fetchCalls = [];
   const windowListeners = new Map();
   const infoProfiles = options.infoProfiles || {};
+  const runtime = options.runtime || {};
   const context = {
     console,
     URL,
@@ -116,6 +117,9 @@ function runWithResolve(resolvePayload, options = {}) {
     },
     fetch: async (url) => {
       fetchCalls.push(String(url));
+      if (String(url).startsWith('/api/browser/runtime')) {
+        return { ok: true, json: async () => ({ ok: true, data: runtime }) };
+      }
       if (String(url).startsWith('/api/browser/resolve')) {
         return { ok: true, json: async () => ({ ok: true, data: resolvePayload }) };
       }
@@ -931,6 +935,112 @@ test('html-iframe navigation bridge accepts only active iframe internal URI mess
     () => fetchCalls.some((url) => String(url).includes(`uri=${encodeURIComponent(targetUri)}`)),
     'bridge navigation resolve',
   );
+});
+
+test('html-iframe bridge responds with sanitized current actor', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const { nodes, fetchCalls, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{
+        id: 'standalone:actor',
+        label: 'Bob',
+        kind: 'wallet',
+        globalMetaId: 'idq1actor',
+        avatar: 'https://example.invalid/avatar.png',
+        isDefault: true,
+        capabilities: ['template-settings'],
+      }],
+      defaultActor: {
+        id: 'standalone:actor',
+        label: 'Bob',
+        kind: 'wallet',
+        globalMetaId: 'idq1actor',
+        avatar: 'https://example.invalid/avatar.png',
+        isDefault: true,
+        capabilities: ['template-settings'],
+      },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'actor-1',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'actor-1',
+    ok: true,
+    result: {
+      actor: {
+        uri: 'metaid://idq1actor',
+        globalMetaId: 'idq1actor',
+        name: 'Bob',
+      },
+    },
+  });
+  assert.equal(fetchCalls.some((url) => String(url).includes('/api/browser/actions')), false);
+});
+
+test('html-iframe bridge ignores actor requests from inactive frames', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const inactiveFrameWindow = {};
+  const { nodes, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: inactiveFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'actor-ignored',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+
+  assert.deepEqual(activeFrameWindow.postMessageCalls, []);
 });
 
 test('custom Bot Page alias renders target renderer while preserving source details', async () => {
