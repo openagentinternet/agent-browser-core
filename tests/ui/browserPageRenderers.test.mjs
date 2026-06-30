@@ -1043,6 +1043,48 @@ test('html-iframe bridge ignores actor requests from inactive frames', async () 
   assert.deepEqual(activeFrameWindow.postMessageCalls, []);
 });
 
+test('html-iframe bridge emits actor changed events after actor selection', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const { context, nodes } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [
+        { id: 'first-actor', label: 'First', kind: 'wallet', globalMetaId: 'idq1first', isDefault: true, capabilities: [] },
+        { id: 'second-actor', label: 'Second', kind: 'wallet', globalMetaId: 'idq1second', isDefault: false, capabilities: [] },
+      ],
+      defaultActor: { id: 'first-actor', label: 'First', kind: 'wallet', globalMetaId: 'idq1first', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  await context.selectUsingIdentity('second-actor');
+
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:event',
+    version: 1,
+    event: 'browser.actor.changed',
+    payload: {
+      actor: {
+        uri: 'metaid://idq1second',
+        globalMetaId: 'idq1second',
+        name: 'Second',
+      },
+    },
+  });
+});
+
 test('custom Bot Page alias renders target renderer while preserving source details', async () => {
   const aliasUri = 'metaid://idq1custombot';
   const customHomepageUri = 'metaapp://custom-pin';

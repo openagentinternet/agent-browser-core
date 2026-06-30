@@ -364,6 +364,21 @@ function bridgeResponse(id, ok, payload) {
   return response;
 }
 
+function bridgeEvent(eventName, payload) {
+  return {
+    type: 'agent-browser:event',
+    version: 1,
+    event: eventName,
+    payload: payload || {}
+  };
+}
+
+function emitBridgeEvent(eventName, payload) {
+  var sourceWindow = currentBrowserHtmlFrameWindow();
+  if (!sourceWindow) return;
+  bridgePostMessage(sourceWindow, bridgeEvent(eventName, payload));
+}
+
 function extractPinId(value) {
   var text = textValue(value);
   if (!text) return '';
@@ -2878,6 +2893,7 @@ async function selectUsingIdentity(slug) {
   state.runtime.defaultActor = selected;
   state.runtime.defaultUri = actorDefaultUri(selected) || null;
   renderUsingIdentity();
+  emitBridgeEvent('browser.actor.changed', { actor: sanitizedActorSnapshot(selectedActor()) });
   closeModal();
   // Switching the active actor only updates the Using chip and the recorded
   // selection. It must NOT navigate or touch the address bar — the selected
