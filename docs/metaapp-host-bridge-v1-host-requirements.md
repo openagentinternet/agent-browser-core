@@ -12,10 +12,9 @@ host contract lives in `packages/host-contract/src/index.ts`.
 
 ## Summary
 
-ABC provides the shared iframe bridge, request validation, sanitized actor snapshots, and
-host-neutral TypeScript contracts. A downstream host provides the real side effects:
+ABC provides the shared iframe bridge, in-Browser navigation, request validation, sanitized actor
+snapshots, and host-neutral TypeScript contracts. A downstream host provides the real side effects:
 
-- in-Browser navigation for Agent Internet URIs from custom MetaApp iframes;
 - current Actor Bot selection;
 - host-controlled confirmation UI;
 - MetaID PIN transaction building, signing, and broadcast;
@@ -24,16 +23,14 @@ host-neutral TypeScript contracts. A downstream host provides the real side effe
 
 The bridge is a JavaScript `postMessage` bridge, not a `map://` command protocol. `map://` remains a
 semantic Agent Internet URI for navigation and resource references. Navigation goes through
-`window.AgentBrowser.navigate(...)`; writes, actor reads, and uploads go through
-`window.AgentBrowser.request(...)` and the host adapter.
+`window.AgentBrowser.navigate(...)` and is owned by ABC UI; writes, actor reads, and uploads go
+through `window.AgentBrowser.request(...)` and the host adapter.
 
 ## Required Host Integration
 
 1. Consume an ABC package version that includes MetaApp Host Bridge v1.
 2. Serve the generated ABC Browser shell and client script without removing the iframe bridge code.
-3. Preserve both bridge message families:
-   - `agent-browser:navigate`
-   - `agent-browser:request` / `agent-browser:response` / `agent-browser:event`
+3. Preserve the packaged ABC Browser page behavior when wrapping, serving, or post-processing it.
 4. Provide an ABC API base path whose endpoints are equivalent to:
    - `POST {apiBasePath}/actions`
    - `POST {apiBasePath}/metafile-upload`
@@ -47,7 +44,7 @@ semantic Agent Internet URI for navigation and resource references. Navigation g
 Hosts may use different internal routes or IPC methods, but the ABC page must observe the same
 request and response semantics.
 
-## Navigation Bridge Requirements
+## Navigation Bridge Compatibility
 
 MetaApps navigate inside the Browser with:
 
@@ -65,26 +62,22 @@ The iframe posts this message to the parent Browser page:
 }
 ```
 
-Host requirements:
+The navigation bridge is implemented by ABC UI. It does not require a host adapter method, trusted
+action, signing path, upload endpoint, or Actor Bot selection.
 
-- Preserve ABC's parent-page message listener for `agent-browser:navigate`.
-- Accept navigation messages only from the active `iframe.browser-html-frame`.
-- Support the Agent Internet URI schemes supported by ABC navigation:
-  - `metaid://`
-  - `pin://`
-  - `metaapp://`
-  - `metafile://`
-  - `map://`
-- Reuse the normal Browser navigation and resource resolution path after a valid navigation request.
-- Do not convert these Agent Internet URIs into host-specific routes before they reach ABC
-  navigation.
+Host compatibility requirements:
+
+- Serve the bridge-capable ABC Browser shell and client script.
+- Do not remove or replace ABC's parent-page `agent-browser:navigate` message listener.
+- If the host wraps or post-processes rendered Browser HTML, keep the custom MetaApp iframe compatible
+  with ABC's active-frame `postMessage` check.
+- Do not convert Agent Internet URIs into host-specific routes before they reach ABC navigation.
 - Do not treat `map://` navigation as a command execution channel. It is a semantic resource URI.
-- Reject or ignore external web URLs, `javascript:` URLs, malformed messages, and messages from
-  inactive iframes.
 - Do not require a selected actor for pure navigation.
 
-Navigation is part of the same MetaApp bridge surface as actor reads, writes, and uploads. Downstream
-hosts should implement and test it in the same integration round.
+Downstream hosts normally should not add code specifically for Navigation Bridge. A smoke test is
+recommended only when the host wrapper, iframe sandbox, HTML post-processing, or ABC package version
+changes.
 
 ## Actor Identity Requirements
 
@@ -265,9 +258,10 @@ Recommended OAC responsibilities:
 
 - Update the ABC package dependency to the bridge-capable version.
 - Ensure the rendered Browser page uses the ABC client script with the expected API base path.
-- Preserve `agent-browser:navigate` handling in the rendered Browser page and OAC wrapper.
-- Verify custom MetaApp iframe navigation for `metaid://`, `pin://`, `metaapp://`, `metafile://`,
-  and `map://` resources.
+- Do not add an OAC-specific Navigation Bridge adapter. Navigation is ABC-owned; OAC only needs to
+  avoid breaking the packaged Browser shell.
+- If the OAC Browser wrapper changes, smoke-test that a custom MetaApp can still navigate to an Agent
+  Internet URI inside Browser.
 - Route `POST /api/browser/actions` or the OAC-equivalent Browser action route to the OAC Browser
   host adapter.
 - Add `metaid-pin-write` handling in the OAC Browser host adapter.
@@ -291,10 +285,11 @@ Recommended IDBots responsibilities:
 
 - Update the ABC package dependency to the bridge-capable version.
 - Preserve the ABC iframe bridge when assigning or post-processing rendered Browser HTML.
-- Preserve `agent-browser:navigate` handling when assigning or post-processing rendered Browser HTML.
-- Keep the iframe sandbox compatible with bridge messaging, navigation, and MetaApp execution.
-- Verify custom MetaApp iframe navigation for `metaid://`, `pin://`, `metaapp://`, `metafile://`,
-  and `map://` resources.
+- Do not add an IDBots-specific Navigation Bridge adapter. Navigation is ABC-owned; IDBots only needs
+  to avoid breaking the packaged Browser shell.
+- Keep the iframe sandbox compatible with bridge messaging and MetaApp execution.
+- If Bot Browser post-processes rendered Browser HTML or iframe sandboxing, smoke-test that a custom
+  MetaApp can still navigate to an Agent Internet URI inside Browser.
 - Route Browser action requests from renderer to main process through explicit IPC handlers.
 - Add `metaid-pin-write` handling in the IDBots Browser host adapter or main-process service layer.
 - Connect that handling to the selected Bot identity, existing MetaID write stack, and host-owned
@@ -311,7 +306,6 @@ adapter boundary.
 ## Security Requirements
 
 - Accept bridge messages only from the active MetaApp iframe.
-- Allow navigation only for ABC-supported Agent Internet URI schemes.
 - Treat MetaApps as untrusted content, even when they are chain-hosted.
 - Keep all write, upload, signer, wallet, and file access behind host confirmation.
 - Never expose private keys, arbitrary signing, balances, payments, host routes, local paths, or
@@ -325,10 +319,9 @@ adapter boundary.
 
 A downstream host implementation is ready when all of these checks pass:
 
-- A custom MetaApp can call `window.AgentBrowser.navigate(...)` for `metaid://`, `pin://`,
-  `metaapp://`, `metafile://`, and `map://` resources, and navigation stays inside Browser.
-- External web URLs, `javascript:` URLs, malformed navigation messages, and inactive iframe
-  navigation requests are ignored or rejected.
+- If the host changed its Browser wrapper, iframe sandbox, HTML post-processing, or ABC package
+  version, a custom MetaApp can still call `window.AgentBrowser.navigate(...)` and open an Agent
+  Internet URI inside Browser.
 - A custom MetaApp can call `browser.actor.current` and receive only MetaID actor fields.
 - A custom MetaApp receives `browser.actor.changed` when the user switches the selected actor.
 - A valid `metaid.pin.write` request reaches the host adapter as `metaid-pin-write`.
