@@ -129,6 +129,7 @@ var browserEndpoints = {
   settings: '/api/browser/settings',
   cache: '/api/browser/cache',
   actions: '/api/browser/actions',
+  metafileUpload: '/api/browser/metafile-upload',
 };
 
 var browserLaunchCopy = {
@@ -435,6 +436,19 @@ function validatePinWriteParams(params) {
   return { ok: true, value: value };
 }
 
+function validateMetafileUploadParams(params) {
+  var input = isPlainObject(params) ? params : {};
+  var source = isPlainObject(input.source) ? input.source : {};
+  if (textValue(source.kind) !== 'host-picker') {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaFile upload source.kind must be host-picker.' } };
+  }
+  var value = { source: { kind: 'host-picker' } };
+  if (typeof source.multiple === 'boolean') value.source.multiple = source.multiple;
+  if (Array.isArray(source.accept)) value.source.accept = source.accept.map(textValue).filter(Boolean);
+  if (textValue(input.purpose)) value.purpose = textValue(input.purpose);
+  return { ok: true, value: value };
+}
+
 async function handleBridgePinWrite(sourceWindow, id, params) {
   var validation = validatePinWriteParams(params);
   if (!validation.ok) {
@@ -467,6 +481,35 @@ async function handleBridgePinWrite(sourceWindow, id, params) {
   }
 }
 
+async function handleBridgeMetafileUpload(sourceWindow, id, params) {
+  var validation = validateMetafileUploadParams(params);
+  if (!validation.ok) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, validation.error));
+    return;
+  }
+  try {
+    var result = await commandApi(endpointWithActor(browserEndpoints.metafileUpload), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(validation.value)
+    });
+    if (result && result.ok === false) {
+      bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+        code: textValue(result.code) || 'upload_failed',
+        message: textValue(result.message) || 'MetaFile upload failed.'
+      }));
+      return;
+    }
+    bridgePostMessage(sourceWindow, bridgeResponse(id, true, result && result.data ? result.data : result));
+  } catch (error) {
+    var payload = error && error.payload ? error.payload : null;
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: textValue(payload && payload.code) || textValue(error && error.code) || 'upload_failed',
+      message: textValue(payload && payload.message) || textValue(error && error.message) || 'MetaFile upload failed.'
+    }));
+  }
+}
+
 function handleBrowserBridgeMessage(event) {
   var data = event && event.data && typeof event.data === 'object' ? event.data : null;
   if (!data || data.version !== 1) return;
@@ -487,6 +530,10 @@ function handleBrowserBridgeMessage(event) {
   }
   if (textValue(data.method) === 'metaid.pin.write') {
     handleBridgePinWrite(sourceWindow, id, data.params);
+    return;
+  }
+  if (textValue(data.method) === 'metafile.upload') {
+    handleBridgeMetafileUpload(sourceWindow, id, data.params);
     return;
   }
   bridgePostMessage(sourceWindow, bridgeResponse(id, false, {

@@ -192,6 +192,20 @@ test('standalone returns manual action for open-conversation', async () => {
   assert.equal(result.code, 'browser_identity_required');
 });
 
+test('standalone metafile upload route returns explicit unsupported state', async (t) => {
+  const server = standalone.createStandaloneBrowserServer();
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const response = await fetch(`${baseUrl}/api/browser/metafile-upload`, { method: 'POST' });
+  const payload = await json(response);
+
+  assert.equal(response.status, 409);
+  assert.equal(payload.ok, false);
+  assert.equal(payload.state, 'manual_action_required');
+  assert.equal(payload.code, 'metafile_upload_unavailable');
+});
+
 test('standalone Browser server maps bad client requests to explicit failures', async (t) => {
   const server = standalone.createStandaloneBrowserServer();
   t.after(() => new Promise((resolve) => server.close(resolve)));

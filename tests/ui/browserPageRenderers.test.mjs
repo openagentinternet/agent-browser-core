@@ -134,6 +134,9 @@ function runWithResolve(resolvePayload, options = {}) {
       if (String(url).startsWith('/api/browser/actions')) {
         return { ok: true, json: async () => options.actionResponse || ({ ok: true, data: {} }) };
       }
+      if (String(url).startsWith('/api/browser/metafile-upload')) {
+        return { ok: true, json: async () => options.uploadResponse || ({ ok: false, state: 'manual_action_required', code: 'metafile_upload_unavailable', message: 'MetaFile upload is not available in this host.' }) };
+      }
       return { ok: true, json: async () => ({ ok: true, data: {} }) };
     },
   };
@@ -1233,6 +1236,64 @@ test('html-iframe bridge rejects invalid MetaID PIN write operations', async () 
     },
   });
   assert.equal(fetchRequests.some((request) => request.url.startsWith('/api/browser/actions')), false);
+});
+
+test('html-iframe bridge forwards MetaFile upload requests to the host endpoint', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const { nodes, fetchRequests, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Actor', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Actor', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'upload-1',
+      method: 'metafile.upload',
+      params: {
+        source: { kind: 'host-picker', multiple: true, accept: ['application/pdf'] },
+        purpose: 'netdisk',
+      },
+    },
+  });
+
+  await waitFor(() => activeFrameWindow.postMessageCalls.length === 1, 'metafile upload bridge response');
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'upload-1',
+    ok: false,
+    error: {
+      code: 'metafile_upload_unavailable',
+      message: 'MetaFile upload is not available in this host.',
+    },
+  });
+
+  const uploadRequest = fetchRequests.find((request) => request.url.startsWith('/api/browser/metafile-upload'));
+  assert.equal(uploadRequest.url, '/api/browser/metafile-upload?actorId=standalone%3Aactor');
+  assert.deepEqual(JSON.parse(uploadRequest.options.body), {
+    source: { kind: 'host-picker', multiple: true, accept: ['application/pdf'] },
+    purpose: 'netdisk',
+  });
 });
 
 test('custom Bot Page alias renders target renderer while preserving source details', async () => {
