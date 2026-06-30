@@ -402,6 +402,71 @@ function sanitizedActorSnapshot(actor) {
   return snapshot;
 }
 
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validatePinWriteParams(params) {
+  var input = isPlainObject(params) ? params : {};
+  var operation = textValue(input.operation);
+  if (['create', 'modify', 'revoke'].indexOf(operation) === -1) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write operation must be create, modify, or revoke.' } };
+  }
+  var path = textValue(input.path);
+  if (!path || path.charAt(0) !== '/') {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write path must start with /.' } };
+  }
+  var payload = isPlainObject(input.payload) ? input.payload : {};
+  var encoding = textValue(payload.encoding);
+  if (['utf8', 'base64'].indexOf(encoding) === -1 || !textValue(payload.value)) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write payload must include utf8 or base64 data.' } };
+  }
+  var value = {
+    operation: operation,
+    path: path,
+    encryption: textValue(input.encryption),
+    version: textValue(input.version),
+    contentType: textValue(input.contentType),
+    payload: { encoding: encoding, value: textValue(payload.value) }
+  };
+  if (textValue(input.originalId)) value.originalId = textValue(input.originalId);
+  if (textValue(input.appAction)) value.appAction = textValue(input.appAction);
+  if (isPlainObject(input.display)) value.display = input.display;
+  return { ok: true, value: value };
+}
+
+async function handleBridgePinWrite(sourceWindow, id, params) {
+  var validation = validatePinWriteParams(params);
+  if (!validation.ok) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, validation.error));
+    return;
+  }
+  try {
+    var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        resourceUri: currentResourceUri(),
+        kind: 'metaid-pin-write',
+        payload: validation.value
+      })
+    });
+    if (result && result.ok === false) {
+      bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+        code: textValue(result.code) || 'pin_write_failed',
+        message: textValue(result.message) || 'MetaID PIN write failed.'
+      }));
+      return;
+    }
+    bridgePostMessage(sourceWindow, bridgeResponse(id, true, result && result.data ? result.data : result));
+  } catch (error) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: error && error.code ? error.code : 'pin_write_failed',
+      message: error && error.message ? error.message : 'MetaID PIN write failed.'
+    }));
+  }
+}
+
 function handleBrowserBridgeMessage(event) {
   var data = event && event.data && typeof event.data === 'object' ? event.data : null;
   if (!data || data.version !== 1) return;
@@ -418,6 +483,10 @@ function handleBrowserBridgeMessage(event) {
   if (!id) return;
   if (textValue(data.method) === 'browser.actor.current') {
     bridgePostMessage(sourceWindow, bridgeResponse(id, true, { actor: sanitizedActorSnapshot(selectedActor()) }));
+    return;
+  }
+  if (textValue(data.method) === 'metaid.pin.write') {
+    handleBridgePinWrite(sourceWindow, id, data.params);
     return;
   }
   bridgePostMessage(sourceWindow, bridgeResponse(id, false, {

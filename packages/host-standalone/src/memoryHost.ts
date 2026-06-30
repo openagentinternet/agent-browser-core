@@ -28,6 +28,10 @@ const WALLET_PROVIDER_ID = WALLET_PROVIDER_NAME.toLowerCase();
 const SECONDARY_WALLET_PROVIDER_NAME = 'Meta' + 'Mask';
 const SECONDARY_WALLET_PROVIDER_ID = SECONDARY_WALLET_PROVIDER_NAME.toLowerCase();
 
+function normalizeText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 export interface MemoryStandaloneHostInput {
   now?: () => number;
 }
@@ -215,6 +219,18 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
           action: { label: 'Open request status', route: '/browser/requests/dev-service-call' },
           data: { requestId: 'dev-service-call' },
         });
+      }
+      if (input.kind === 'metaid-pin-write') {
+        return browserManualActionRequired(
+          'browser_identity_required',
+          'Standalone Browser cannot write MetaID PINs until a signing actor is available.',
+          {
+            data: {
+              operation: normalizeText(input.payload?.operation),
+              path: normalizeText(input.payload?.path),
+            },
+          },
+        );
       }
       return browserFailure('browser_action_not_supported', `Standalone Browser does not support trusted action: ${input.kind}`);
     },
