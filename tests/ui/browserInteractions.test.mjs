@@ -55,6 +55,11 @@ test('client script includes custom homepage iframe navigation bridge', () => {
   assert.match(script, /function currentBrowserHtmlFrameWindow\(\)/);
   assert.match(script, /function handleBrowserBridgeMessage\(event\)/);
   assert.match(script, /agent-browser:navigate/);
+  assert.match(script, /agent-browser:request/);
+  assert.match(script, /agent-browser:response/);
+  assert.match(script, /browser\.actor\.current/);
+  assert.match(script, /metaid\.pin\.write/);
+  assert.match(script, /metafile\.upload/);
   assert.match(script, /window\.addEventListener\('message', handleBrowserBridgeMessage\)/);
   assert.match(script, /event\.source !== sourceWindow/);
   assert.match(script, /navigateTo\(uri\)\.catch\(\(\) => \{\}\)/);

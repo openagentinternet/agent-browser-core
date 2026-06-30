@@ -129,6 +129,7 @@ var browserEndpoints = {
   settings: '/api/browser/settings',
   cache: '/api/browser/cache',
   actions: '/api/browser/actions',
+  metafileUpload: '/api/browser/metafile-upload',
 };
 
 var browserLaunchCopy = {
@@ -347,14 +348,198 @@ function currentBrowserHtmlFrameWindow() {
   return frame && frame.contentWindow ? frame.contentWindow : null;
 }
 
+function bridgePostMessage(targetWindow, message) {
+  if (!targetWindow || typeof targetWindow.postMessage !== 'function') return;
+  targetWindow.postMessage(message, '*');
+}
+
+function bridgeResponse(id, ok, payload) {
+  var response = {
+    type: 'agent-browser:response',
+    version: 1,
+    id: textValue(id),
+    ok: !!ok
+  };
+  if (ok) response.result = payload || {};
+  else response.error = payload || { code: 'invalid_request', message: 'Invalid bridge request.' };
+  return response;
+}
+
+function bridgeEvent(eventName, payload) {
+  return {
+    type: 'agent-browser:event',
+    version: 1,
+    event: eventName,
+    payload: payload || {}
+  };
+}
+
+function emitBridgeEvent(eventName, payload) {
+  var sourceWindow = currentBrowserHtmlFrameWindow();
+  if (!sourceWindow) return;
+  bridgePostMessage(sourceWindow, bridgeEvent(eventName, payload));
+}
+
+function extractPinId(value) {
+  var text = textValue(value);
+  if (!text) return '';
+  if (/^metafile:\\/\\//i.test(text)) text = text.slice('metafile://'.length);
+  if (/^pin:\\/\\//i.test(text)) text = text.slice('pin://'.length);
+  text = text.split(/[?#]/, 1)[0].replace(/\\.[A-Za-z0-9]+$/u, '').toLowerCase();
+  return isBrowserPinId(text) ? text : '';
+}
+
+function sanitizedActorSnapshot(actor) {
+  var data = effectiveActor(actor);
+  var globalMetaId = textValue(data && data.globalMetaId);
+  if (!globalMetaId) return null;
+  var snapshot = {
+    uri: 'metaid://' + globalMetaId,
+    globalMetaId: globalMetaId,
+    name: textValue(data && data.label) || globalMetaId
+  };
+  var avatarPinId = extractPinId(textValue(data && data.avatarPinId));
+  if (avatarPinId) snapshot.avatarPinId = avatarPinId;
+  return snapshot;
+}
+
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validatePinWriteParams(params) {
+  var input = isPlainObject(params) ? params : {};
+  var operation = textValue(input.operation);
+  if (['create', 'modify', 'revoke'].indexOf(operation) === -1) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write operation must be create, modify, or revoke.' } };
+  }
+  var path = textValue(input.path);
+  if (!path || path.charAt(0) !== '/') {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write path must start with /.' } };
+  }
+  var payload = isPlainObject(input.payload) ? input.payload : {};
+  var encoding = textValue(payload.encoding);
+  if (['utf8', 'base64'].indexOf(encoding) === -1 || !textValue(payload.value)) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write payload must include utf8 or base64 data.' } };
+  }
+  var value = {
+    operation: operation,
+    path: path,
+    encryption: textValue(input.encryption),
+    version: textValue(input.version),
+    contentType: textValue(input.contentType),
+    payload: { encoding: encoding, value: textValue(payload.value) }
+  };
+  if (textValue(input.originalId)) value.originalId = textValue(input.originalId);
+  if (textValue(input.appAction)) value.appAction = textValue(input.appAction);
+  if (isPlainObject(input.display)) value.display = input.display;
+  return { ok: true, value: value };
+}
+
+function validateMetafileUploadParams(params) {
+  var input = isPlainObject(params) ? params : {};
+  var source = isPlainObject(input.source) ? input.source : {};
+  if (textValue(source.kind) !== 'host-picker') {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaFile upload source.kind must be host-picker.' } };
+  }
+  var value = { source: { kind: 'host-picker' } };
+  if (typeof source.multiple === 'boolean') value.source.multiple = source.multiple;
+  if (Array.isArray(source.accept)) value.source.accept = source.accept.map(textValue).filter(Boolean);
+  if (textValue(input.purpose)) value.purpose = textValue(input.purpose);
+  return { ok: true, value: value };
+}
+
+async function handleBridgePinWrite(sourceWindow, id, params) {
+  var validation = validatePinWriteParams(params);
+  if (!validation.ok) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, validation.error));
+    return;
+  }
+  try {
+    var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        resourceUri: currentResourceUri(),
+        kind: 'metaid-pin-write',
+        payload: validation.value
+      })
+    });
+    if (result && result.ok === false) {
+      bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+        code: textValue(result.code) || 'pin_write_failed',
+        message: textValue(result.message) || 'MetaID PIN write failed.'
+      }));
+      return;
+    }
+    bridgePostMessage(sourceWindow, bridgeResponse(id, true, result && result.data ? result.data : result));
+  } catch (error) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: error && error.code ? error.code : 'pin_write_failed',
+      message: error && error.message ? error.message : 'MetaID PIN write failed.'
+    }));
+  }
+}
+
+async function handleBridgeMetafileUpload(sourceWindow, id, params) {
+  var validation = validateMetafileUploadParams(params);
+  if (!validation.ok) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, validation.error));
+    return;
+  }
+  try {
+    var result = await commandApi(endpointWithActor(browserEndpoints.metafileUpload), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(validation.value)
+    });
+    if (result && result.ok === false) {
+      bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+        code: textValue(result.code) || 'upload_failed',
+        message: textValue(result.message) || 'MetaFile upload failed.'
+      }));
+      return;
+    }
+    bridgePostMessage(sourceWindow, bridgeResponse(id, true, result && result.data ? result.data : result));
+  } catch (error) {
+    var payload = error && error.payload ? error.payload : null;
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: textValue(payload && payload.code) || textValue(error && error.code) || 'upload_failed',
+      message: textValue(payload && payload.message) || textValue(error && error.message) || 'MetaFile upload failed.'
+    }));
+  }
+}
+
 function handleBrowserBridgeMessage(event) {
   var data = event && event.data && typeof event.data === 'object' ? event.data : null;
-  if (!data || data.type !== 'agent-browser:navigate' || data.version !== 1) return;
-  var uri = textValue(data.uri);
-  if (!isBrowserInternalHref(uri)) return;
+  if (!data || data.version !== 1) return;
   var sourceWindow = currentBrowserHtmlFrameWindow();
   if (!sourceWindow || event.source !== sourceWindow) return;
-  navigateTo(uri);
+  if (data.type === 'agent-browser:navigate') {
+    var uri = textValue(data.uri);
+    if (!isBrowserInternalHref(uri)) return;
+    navigateTo(uri);
+    return;
+  }
+  if (data.type !== 'agent-browser:request') return;
+  var id = textValue(data.id);
+  if (!id) return;
+  if (textValue(data.method) === 'browser.actor.current') {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, true, { actor: sanitizedActorSnapshot(selectedActor()) }));
+    return;
+  }
+  if (textValue(data.method) === 'metaid.pin.write') {
+    handleBridgePinWrite(sourceWindow, id, data.params);
+    return;
+  }
+  if (textValue(data.method) === 'metafile.upload') {
+    handleBridgeMetafileUpload(sourceWindow, id, data.params);
+    return;
+  }
+  bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+    code: 'unsupported_method',
+    message: 'Unsupported AgentBrowser bridge method.'
+  }));
 }
 
 function resolveDownloadHref(reference) {
@@ -2824,6 +3009,7 @@ async function selectUsingIdentity(slug) {
   state.runtime.defaultActor = selected;
   state.runtime.defaultUri = actorDefaultUri(selected) || null;
   renderUsingIdentity();
+  emitBridgeEvent('browser.actor.changed', { actor: sanitizedActorSnapshot(selectedActor()) });
   closeModal();
   // Switching the active actor only updates the Using chip and the recorded
   // selection. It must NOT navigate or touch the address bar — the selected

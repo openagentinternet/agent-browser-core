@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer';
 import type http from 'node:http';
 import {
   browserFailure,
+  browserManualActionRequired,
   type BrowserCommandResult,
   type BrowserHostAdapter,
   type BrowserTrustedActionKind,
@@ -192,6 +193,18 @@ export async function handleStandaloneBrowserApiRoute(
       return true;
     }
     sendJson(res, 405, browserFailure('method_not_allowed', 'Expected GET or DELETE.'));
+    return true;
+  }
+
+  if (url.pathname === '/api/browser/metafile-upload') {
+    if (method !== 'POST') {
+      sendJson(res, 405, browserFailure('method_not_allowed', 'Expected POST.'));
+      return true;
+    }
+    sendJson(res, 409, browserManualActionRequired(
+      'metafile_upload_unavailable',
+      'MetaFile upload is not available in the standalone host.',
+    ));
     return true;
   }
 

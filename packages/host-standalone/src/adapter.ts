@@ -654,6 +654,18 @@ export function createStandaloneBrowserHostAdapter(
         },
       );
     }
+    if (actionInput.kind === 'metaid-pin-write') {
+      return browserManualActionRequired(
+        'browser_identity_required',
+        'Standalone Browser cannot write MetaID PINs until a signing actor is available.',
+        {
+          data: {
+            operation: normalizeText(actionInput.payload?.operation),
+            path: normalizeText(actionInput.payload?.path),
+          },
+        },
+      );
+    }
     return browserFailure(
       'browser_action_not_supported',
       `Standalone Browser does not support trusted action: ${actionInput.kind}`,

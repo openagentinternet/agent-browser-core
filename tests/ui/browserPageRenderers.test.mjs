@@ -90,8 +90,10 @@ function elements() {
 function runWithResolve(resolvePayload, options = {}) {
   const nodes = elements();
   const fetchCalls = [];
+  const fetchRequests = [];
   const windowListeners = new Map();
   const infoProfiles = options.infoProfiles || {};
+  const runtime = options.runtime || {};
   const context = {
     console,
     URL,
@@ -114,8 +116,12 @@ function runWithResolve(resolvePayload, options = {}) {
       querySelectorAll: () => [],
       addEventListener: () => {},
     },
-    fetch: async (url) => {
+    fetch: async (url, fetchOptions = {}) => {
       fetchCalls.push(String(url));
+      fetchRequests.push({ url: String(url), options: fetchOptions });
+      if (String(url).startsWith('/api/browser/runtime')) {
+        return { ok: true, json: async () => ({ ok: true, data: runtime }) };
+      }
       if (String(url).startsWith('/api/browser/resolve')) {
         return { ok: true, json: async () => ({ ok: true, data: resolvePayload }) };
       }
@@ -125,11 +131,17 @@ function runWithResolve(resolvePayload, options = {}) {
         const profile = infoProfiles[globalMetaId] || { globalMetaId, name: globalMetaId, avatar: '' };
         return { ok: true, json: async () => ({ ok: true, data: profile }) };
       }
+      if (String(url).startsWith('/api/browser/actions')) {
+        return { ok: true, json: async () => options.actionResponse || ({ ok: true, data: {} }) };
+      }
+      if (String(url).startsWith('/api/browser/metafile-upload')) {
+        return { ok: true, json: async () => options.uploadResponse || ({ ok: false, state: 'manual_action_required', code: 'metafile_upload_unavailable', message: 'MetaFile upload is not available in this host.' }) };
+      }
       return { ok: true, json: async () => ({ ok: true, data: {} }) };
     },
   };
   vm.runInNewContext(buildBrowserPageDefinition().script, context);
-  return { context, nodes, fetchCalls, windowListeners };
+  return { context, nodes, fetchCalls, fetchRequests, windowListeners };
 }
 
 function result(renderer, overrides = {}) {
@@ -931,6 +943,357 @@ test('html-iframe navigation bridge accepts only active iframe internal URI mess
     () => fetchCalls.some((url) => String(url).includes(`uri=${encodeURIComponent(targetUri)}`)),
     'bridge navigation resolve',
   );
+});
+
+test('html-iframe bridge responds with sanitized current actor', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const { nodes, fetchCalls, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{
+        id: 'standalone:actor',
+        label: 'Bob',
+        kind: 'wallet',
+        globalMetaId: 'idq1actor',
+        avatar: 'https://example.invalid/avatar.png',
+        isDefault: true,
+        capabilities: ['template-settings'],
+      }],
+      defaultActor: {
+        id: 'standalone:actor',
+        label: 'Bob',
+        kind: 'wallet',
+        globalMetaId: 'idq1actor',
+        avatar: 'https://example.invalid/avatar.png',
+        isDefault: true,
+        capabilities: ['template-settings'],
+      },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'actor-1',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'actor-1',
+    ok: true,
+    result: {
+      actor: {
+        uri: 'metaid://idq1actor',
+        globalMetaId: 'idq1actor',
+        name: 'Bob',
+      },
+    },
+  });
+  assert.equal(fetchCalls.some((url) => String(url).includes('/api/browser/actions')), false);
+});
+
+test('html-iframe bridge ignores actor requests from inactive frames', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const inactiveFrameWindow = {};
+  const { nodes, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: inactiveFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'actor-ignored',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+
+  assert.deepEqual(activeFrameWindow.postMessageCalls, []);
+});
+
+test('html-iframe bridge emits actor changed events after actor selection', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const { context, nodes } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [
+        { id: 'first-actor', label: 'First', kind: 'wallet', globalMetaId: 'idq1first', isDefault: true, capabilities: [] },
+        { id: 'second-actor', label: 'Second', kind: 'wallet', globalMetaId: 'idq1second', isDefault: false, capabilities: [] },
+      ],
+      defaultActor: { id: 'first-actor', label: 'First', kind: 'wallet', globalMetaId: 'idq1first', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  await context.selectUsingIdentity('second-actor');
+
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:event',
+    version: 1,
+    event: 'browser.actor.changed',
+    payload: {
+      actor: {
+        uri: 'metaid://idq1second',
+        globalMetaId: 'idq1second',
+        name: 'Second',
+      },
+    },
+  });
+});
+
+test('html-iframe bridge forwards MetaID PIN write requests to host actions', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const { nodes, fetchRequests, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Actor', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Actor', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+    actionResponse: {
+      ok: true,
+      state: 'success',
+      data: {
+        kind: 'metaid-pin-write',
+        handled: true,
+        data: {
+          pinId: servicePinId,
+          txid: servicePinId.slice(0, 64),
+          operation: 'create',
+          path: '/protocols/simplebuzz',
+          actor: { uri: 'metaid://idq1actor', globalMetaId: 'idq1actor', name: 'Actor' },
+        },
+      },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'write-1',
+      method: 'metaid.pin.write',
+      params: {
+        operation: 'create',
+        path: '/protocols/simplebuzz',
+        encryption: '0',
+        version: '1.0.0',
+        contentType: 'application/json;utf-8',
+        payload: { encoding: 'utf8', value: '{"content":"hello"}' },
+        display: { title: 'Post buzz', summary: 'hello' },
+      },
+    },
+  });
+
+  await waitFor(() => activeFrameWindow.postMessageCalls.length === 1, 'pin write bridge response');
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'write-1',
+    ok: true,
+    result: {
+      pinId: servicePinId,
+      txid: servicePinId.slice(0, 64),
+      operation: 'create',
+      path: '/protocols/simplebuzz',
+      actor: { uri: 'metaid://idq1actor', globalMetaId: 'idq1actor', name: 'Actor' },
+    },
+  });
+
+  const actionRequest = fetchRequests.find((request) => request.url.startsWith('/api/browser/actions'));
+  assert.equal(actionRequest.url, '/api/browser/actions?actorId=standalone%3Aactor');
+  assert.deepEqual(JSON.parse(actionRequest.options.body), {
+    resourceUri: 'metaapp://pin',
+    kind: 'metaid-pin-write',
+    payload: {
+      operation: 'create',
+      path: '/protocols/simplebuzz',
+      encryption: '0',
+      version: '1.0.0',
+      contentType: 'application/json;utf-8',
+      payload: { encoding: 'utf8', value: '{"content":"hello"}' },
+      display: { title: 'Post buzz', summary: 'hello' },
+    },
+  });
+});
+
+test('html-iframe bridge rejects invalid MetaID PIN write operations', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const { nodes, fetchRequests, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Actor', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Actor', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'write-invalid',
+      method: 'metaid.pin.write',
+      params: {
+        operation: 'delete',
+        path: '/protocols/simplebuzz',
+        encryption: '0',
+        version: '1.0.0',
+        contentType: 'application/json;utf-8',
+        payload: { encoding: 'utf8', value: '{"content":"hello"}' },
+      },
+    },
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'write-invalid',
+    ok: false,
+    error: {
+      code: 'invalid_params',
+      message: 'MetaID PIN write operation must be create, modify, or revoke.',
+    },
+  });
+  assert.equal(fetchRequests.some((request) => request.url.startsWith('/api/browser/actions')), false);
+});
+
+test('html-iframe bridge forwards MetaFile upload requests to the host endpoint', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const { nodes, fetchRequests, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Actor', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Actor', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'upload-1',
+      method: 'metafile.upload',
+      params: {
+        source: { kind: 'host-picker', multiple: true, accept: ['application/pdf'] },
+        purpose: 'netdisk',
+      },
+    },
+  });
+
+  await waitFor(() => activeFrameWindow.postMessageCalls.length === 1, 'metafile upload bridge response');
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'upload-1',
+    ok: false,
+    error: {
+      code: 'metafile_upload_unavailable',
+      message: 'MetaFile upload is not available in this host.',
+    },
+  });
+
+  const uploadRequest = fetchRequests.find((request) => request.url.startsWith('/api/browser/metafile-upload'));
+  assert.equal(uploadRequest.url, '/api/browser/metafile-upload?actorId=standalone%3Aactor');
+  assert.deepEqual(JSON.parse(uploadRequest.options.body), {
+    source: { kind: 'host-picker', multiple: true, accept: ['application/pdf'] },
+    purpose: 'netdisk',
+  });
 });
 
 test('custom Bot Page alias renders target renderer while preserving source details', async () => {
