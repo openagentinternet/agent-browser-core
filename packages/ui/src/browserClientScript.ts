@@ -85,6 +85,19 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
   function isBrowserInternalHref(value) {
     return new RegExp('^(metaid|metaapp|metafile|map|pin):\\/\\/', 'i').test(textValue(value));
   }
+  function currentBrowserHtmlFrameWindow() {
+    const frame = viewport && viewport.querySelector ? viewport.querySelector('iframe.browser-html-frame') : null;
+    return frame && frame.contentWindow ? frame.contentWindow : null;
+  }
+  function handleBrowserBridgeMessage(event) {
+    const data = event && event.data && typeof event.data === 'object' ? event.data : null;
+    if (!data || data.type !== 'agent-browser:navigate' || data.version !== 1) return;
+    const uri = textValue(data.uri);
+    if (!isBrowserInternalHref(uri)) return;
+    const sourceWindow = currentBrowserHtmlFrameWindow();
+    if (!sourceWindow || event.source !== sourceWindow) return;
+    navigateTo(uri).catch(() => {});
+  }
   function resolveDownloadHref(reference) {
     const value = textValue(reference);
     if (!value) return '';
@@ -1363,6 +1376,9 @@ function openPinRawRecord(trigger) {
     } catch (error) {
       renderResolveFailure(uri, error && error.message || 'Network error', options);
     }
+  }
+  if (typeof window !== 'undefined' && window.addEventListener) {
+    window.addEventListener('message', handleBrowserBridgeMessage);
   }
   if (form) {
     form.addEventListener('submit', (event) => {

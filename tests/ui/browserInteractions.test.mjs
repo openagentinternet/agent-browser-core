@@ -48,6 +48,18 @@ test('generated client script compiles', () => {
   assert.doesNotThrow(() => new Function(script));
 });
 
+test('client script includes custom homepage iframe navigation bridge', () => {
+  const script = ui.buildBrowserClientScript({ apiBasePath: '/api/browser', initialUri: 'metaid://idq1fixturebot' });
+
+  assert.match(script, /function isBrowserInternalHref\(value\)/);
+  assert.match(script, /function currentBrowserHtmlFrameWindow\(\)/);
+  assert.match(script, /function handleBrowserBridgeMessage\(event\)/);
+  assert.match(script, /agent-browser:navigate/);
+  assert.match(script, /window\.addEventListener\('message', handleBrowserBridgeMessage\)/);
+  assert.match(script, /event\.source !== sourceWindow/);
+  assert.match(script, /navigateTo\(uri\)\.catch\(\(\) => \{\}\)/);
+});
+
 test('client script includes drawer inspector share and trusted action flows', () => {
   const script = ui.buildBrowserClientScript({ apiBasePath: '/api/browser', initialUri: 'metaid://idq1fixturebot' });
 

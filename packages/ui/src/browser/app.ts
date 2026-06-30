@@ -202,6 +202,7 @@ var state = {
   pinEntityProfiles: {},
   pinEntityProfilePending: {},
   enrichToken: 0,
+  bridgeMessageListenerBound: false,
   standaloneWalletPlaceholderActor: null
 };
 
@@ -337,6 +338,23 @@ function buildMetafileContentHref(reference) {
 
 function isBrowserInternalHref(value) {
   return /^(metaid|metaapp|metafile|map|pin):\\/\\//i.test(textValue(value));
+}
+
+function currentBrowserHtmlFrameWindow() {
+  var frame = elements.viewport && elements.viewport.querySelector
+    ? elements.viewport.querySelector('iframe.browser-html-frame')
+    : null;
+  return frame && frame.contentWindow ? frame.contentWindow : null;
+}
+
+function handleBrowserBridgeMessage(event) {
+  var data = event && event.data && typeof event.data === 'object' ? event.data : null;
+  if (!data || data.type !== 'agent-browser:navigate' || data.version !== 1) return;
+  var uri = textValue(data.uri);
+  if (!isBrowserInternalHref(uri)) return;
+  var sourceWindow = currentBrowserHtmlFrameWindow();
+  if (!sourceWindow || event.source !== sourceWindow) return;
+  navigateTo(uri);
 }
 
 function resolveDownloadHref(reference) {
@@ -4294,6 +4312,10 @@ function handleCopyValue(event) {
 
 async function initialize() {
   bindElements();
+  if (!state.bridgeMessageListenerBound && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('message', handleBrowserBridgeMessage);
+    state.bridgeMessageListenerBound = true;
+  }
   if (elements.drawer) elements.drawer.hidden = true;
   if (elements.inspector) elements.inspector.hidden = true;
   if (elements.modalRoot) elements.modalRoot.hidden = true;
@@ -4631,6 +4653,8 @@ globalThis.loadRuntime = loadRuntime;
 globalThis.loadContext = loadContext;
 globalThis.resolveUri = resolveUri;
 globalThis.navigateTo = navigateTo;
+globalThis.currentBrowserHtmlFrameWindow = currentBrowserHtmlFrameWindow;
+globalThis.handleBrowserBridgeMessage = handleBrowserBridgeMessage;
 globalThis.reloadCurrent = reloadCurrent;
 globalThis.goBack = goBack;
 globalThis.goForward = goForward;

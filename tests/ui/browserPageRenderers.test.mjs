@@ -39,12 +39,15 @@ class FakeElement {
     this.hidden = false;
     this.attrs = {};
     this.listeners = new Map();
+    this.childrenBySelector = new Map();
     this.classList = { add() {}, remove() {}, toggle() {} };
   }
   addEventListener(eventName, handler) { this.listeners.set(eventName, handler); }
   setAttribute(name, value) { this.attrs[name] = String(value); }
   getAttribute(name) { return this.attrs[name] || ''; }
   hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attrs, name); }
+  querySelector(selector) { return this.childrenBySelector.get(selector) || null; }
+  setChild(selector, value) { this.childrenBySelector.set(selector, value); }
 }
 
 function waitFor(condition, label) {
@@ -87,6 +90,7 @@ function elements() {
 function runWithResolve(resolvePayload, options = {}) {
   const nodes = elements();
   const fetchCalls = [];
+  const windowListeners = new Map();
   const infoProfiles = options.infoProfiles || {};
   const context = {
     console,
@@ -99,7 +103,11 @@ function runWithResolve(resolvePayload, options = {}) {
     Error,
     setTimeout,
     clearTimeout,
-    window: { location: { search: '?uri=metaid%3A%2F%2Fidq1fixturebot' }, history: { replaceState() {} } },
+    window: {
+      location: { search: '?uri=metaid%3A%2F%2Fidq1fixturebot' },
+      history: { replaceState() {} },
+      addEventListener(eventName, handler) { windowListeners.set(eventName, handler); },
+    },
     document: {
       readyState: 'complete',
       querySelector: (selector) => nodes[selector] ?? null,
@@ -121,7 +129,7 @@ function runWithResolve(resolvePayload, options = {}) {
     },
   };
   vm.runInNewContext(buildBrowserPageDefinition().script, context);
-  return { context, nodes, fetchCalls };
+  return { context, nodes, fetchCalls, windowListeners };
 }
 
 function result(renderer, overrides = {}) {
@@ -876,6 +884,53 @@ test('html-iframe renderer is sandboxed without privileged permissions', async (
   assert.doesNotMatch(html, /allow-same-origin/);
   assert.doesNotMatch(html, /allow-top-navigation/);
   assert.doesNotMatch(html, /wallet|payment|signing/i);
+});
+
+test('html-iframe navigation bridge accepts only active iframe internal URI messages', async () => {
+  const targetUri = `pin://${servicePinId}`;
+  const activeFrameWindow = {};
+  const inactiveFrameWindow = {};
+  const { nodes, fetchCalls, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  assert.equal(typeof listener, 'function');
+
+  listener({
+    data: { type: 'agent-browser:navigate', version: 1, uri: targetUri },
+    source: inactiveFrameWindow,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(fetchCalls.some((url) => String(url).includes(`uri=${encodeURIComponent(targetUri)}`)), false);
+
+  listener({
+    data: { type: 'agent-browser:navigate', version: 1, uri: 'https://example.com' },
+    source: activeFrameWindow,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(fetchCalls.some((url) => String(url).includes('https%3A%2F%2Fexample.com')), false);
+
+  listener({
+    data: { type: 'agent-browser:navigate', version: 1, uri: 'javascript:alert(1)' },
+    source: activeFrameWindow,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(fetchCalls.some((url) => String(url).includes('javascript%3Aalert')), false);
+
+  listener({
+    data: { type: 'agent-browser:navigate', version: 1, uri: targetUri },
+    source: activeFrameWindow,
+  });
+  await waitFor(
+    () => fetchCalls.some((url) => String(url).includes(`uri=${encodeURIComponent(targetUri)}`)),
+    'bridge navigation resolve',
+  );
 });
 
 test('custom Bot Page alias renders target renderer while preserving source details', async () => {
