@@ -91,8 +91,8 @@ max-width approximately 640px.
 ### Hero
 
 - Title/logo: `Agent Internet`.
-- Subtitle: `在地址栏输入 metaid:// URI 即可访问` (i18n via the existing `browserText()` /
-  `browserLaunchCopy['zh-CN']` pattern; an English fallback string is also provided).
+- Subtitle: `Enter a metaid:// URI in the address bar to visit a resource.` ABC v1 renders
+  Browser chrome in English only; hosts can add localization outside the shared default UI.
 - A prompt-shaped input mock: a styled element resembling the address bar with a `metaid://`
   hint and a search icon. Clicking it focuses the real top address bar input. This element is
   purely visual; it is styled with care (rounded corners, balanced padding, icon alignment, a

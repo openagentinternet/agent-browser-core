@@ -194,6 +194,7 @@ test('resolveBrowserResource dispatches metafile URI to ManAPI file metadata', a
 
 const customMetaAppPinId = 'c06b7a2db6efa241560a2356e9966cf9758dae3ec9c795f614a652b113e30329i0';
 const customMetafilePinId = 'f038f3f06c0781e24cc89c25e5145fd225c13309acdad2db7b911d99aa160c98i0';
+const customBotAvatarPinId = '7'.repeat(64) + 'i0';
 const metaAppOwnerAvatarId = '9'.repeat(64) + 'i0';
 
 function browserConfig(overrides = {}) {
@@ -220,6 +221,10 @@ function homepageWithCustom(custom) {
     },
     profile: {
       name: 'Custom Bot',
+      avatar: {
+        pinId: customBotAvatarPinId,
+        contentType: 'image/png',
+      },
       bio: 'Custom summary.',
       homepage: custom
         ? {
@@ -480,7 +485,13 @@ test('resolveBrowserResource aliases custom metaapp homepage without rewriting n
   assert.equal(result.data.uri, 'metaid://idq1custombot');
   assert.equal(result.data.normalizedUri, 'metaid://idq1custombot');
   assert.equal(result.data.resourceType, 'metaapp');
-  assert.equal(result.data.owner.globalMetaId, 'idq1metaappowner');
+  assert.equal(result.data.owner.kind, 'bot');
+  assert.equal(result.data.owner.globalMetaId, 'idq1custombot');
+  assert.equal(result.data.owner.name, 'Custom Bot');
+  assert.equal(
+    result.data.owner.avatar,
+    `https://file.metaid.io/metafile-indexer/content/${customBotAvatarPinId}`,
+  );
   assert.equal(result.data.renderer.type, 'html-iframe');
   assert.equal(result.data.actions.find((action) => action.id === 'copy-uri').uri, 'metaid://idq1custombot');
   assert.equal(result.data.source.raw.aliasUri, 'metaid://idq1custombot');
@@ -535,6 +546,13 @@ test('resolveBrowserResource aliases custom metafile homepage without rewriting 
   assert.equal(result.data.uri, 'metaid://idq1custombot');
   assert.equal(result.data.normalizedUri, 'metaid://idq1custombot');
   assert.equal(result.data.resourceType, 'image');
+  assert.equal(result.data.owner.kind, 'bot');
+  assert.equal(result.data.owner.globalMetaId, 'idq1custombot');
+  assert.equal(result.data.owner.name, 'Custom Bot');
+  assert.equal(
+    result.data.owner.avatar,
+    `https://file.metaid.io/metafile-indexer/content/${customBotAvatarPinId}`,
+  );
   assert.equal(result.data.renderer.type, 'image');
   assert.equal(result.data.renderer.url, `https://file.metaid.io/metafile-indexer/api/v1/files/accelerate/content/${customMetafilePinId}`);
   assert.equal(result.data.actions.find((action) => action.id === 'copy-uri').uri, 'metaid://idq1custombot');

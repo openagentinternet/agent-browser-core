@@ -67,7 +67,7 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
             </button>
           </form>
-          <button type="button" class="browser-icon-button browser-bookmark-star" data-browser-bookmark-star aria-label="收藏当前页面" title="Bookmark this page" disabled>
+          <button type="button" class="browser-icon-button browser-bookmark-star" data-browser-bookmark-star aria-label="Bookmark this page" title="Bookmark this page" disabled>
             <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
           </button>
           <div class="browser-owner-chip-wrap">
@@ -132,50 +132,6 @@ var browserEndpoints = {
   metafileUpload: '/api/browser/metafile-upload',
 };
 
-var browserLaunchCopy = {
-  'zh-CN': {
-    'runtime.actorChip': '当前 Bot',
-    'runtime.noActorTitle': '创建你的第一个 Bot',
-    'runtime.noActorBody': '本地 Agent 需要先拥有一个 Bot 身份，才能出现在 Bot Internet 上。',
-    'runtime.noActorAction.label': '创建 Bot',
-    'resource.emptyTitle': '没有资源',
-    'status.unverified': '未验证',
-    'status.rendererNone': '渲染器：无',
-    'ownerPanel.visitHome': '访问主页',
-    'ownerPanel.sendMessage': '发送信息',
-    'ownerPanel.follow': '关注该 Bot',
-    'ownerPanel.copied': '已复制',
-    'ownerPanel.copyMetaId': '复制 GlobalMetaId',
-    'privateChat.messageSentTitle': '信息已发送',
-    'privateChat.messageSentBody': '信息已发送。',
-    'privateChat.viewConversation': '查看对话',
-    'modal.close': '关闭',
-    'modal.cancel': '取消',
-    'modal.ok': '确定',
-    'modal.usingActorTitle': '选择当前 Bot',
-    'wallet.connect': '连接钱包',
-    'wallet.selectTitle': 'Select a wallet to connect',
-    'wallet.unsupportedProvider': 'Coming soon',
-    'wallet.logout': 'Logout',
-    'wallet.installTitle': '安装钱包',
-    'wallet.installBody': '请先安装钱包扩展。',
-    'wallet.installAction': '安装',
-    'bookmark.starLabel': '收藏当前页面',
-    'bookmark.starLabelActive': '已收藏，点击移除书签',
-    'bookmark.added': '已添加书签',
-    'bookmark.removed': '已移除书签',
-    'bookmark.removeTitle': '移除书签',
-    'bookmark.removeConfirm': '确定要移除该书签吗？',
-    'bookmark.removeLabel': '移除',
-    'welcome.title': 'Agent Internet',
-    'welcome.subtitle': '在地址栏输入 metaid:// URI 即可访问',
-    'welcome.promptPlaceholder': 'metaid://',
-    'welcome.gridHeading': '书签 / 最近访问',
-    'status.standaloneUnsupported': '网页版暂时不支持此功能',
-    'standaloneUnsupported.title': '暂不支持'
-  }
-};
-
 var state = {
   history: [],
   historyIndex: -1,
@@ -214,21 +170,8 @@ function textValue(value) {
   return String(value).trim();
 }
 
-function browserLanguage() {
-  if (typeof document !== 'undefined' && document.documentElement && document.documentElement.lang) {
-    var lang = String(document.documentElement.lang).trim();
-    if (lang) return lang;
-  }
-  return 'en';
-}
-
-function browserIsZhCN() {
-  return browserLanguage().toLowerCase() === 'zh-cn';
-}
-
 function browserText(key, fallback) {
-  var dictionary = browserIsZhCN() ? browserLaunchCopy['zh-CN'] : null;
-  return dictionary && dictionary[key] ? dictionary[key] : fallback;
+  return fallback;
 }
 
 function escapeHtml(value) {
@@ -2624,9 +2567,9 @@ function renderChatActivityRow(item) {
   var pinBadge = pinBadgeHtml(item.pinId);
   var contentHtml = '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-width:0;line-height:1.5;color:#344054;">' +
     renderActivityPerson(item.actorName, item.actorAvatar, '') +
-    '<span style="color:#667085;">' + escapeHtml('在 ' + dateText + ' 和') + '</span>' +
+    '<span style="color:#667085;"> interacted with </span>' +
     renderActivityPerson(item.partnerName, item.partnerAvatar, item.partnerHref, 'data-chat-partner') +
-    '<span style="color:#667085;">发生了互动</span>' +
+    '<span style="color:#667085;">' + escapeHtml(' on ' + dateText) + '</span>' +
     pinBadge +
     '</div>';
   var peerAttr = item.partnerGlobalMetaId ? ' data-chat-peer="' + escapeHtml(item.partnerGlobalMetaId) + '"' : '';

@@ -421,13 +421,13 @@ test('bot-page renderer mixes buzzes and chats in Recent Activity by descending 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Recent Activity'), 'mixed recent activity render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
   assert.equal((html.match(/class="browser-activity-row"/g) || []).length, 6);
-  assert.match(html, /在 2026-06-19 和/);
-  assert.match(html, />Eric<\/span><\/span><span style="color:#667085;">在 2026-06-19 和<\/span>/);
+  assert.match(html, />Eric<\/span><\/span><span style="color:#667085;"> interacted with <\/span>/);
   assert.match(html, new RegExp(`href="metaid://${chatPeerSunny}"[^>]*data-browser-map-link`));
   assert.match(html, /AI_Sunny<\/span><\/a>/);
+  assert.match(html, /AI_Sunny<\/span><\/a><span style="color:#667085;"> on 2026-06-19<\/span>/);
   assert.match(html, new RegExp(escapeRegExp(chatPeerSunnyAvatarUrl)));
   assert.match(html, new RegExp(escapeRegExp(chatPeerDonAvatarUrl)));
-  assert.match(html, /发生了互动/);
+  assert.doesNotMatch(html, /[\u4e00-\u9fff]/);
   assert.ok(html.indexOf('Published new build.') < html.indexOf('AI_Sunny'), 'latest buzz should render before newer chat peers');
   assert.ok(html.indexOf('AI_Sunny') < html.indexOf('don-bot'), 'newer chat should render before older chat');
   assert.ok(html.indexOf('don-bot') < html.indexOf('Published earlier build.'), 'older buzz should remain below newer chat');

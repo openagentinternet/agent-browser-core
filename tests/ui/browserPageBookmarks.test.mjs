@@ -332,11 +332,11 @@ test('toggleBookmark shows a toast and toggles the bookmark', async () => {
   context.toggleBookmark();
   assert.equal(context.state.bookmarks.length, 1);
   assert.equal(elements['[data-browser-toast]'].hidden, false);
-  assert.ok(['已添加书签', 'Bookmark added'].includes(elements['[data-browser-toast]'].textContent));
+  assert.equal(elements['[data-browser-toast]'].textContent, 'Bookmark added');
   assert.equal(elements['[data-browser-toast]'].classList.contains('is-visible'), true);
   context.toggleBookmark();
   assert.equal(context.state.bookmarks.length, 0);
-  assert.ok(['已移除书签', 'Bookmark removed'].includes(elements['[data-browser-toast]'].textContent));
+  assert.equal(elements['[data-browser-toast]'].textContent, 'Bookmark removed');
   assert.equal(elements['[data-browser-bookmark-star]'].classList.contains('is-active'), false);
 });
 
@@ -396,7 +396,7 @@ test('confirming the delete-bookmark modal removes the bookmark and closes the m
   assert.equal(context.state.bookmarks.length, 0);
   assert.equal(context.state.pendingBookmarkRemoval, '');
   assert.equal(elements['[data-browser-modal-root]'].hidden, true);
-  assert.ok(['已移除书签', 'Bookmark removed'].includes(elements['[data-browser-toast]'].textContent));
+  assert.equal(elements['[data-browser-toast]'].textContent, 'Bookmark removed');
   const stored = JSON.parse(storage.getItem('agent-browser:bookmarks'));
   assert.equal(stored.length, 0);
 });
