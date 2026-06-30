@@ -3,12 +3,14 @@ import type {
   BrowserCommandResult,
   BrowserHostAdapter,
   BrowserHostKind,
+  BrowserTrustedActionInput,
 } from '@openagentinternet/agent-browser-host-contract';
 
 export interface BrowserHostConformanceInput {
   adapter: BrowserHostAdapter;
   expectedHostKind: BrowserHostKind;
   sampleUri: string;
+  trustedAction?: BrowserTrustedActionInput;
 }
 
 const RESOURCE_TYPES = ['bot', 'metaapp', 'document', 'image', 'pdf', 'protocol', 'conversation', 'pin', 'unsupported', 'unknown'];
@@ -17,6 +19,22 @@ const RENDERER_TYPES = ['bot-page', 'html-iframe', 'pdf', 'image', 'video', 'pro
 const RESOLUTION_STATES = ['resolved', 'loading', 'not_found', 'error'];
 const VERIFICATION_STATES = ['verified', 'partial', 'unverified'];
 const RESOURCE_ACTION_KINDS = ['private-chat', 'service-list', 'service-call', 'copy', 'proof', 'creator', 'open-conversation'];
+const TRUSTED_ACTION_KINDS = [
+  'private-chat',
+  'service-call',
+  'copy-uri',
+  'open-settings',
+  'login',
+  'wallet-sign',
+  'payment',
+  'edit-profile',
+  'configure-chat',
+  'view-messages',
+  'open-conversation',
+  'share-resource',
+  'metaid-pin-write',
+  'metafile-upload',
+];
 
 function assertAllowedString(value: unknown, allowed: readonly string[], label: string): asserts value is string {
   if (typeof value !== 'string') {
@@ -144,14 +162,16 @@ export async function assertBrowserHostConformance(input: BrowserHostConformance
     assertAllowedString(resolved.data.proof.verificationState, VERIFICATION_STATES, 'resolveResource proof verificationState');
   }
 
-  const unsupported = await input.adapter.runTrustedAction({
+  const trustedAction = input.trustedAction ?? {
     resourceUri: input.sampleUri,
     kind: 'payment',
     payload: {},
-  });
+  };
+  const unsupported = await input.adapter.runTrustedAction(trustedAction);
   assertBrowserCommandResultShape(unsupported, 'runTrustedAction');
   if (unsupported.ok) {
-    assert.equal(unsupported.data.kind, 'payment');
+    assertAllowedString(unsupported.data.kind, TRUSTED_ACTION_KINDS, 'runTrustedAction kind');
+    assert.equal(unsupported.data.kind, trustedAction.kind);
     assert.equal(typeof unsupported.data.handled, 'boolean');
   }
 }

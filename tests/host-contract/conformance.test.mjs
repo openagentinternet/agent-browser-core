@@ -189,6 +189,53 @@ test('host conformance accepts successful trusted actions', async () => {
   });
 });
 
+test('host conformance accepts MetaApp bridge trusted action kinds', async () => {
+  let called = false;
+  const adapter = createConformantAdapter({
+    async runTrustedAction(input) {
+      if (input.kind === 'metaid-pin-write') {
+        called = true;
+        return browserSuccess({
+          kind: 'metaid-pin-write',
+          handled: true,
+          data: {
+            pinId: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+            txid: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7',
+            operation: 'create',
+            path: '/protocols/simplebuzz',
+            actor: {
+              uri: 'metaid://idq1actor',
+              globalMetaId: 'idq1actor',
+              name: 'Actor',
+            },
+          },
+        });
+      }
+      return browserFailure('unsupported_action', `Unsupported action: ${input.kind}`);
+    },
+  });
+
+  await assertBrowserHostConformance({
+    adapter,
+    expectedHostKind: 'standalone',
+    sampleUri: 'metaid://idq1fake',
+    trustedAction: {
+      resourceUri: 'metaapp://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+      kind: 'metaid-pin-write',
+      payload: {
+        operation: 'create',
+        path: '/protocols/simplebuzz',
+        encryption: '0',
+        version: '1.0.0',
+        contentType: 'application/json;utf-8',
+        payload: { encoding: 'utf8', value: '{"content":"hello"}' },
+      },
+    },
+  });
+
+  assert.equal(called, true);
+});
+
 test('host conformance accepts waiting trusted actions', async () => {
   const adapter = createConformantAdapter({
     async runTrustedAction() {

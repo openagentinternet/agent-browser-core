@@ -45,3 +45,49 @@ test('Browser command shape accepts conversation href follow-up actions', () => 
     'open-conversation',
   );
 });
+
+test('Browser command shape accepts MetaID PIN write data', () => {
+  harness.assertBrowserCommandResultShape(
+    contract.browserSuccess({
+      kind: 'metaid-pin-write',
+      handled: true,
+      data: {
+        pinId: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        txid: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7',
+        operation: 'create',
+        path: '/protocols/simplebuzz',
+        actor: {
+          uri: 'metaid://idq1actor',
+          globalMetaId: 'idq1actor',
+          name: 'Actor',
+          avatarPinId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaai0',
+        },
+      },
+    }),
+    'metaid-pin-write',
+  );
+});
+
+test('Browser command shape accepts MetaFile upload data', () => {
+  harness.assertBrowserCommandResultShape(
+    contract.browserSuccess({
+      kind: 'metafile-upload',
+      handled: true,
+      data: {
+        files: [{
+          pinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+          uri: 'metafile://7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0.pdf',
+          name: 'paper.pdf',
+          size: 1234,
+          contentType: 'application/pdf',
+          actor: {
+            uri: 'metaid://idq1actor',
+            globalMetaId: 'idq1actor',
+            name: 'Actor',
+          },
+        }],
+      },
+    }),
+    'metafile-upload',
+  );
+});
