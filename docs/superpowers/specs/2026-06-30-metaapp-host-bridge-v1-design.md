@@ -216,6 +216,10 @@ Rules:
 - `operation`, `path`, `encryption`, `version`, `contentType`, and `payload` map directly to the
   MetaID OP_RETURN tuple: `metaid`, operation, path, encryption, version, content type, content body.
 - `create`, `modify`, and `revoke` are first-class peer operations in v1.
+- `create` uses an absolute MetaID protocol path beginning with `/`; `modify` and `revoke` use
+  `@<pinId>` to target the existing PIN.
+- If `originalId` is present for `modify` or `revoke`, it must match the `@<pinId>` target.
+- `revoke` may use an empty UTF-8 payload.
 - ABC must not interpret app-level protocols such as simplebuzz, notes, likes, replies, or netdisk.
 - The parent bridge validates the basic schema before forwarding to the host.
 - The host must re-read the active actor at execution time. A previously returned actor snapshot is

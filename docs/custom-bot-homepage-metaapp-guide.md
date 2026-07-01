@@ -171,8 +171,10 @@ await window.AgentBrowser.request({
 });
 ```
 
-The same method shape is used for `create`, `modify`, and `revoke`. The host signs and broadcasts
-with the current actor when it supports write actions.
+The same method shape is used for `create`, `modify`, and `revoke`. Use an absolute MetaID protocol
+path such as `/protocols/simplebuzz` for `create`. Use `@<pinId>` for `modify` and `revoke`; when
+`originalId` is present, it must match the target pin id. `revoke` may use an empty UTF-8 payload.
+The host signs and broadcasts with the current actor when it supports write actions.
 
 ## Uploading Files
 

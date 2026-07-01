@@ -152,6 +152,10 @@ ABC forwards this to the host action endpoint as:
 Host requirements:
 
 - Accept `create`, `modify`, and `revoke` as peer operations.
+- Treat `path` as operation-specific: `create` requires an absolute MetaID protocol path beginning
+  with `/`; `modify` and `revoke` require `@<pinId>` and target that existing PIN.
+- When `originalId` is present for `modify` or `revoke`, require it to match the `@<pinId>` target.
+- Allow `revoke` to carry an empty UTF-8 payload.
 - Validate the payload again in the host adapter. ABC validation is only the first boundary.
 - Require a selected actor with a usable MetaID signing path.
 - Re-read the selected actor at execution time, even when the request includes an `actorId` query

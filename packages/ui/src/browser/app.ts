@@ -350,30 +350,71 @@ function isPlainObject(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
+function normalizePinWriteTargetPinId(value) {
+  var pinId = textValue(value).toLowerCase();
+  return isBrowserPinId(pinId) ? pinId : '';
+}
+
+function validatePinWritePath(operation, rawPath) {
+  var path = textValue(rawPath);
+  if (!path) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write path is required.' } };
+  }
+  if (operation === 'create') {
+    if (path.charAt(0) !== '/') {
+      return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN create path must start with /.' } };
+    }
+    return { ok: true, path: path };
+  }
+  if (path.charAt(0) !== '@') {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN modify/revoke path must be @<targetPinId>.' } };
+  }
+  var targetPinId = normalizePinWriteTargetPinId(path.slice(1));
+  if (!targetPinId) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN modify/revoke target pin id is invalid.' } };
+  }
+  return { ok: true, path: '@' + targetPinId, targetPinId: targetPinId };
+}
+
+function validatePinWriteOriginalId(input, targetPinId) {
+  var originalId = textValue(input.originalId);
+  if (!originalId) return { ok: true, originalId: '' };
+  var normalizedOriginalId = normalizePinWriteTargetPinId(originalId);
+  if (!normalizedOriginalId) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write originalId is invalid.' } };
+  }
+  if (targetPinId && normalizedOriginalId !== targetPinId) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write originalId must match the target pin id.' } };
+  }
+  return { ok: true, originalId: normalizedOriginalId };
+}
+
 function validatePinWriteParams(params) {
   var input = isPlainObject(params) ? params : {};
   var operation = textValue(input.operation);
   if (['create', 'modify', 'revoke'].indexOf(operation) === -1) {
     return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write operation must be create, modify, or revoke.' } };
   }
-  var path = textValue(input.path);
-  if (!path || path.charAt(0) !== '/') {
-    return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write path must start with /.' } };
-  }
+  var pathValidation = validatePinWritePath(operation, input.path);
+  if (!pathValidation.ok) return pathValidation;
   var payload = isPlainObject(input.payload) ? input.payload : {};
   var encoding = textValue(payload.encoding);
-  if (['utf8', 'base64'].indexOf(encoding) === -1 || !textValue(payload.value)) {
+  var payloadValue = textValue(payload.value);
+  var allowEmptyPayload = operation === 'revoke' && encoding === 'utf8';
+  if (['utf8', 'base64'].indexOf(encoding) === -1 || (!payloadValue && !allowEmptyPayload)) {
     return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write payload must include utf8 or base64 data.' } };
   }
+  var originalIdValidation = validatePinWriteOriginalId(input, pathValidation.targetPinId);
+  if (!originalIdValidation.ok) return originalIdValidation;
   var value = {
     operation: operation,
-    path: path,
+    path: pathValidation.path,
     encryption: textValue(input.encryption),
     version: textValue(input.version),
     contentType: textValue(input.contentType),
-    payload: { encoding: encoding, value: textValue(payload.value) }
+    payload: { encoding: encoding, value: payloadValue }
   };
-  if (textValue(input.originalId)) value.originalId = textValue(input.originalId);
+  if (originalIdValidation.originalId) value.originalId = originalIdValidation.originalId;
   if (textValue(input.appAction)) value.appAction = textValue(input.appAction);
   if (isPlainObject(input.display)) value.display = input.display;
   return { ok: true, value: value };

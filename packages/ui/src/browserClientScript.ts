@@ -138,30 +138,68 @@ export function buildBrowserClientScript(input: BrowserClientScriptInput): strin
     if (avatarPinId) snapshot.avatarPinId = avatarPinId;
     return snapshot;
   }
+  function normalizePinWriteTargetPinId(value) {
+    const pinId = textValue(value).toLowerCase();
+    return /^[0-9a-f]{64}i[0-9]+$/i.test(pinId) ? pinId : '';
+  }
+  function validatePinWritePath(operation, rawPath) {
+    const path = textValue(rawPath);
+    if (!path) {
+      return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write path is required.' } };
+    }
+    if (operation === 'create') {
+      if (path.charAt(0) !== '/') {
+        return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN create path must start with /.' } };
+      }
+      return { ok: true, path };
+    }
+    if (path.charAt(0) !== '@') {
+      return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN modify/revoke path must be @<targetPinId>.' } };
+    }
+    const targetPinId = normalizePinWriteTargetPinId(path.slice(1));
+    if (!targetPinId) {
+      return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN modify/revoke target pin id is invalid.' } };
+    }
+    return { ok: true, path: '@' + targetPinId, targetPinId };
+  }
+  function validatePinWriteOriginalId(input, targetPinId) {
+    const originalId = textValue(input.originalId);
+    if (!originalId) return { ok: true, originalId: '' };
+    const normalizedOriginalId = normalizePinWriteTargetPinId(originalId);
+    if (!normalizedOriginalId) {
+      return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write originalId is invalid.' } };
+    }
+    if (targetPinId && normalizedOriginalId !== targetPinId) {
+      return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write originalId must match the target pin id.' } };
+    }
+    return { ok: true, originalId: normalizedOriginalId };
+  }
   function validatePinWriteParams(params) {
     const input = objectValue(params);
     const operation = textValue(input.operation);
     if (!['create', 'modify', 'revoke'].includes(operation)) {
       return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write operation must be create, modify, or revoke.' } };
     }
-    const path = textValue(input.path);
-    if (!path || path.charAt(0) !== '/') {
-      return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write path must start with /.' } };
-    }
+    const pathValidation = validatePinWritePath(operation, input.path);
+    if (!pathValidation.ok) return pathValidation;
     const payload = objectValue(input.payload);
     const encoding = textValue(payload.encoding);
-    if (!['utf8', 'base64'].includes(encoding) || !textValue(payload.value)) {
+    const payloadValue = textValue(payload.value);
+    const allowEmptyPayload = operation === 'revoke' && encoding === 'utf8';
+    if (!['utf8', 'base64'].includes(encoding) || (!payloadValue && !allowEmptyPayload)) {
       return { ok: false, error: { code: 'invalid_params', message: 'MetaID PIN write payload must include utf8 or base64 data.' } };
     }
+    const originalIdValidation = validatePinWriteOriginalId(input, pathValidation.targetPinId);
+    if (!originalIdValidation.ok) return originalIdValidation;
     const value = {
       operation,
-      path,
+      path: pathValidation.path,
       encryption: textValue(input.encryption),
       version: textValue(input.version),
       contentType: textValue(input.contentType),
-      payload: { encoding, value: textValue(payload.value) }
+      payload: { encoding, value: payloadValue }
     };
-    if (textValue(input.originalId)) value.originalId = textValue(input.originalId);
+    if (originalIdValidation.originalId) value.originalId = originalIdValidation.originalId;
     if (textValue(input.appAction)) value.appAction = textValue(input.appAction);
     if (input.display && typeof input.display === 'object' && !Array.isArray(input.display)) value.display = input.display;
     return { ok: true, value };
