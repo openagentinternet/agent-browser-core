@@ -244,13 +244,18 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
 });
 
 test('bot-page Overview renders both Primary and Fallback LLM provider chips', async () => {
+  // Mirrors the real v3 homepage shape (e.g. so.metaid.io bot-homepage API),
+  // where profile.llm.payload carries both primaryProvider and fallbackProvider.
   const homepage = {
     schemaVersion: 'botHomepage.v3',
     identity: { globalMetaId: 'idq1llmbot' },
     profile: {
       name: 'LLM Bot',
       bio: 'Runs on two providers.',
-      llm: { pinId: 'llm-pin', payload: { primaryProvider: 'claude-code', fallbackProvider: 'gemini' } },
+      llm: {
+        pinId: '3e9d1dc7e8f3d972fe1cfce6cb4715f9f88ddf5c2779a5b75c8a0f2dfb9adaf2i0',
+        payload: { primaryProvider: 'codex', fallbackProvider: 'cursor' },
+      },
     },
     sections: [],
   };
@@ -271,9 +276,9 @@ test('bot-page Overview renders both Primary and Fallback LLM provider chips', a
   const html = nodes['[data-browser-viewport]'].innerHTML;
   assert.match(html, /browser-llm-chips/);
   assert.match(html, /Primary/);
-  assert.match(html, /Claude Code/);
+  assert.match(html, /Codex/);
   assert.match(html, /Fallback/);
-  assert.match(html, /Gemini/);
+  assert.match(html, /Cursor/);
   // both chips carry the icon wrapper, and each renders an inlined <svg>.
   assert.equal((html.match(/browser-llm-provider-chip/g) || []).length, 2);
   assert.equal((html.match(/browser-llm-provider-icon/g) || []).length, 2);
