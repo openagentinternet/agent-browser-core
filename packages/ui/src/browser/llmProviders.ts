@@ -2,7 +2,7 @@
 //
 // The icons are inlined as SVG markup (copied from the Open Agent Connect
 // platform asset set at src/ui/assets/platforms/) so the bot homepage renders
-// correct provider branding on every host (standalone, OAC, IDBots) without
+// correct provider branding on every host without
 // each host having to serve its own static asset directory. Inlining mirrors
 // how the Browser shell's own chrome icons work (see iconHtml() in app.ts).
 //
@@ -153,4 +153,3 @@ export const LLM_PROVIDERS: Record<string, LlmProviderInfo> = {
 // Point WorkBuddy at the CodeBuddy icon (defined above) after the table so the
 // reference reads cleanly.
 LLM_PROVIDERS['workbuddy'].icon = LLM_PROVIDERS['codebuddy'].icon;
-

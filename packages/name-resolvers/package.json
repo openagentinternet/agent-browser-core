@@ -1,6 +1,6 @@
 {
   "name": "@openagentinternet/agent-browser-name-resolvers",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -16,6 +16,10 @@
     "dist/index.d.ts.map",
     "dist/index.js",
     "dist/index.js.map",
+    "dist/providers.d.ts",
+    "dist/providers.d.ts.map",
+    "dist/providers.js",
+    "dist/providers.js.map",
     "dist/ens.d.ts",
     "dist/ens.d.ts.map",
     "dist/ens.js",
@@ -23,6 +27,8 @@
     "dist-cjs/package.json",
     "dist-cjs/index.js",
     "dist-cjs/index.js.map",
+    "dist-cjs/providers.js",
+    "dist-cjs/providers.js.map",
     "dist-cjs/ens.js",
     "dist-cjs/ens.js.map"
   ],
@@ -34,7 +40,7 @@
     }
   },
   "dependencies": {
-    "@openagentinternet/agent-browser-core": "0.3.5",
+    "@openagentinternet/agent-browser-core": "0.3.6",
     "viem": "2.0.0"
   },
   "scripts": {

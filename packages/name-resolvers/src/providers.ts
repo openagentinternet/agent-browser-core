@@ -33,8 +33,8 @@ export interface CreateBrowserNameAliasProvidersInput {
  * Build the list of name-alias providers for a Browser host from its resolved
  * configuration.
  *
- * The gating rules mirror the standalone host so every host (standalone, OAC,
- * IDBots) applies identical, core-derived name-resolution semantics:
+ * The gating rules mirror the standalone host so every host uses identical,
+ * core-derived name-resolution semantics:
  *
  * - When name resolution is disabled, no providers are returned.
  * - When the host supplies its own providers, they are used as-is (with the
