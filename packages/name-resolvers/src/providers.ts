@@ -1,0 +1,92 @@
+import {
+  resolveBrowserConfig,
+  type BrowserBaseConfig,
+  type BrowserNameAliasProvider,
+} from '@openagentinternet/agent-browser-core';
+import { createEnsOpenAgentInternetResolver } from './ens.js';
+
+export interface CreateBrowserNameAliasProvidersInput {
+  /**
+   * Providers supplied by the host. When present, these take precedence over
+   * the built-in ENS provider, mirroring the host-override behavior used by
+   * the standalone host.
+   */
+  configured?: BrowserNameAliasProvider[];
+  /**
+   * Resolved Browser configuration. This is the output of
+   * `resolveBrowserConfig()` and carries the `nameResolution` gating fields
+   * that decide whether ENS resolution is enabled.
+   */
+  config: BrowserBaseConfig;
+  /**
+   * Optional factory override for the built-in ENS provider, primarily used
+   * for testing. Defaults to `createEnsOpenAgentInternetResolver`.
+   */
+  ensNameAliasProviderFactory?: (config: {
+    chainId: 1;
+    rpcUrls: string[];
+    textKey: string;
+  }) => BrowserNameAliasProvider;
+}
+
+/**
+ * Build the list of name-alias providers for a Browser host from its resolved
+ * configuration.
+ *
+ * The gating rules mirror the standalone host so every host (standalone, OAC,
+ * IDBots) applies identical, core-derived name-resolution semantics:
+ *
+ * - When name resolution is disabled, no providers are returned.
+ * - When the host supplies its own providers, they are used as-is (with the
+ *   built-in ENS provider filtered out when ENS is disabled).
+ * - Otherwise, when ENS is enabled, the built-in ENS provider is constructed
+ *   from the resolved configuration.
+ *
+ * Hosts that do not pass `nameAliasProviders` to `resolveBrowserResource`
+ * will see ENS names fail with "Name alias resolution is not configured."
+ * Calling this helper closes that gap without each host re-implementing the
+ * wiring.
+ */
+export function createBrowserNameAliasProviders(
+  input: CreateBrowserNameAliasProvidersInput,
+): BrowserNameAliasProvider[] {
+  const nameResolution = input.config.nameResolution;
+  if (!nameResolution.enabled) {
+    return [];
+  }
+  if (input.configured) {
+    if (!nameResolution.ens.enabled) {
+      return input.configured.filter((provider) => provider.id.trim().toLowerCase() !== 'ens');
+    }
+    return input.configured;
+  }
+  if (!nameResolution.ens.enabled) {
+    return [];
+  }
+  return [
+    (input.ensNameAliasProviderFactory ?? createEnsOpenAgentInternetResolver)({
+      chainId: nameResolution.ens.chainId,
+      rpcUrls: nameResolution.ens.rpcUrls,
+      textKey: nameResolution.ens.textKey,
+    }),
+  ];
+}
+
+/**
+ * Convenience wrapper that resolves the Browser config and builds the provider
+ * list in one step. Hosts that already call `resolveBrowserConfig` should use
+ * `createBrowserNameAliasProviders` directly to avoid resolving twice.
+ */
+export function createBrowserNameAliasProvidersFromContainer(input: {
+  config: Parameters<typeof resolveBrowserConfig>[0];
+  env?: Record<string, string | undefined>;
+  configured?: BrowserNameAliasProvider[];
+  ensNameAliasProviderFactory?: CreateBrowserNameAliasProvidersInput['ensNameAliasProviderFactory'];
+}): BrowserNameAliasProvider[] {
+  const resolved = resolveBrowserConfig(input.config, input.env ?? {});
+  return createBrowserNameAliasProviders({
+    configured: input.configured,
+    config: resolved,
+    ...(input.ensNameAliasProviderFactory ? { ensNameAliasProviderFactory: input.ensNameAliasProviderFactory } : {}),
+  });
+}
