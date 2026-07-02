@@ -506,7 +506,9 @@ test('Browser address input displays the resolver-normalized URI for a bare Glob
 
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=${encodeURIComponent(globalMetaId)}&actorId=worker`);
   assert.equal(elements['[data-browser-uri-input]'].value, canonicalUri);
-  assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
+  // The welcome page seeds history as its origin (empty URI), so the first
+  // navigation appends after it.
+  assert.deepEqual(Array.from(context.state.history), ['', canonicalUri]);
 });
 
 test('Browser address input displays the resolver-normalized URI for a bare domain alias', async () => {
@@ -532,7 +534,7 @@ test('Browser address input displays the resolver-normalized URI for a bare doma
 
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=${encodeURIComponent(alias)}&actorId=worker`);
   assert.equal(elements['[data-browser-uri-input]'].value, canonicalUri);
-  assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
+  assert.deepEqual(Array.from(context.state.history), ['', canonicalUri]);
 });
 
 test('Browser address input displays the resolver-normalized URI for a bare pin id', async () => {
@@ -565,7 +567,7 @@ test('Browser address input displays the resolver-normalized URI for a bare pin 
 
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=${encodeURIComponent(pinId)}&actorId=worker`);
   assert.equal(elements['[data-browser-uri-input]'].value, canonicalUri);
-  assert.deepEqual(Array.from(context.state.history), [canonicalUri]);
+  assert.deepEqual(Array.from(context.state.history), ['', canonicalUri]);
 });
 
 test('Browser preserves metaid address when resolver returns custom target resource model', async () => {
@@ -1271,4 +1273,29 @@ test('Browser no-local-Bot empty state renders Bot creation activation entry', a
   assert.match(elements['[data-browser-viewport]'].innerHTML, /Your local Agent needs a Bot identity before it can appear on the Agent Internet\./);
   assert.match(elements['[data-browser-viewport]'].innerHTML, /href="\/ui\/bot\?mode=create"/);
   assert.match(elements['[data-browser-viewport]'].innerHTML, />Create Bot<\/a>/);
+});
+
+test('Browser back button returns to the welcome page from the first navigation', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({
+    runtimeResponse: runtimePayload({ defaultUri: null }),
+  });
+
+  await waitFor(() => context.state.actorId === 'worker', 'runtime actor load');
+  // The welcome page seeds the history origin so it is reachable via back.
+  assert.deepEqual(Array.from(context.state.history), ['']);
+  assert.equal(context.state.historyIndex, 0);
+
+  elements['[data-browser-uri-input]'].value = 'metaid://idq1first';
+  elements['[data-browser-address-form]'].submit();
+  await waitFor(() => context.state.history.length === 2, 'first navigation recorded');
+
+  assert.deepEqual(Array.from(context.state.history), ['', 'metaid://idq1first']);
+  assert.equal(context.state.historyIndex, 1);
+
+  elements['[data-browser-back]'].click();
+  await waitFor(() => context.state.historyIndex === 0, 'back to welcome origin');
+
+  // Back to the welcome origin renders the welcome page again.
+  assert.match(elements['[data-browser-viewport]'].innerHTML, /data-browser-welcome/);
+  assert.deepEqual(Array.from(context.state.history), ['', 'metaid://idq1first']);
 });

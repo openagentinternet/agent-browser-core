@@ -4782,6 +4782,12 @@ async function initialize() {
     renderNoLocalBot();
     return;
   }
+  // Seed the welcome page as the history origin so the back button can return
+  // to it. An empty URI resolves to the welcome page (see resolveUri).
+  if (state.historyIndex < 0) {
+    state.history = [''];
+    state.historyIndex = 0;
+  }
   renderWelcome();
 }
 
