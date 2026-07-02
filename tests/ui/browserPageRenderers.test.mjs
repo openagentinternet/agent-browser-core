@@ -206,6 +206,14 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.match(html, /Builds Agent Browser fixtures/);
   assert.match(html, /Overview/);
   assert.match(html, /Recent Activity/);
+  // profile.llm.payload.primaryProvider ("codex") renders a Primary provider chip
+  // with the Codex brand icon inside the Overview section.
+  assert.match(html, /browser-llm-provider-chip/);
+  assert.match(html, /Primary/);
+  assert.match(html, /Codex/);
+  assert.match(html, /browser-llm-provider-icon/);
+  assert.match(html, /browser-llm-chips/);
+  assert.doesNotMatch(html, /Fallback/);
   assert.doesNotMatch(html, /browser-proof-icon/);
   assert.doesNotMatch(html, /<section class="browser-document-section browser-bot-buzzes">/);
   assert.match(html, /<h3>MetaApps<\/h3>/);
@@ -233,6 +241,97 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   // web2 image URLs (manapi /content/) are passed through unchanged.
   assert.match(html, new RegExp(`src="https:\\/\\/manapi\\.metaid\\.io\\/content\\/${metaappCoverPinId}"`));
   assert.match(html, new RegExp(`src="https:\\/\\/manapi\\.metaid\\.io\\/content\\/${metaappIconPinId}"`));
+});
+
+test('bot-page Overview renders both Primary and Fallback LLM provider chips', async () => {
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1llmbot' },
+    profile: {
+      name: 'LLM Bot',
+      bio: 'Runs on two providers.',
+      llm: { pinId: 'llm-pin', payload: { primaryProvider: 'claude-code', fallbackProvider: 'gemini' } },
+    },
+    sections: [],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    uri: 'metaid://idq1llmbot',
+    normalizedUri: 'metaid://idq1llmbot',
+    resourceType: 'bot',
+    title: 'LLM Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1llmbot', name: 'LLM Bot', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Overview'), 'llm chips render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /browser-llm-chips/);
+  assert.match(html, /Primary/);
+  assert.match(html, /Claude Code/);
+  assert.match(html, /Fallback/);
+  assert.match(html, /Gemini/);
+  // both chips carry the icon wrapper, and each renders an inlined <svg>.
+  assert.equal((html.match(/browser-llm-provider-chip/g) || []).length, 2);
+  assert.equal((html.match(/browser-llm-provider-icon/g) || []).length, 2);
+  assert.equal((html.match(/<svg/g) || []).length >= 2, true);
+});
+
+test('bot-page Overview hides LLM provider chips when profile.llm is absent or empty', async () => {
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1nollmbot' },
+    profile: { name: 'No-LLM Bot', bio: 'No provider configured.' },
+    sections: [],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    uri: 'metaid://idq1nollmbot',
+    normalizedUri: 'metaid://idq1nollmbot',
+    resourceType: 'bot',
+    title: 'No-LLM Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1nollmbot', name: 'No-LLM Bot', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Overview'), 'no-llm render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.doesNotMatch(html, /browser-llm-provider-chip/);
+  assert.doesNotMatch(html, /browser-llm-chips/);
+  assert.doesNotMatch(html, /Primary/);
+  assert.doesNotMatch(html, /Fallback/);
+});
+
+test('bot-page Overview hides LLM provider chips when profile.llm.payload is null', async () => {
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1nullllmbot' },
+    profile: { name: 'Null-LLM Bot', bio: 'Empty LLM payload.', llm: null },
+    sections: [],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    uri: 'metaid://idq1nullllmbot',
+    normalizedUri: 'metaid://idq1nullllmbot',
+    resourceType: 'bot',
+    title: 'Null-LLM Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1nullllmbot', name: 'Null-LLM Bot', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Overview'), 'null-llm render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.doesNotMatch(html, /browser-llm-provider-chip/);
+  assert.doesNotMatch(html, /browser-llm-chips/);
 });
 
 test('bot-page renderer does not create pin detail links from non-pin service ids', async () => {
