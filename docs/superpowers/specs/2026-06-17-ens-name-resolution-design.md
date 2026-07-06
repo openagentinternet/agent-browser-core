@@ -9,6 +9,7 @@ Agent Browser Core currently uses explicit Browser URIs for Agent Internet resou
 
 - `metaid://{globalMetaId}` for Bot Pages;
 - `metaapp://{pinId}` for MetaApps;
+- `pin://{pinId}` for generic pin inspection;
 - `metafile://{pinId}` for file resources;
 - `map://...` for MetaID Application Pointer resources, as defined in the MAP URI design.
 
@@ -32,6 +33,10 @@ The text record value must be a complete Agent Internet URI:
 ```text
 metaid://{globalMetaId}
 metaapp://{pinId}
+pin://{pinId}
+metafile://{pinId}
+metafile://{pinId}.{ext}
+metafile://{kind}/{pinId}
 map://{canonicalMapTarget}
 ```
 
@@ -40,6 +45,8 @@ The user input scheme must match the resolved record scheme:
 ```text
 metaid://sunny.eth  -> metaid://{globalMetaId}
 metaapp://sunny.eth -> metaapp://{pinId}
+pin://pin.sunny.eth -> pin://{pinId}
+metafile://file.sunny.eth -> metafile://{pinId}
 map://sunny.eth     -> map://{canonicalMapTarget}
 ```
 
@@ -58,7 +65,7 @@ metadata and Inspector.
 ## Goals
 
 - Let users open memorable ENS names in Browser URI form.
-- Keep `metaid://`, `metaapp://`, and `map://` semantics trustworthy.
+- Keep `metaid://`, `metaapp://`, `pin://`, `metafile://`, and `map://` semantics trustworthy.
 - Use one Open Agent Internet text-record key across supported resource schemes.
 - Keep ABC core host-neutral and free of Ethereum RPC, wallet, signer, OAC, IDBots, and database
   dependencies.
@@ -86,6 +93,8 @@ An alias URI is a normal Browser URI whose resource id is an ENS name:
 ```text
 metaid://sunny.eth
 metaapp://app.sunny.eth
+pin://pin.sunny.eth
+metafile://file.sunny.eth
 map://buzz.sunny.eth
 ```
 
@@ -100,6 +109,10 @@ own scheme:
 ```text
 metaid://idq1...
 metaapp://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0
+pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0
+metafile://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0
+metafile://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0.pdf
+metafile://video/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0
 map://simplebuzz/pin/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0
 ```
 
@@ -108,6 +121,9 @@ The canonical value must pass target-specific validation:
 - `metaid://` requires a valid Global MetaID, including checksum and payload-length rules.
 - `metaapp://` requires a canonical MetaApp pin id: 64 lowercase or uppercase hex characters
   followed by `i0`.
+- `pin://` requires a canonical pin URI accepted by the pin parser.
+- `metafile://` requires a canonical file reference accepted by the Metafile resolver. Version 1
+  accepts `metafile://{pinId}`, `metafile://{pinId}.{ext}`, and `metafile://{kind}/{pinId}`.
 - `map://` requires a canonical MAP URI accepted by the MAP parser. For version 1 this means a
   concrete MAP target such as `map://{protocol}/pin/{pinId}` rather than another name alias.
 
@@ -142,6 +158,8 @@ Record value examples:
 ```text
 metaid://idq1...
 metaapp://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0
+pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0
+metafile://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0.pdf
 map://simplebuzz/pin/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0
 ```
 

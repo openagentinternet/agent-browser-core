@@ -406,6 +406,15 @@ test('Browser MetaID deep link path is decoded into the address bar and resolved
   assert.equal(fetchCalls[1], '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1alice&actorId=worker');
 });
 
+test('Browser bare ENS alias path is decoded into the address bar and resolved', async () => {
+  const { elements, fetchCalls } = createBrowserContext({ pathname: '/browser/sunnyfung.eth' });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and bare ENS alias resolve');
+
+  assert.equal(elements['[data-browser-uri-input]'].value, 'metaid://sunnyfung.eth');
+  assert.equal(fetchCalls[1], '/api/browser/resolve?uri=metaid%3A%2F%2Fsunnyfung.eth&actorId=worker');
+});
+
 test('Browser MetaID deep link path keeps botpage override in the address bar and resolve request', async () => {
   const { elements, fetchCalls } = createBrowserContext({
     pathname: '/browser/metaid/idq1alice',

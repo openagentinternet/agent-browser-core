@@ -48,6 +48,34 @@ test('canonical target validation accepts same-scheme metaapp targets', () => {
   assert.equal(result.data.normalizedUri, `metaapp://${validPinId}`);
 });
 
+test('canonical target validation accepts same-scheme pin targets', () => {
+  const result = validateNameAliasCanonicalTarget({
+    inputScheme: 'pin',
+    aliasName: 'pin.sunny.eth',
+    canonicalUri: `pin://${validPinId}`,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.normalizedUri, `pin://${validPinId}`);
+});
+
+test('canonical target validation accepts same-scheme metafile targets', () => {
+  for (const canonicalUri of [
+    `metafile://${validPinId}`,
+    `metafile://${validPinId}.pdf`,
+    `metafile://video/${validPinId}`,
+  ]) {
+    const result = validateNameAliasCanonicalTarget({
+      inputScheme: 'metafile',
+      aliasName: 'file.sunny.eth',
+      canonicalUri,
+    });
+
+    assert.equal(result.ok, true, canonicalUri);
+    assert.equal(result.data.normalizedUri, canonicalUri);
+  }
+});
+
 test('canonical target validation accepts concrete same-scheme map targets', () => {
   const result = validateNameAliasCanonicalTarget({
     inputScheme: 'map',
@@ -67,9 +95,15 @@ test('canonical target validation rejects scheme mismatch, recursive aliases, an
   }).code, 'invalid_name_alias_target');
 
   assert.equal(validateNameAliasCanonicalTarget({
+    inputScheme: 'pin',
+    aliasName: 'pin.sunny.eth',
+    canonicalUri: 'pin://not-a-pin',
+  }).code, 'invalid_name_alias_target');
+
+  assert.equal(validateNameAliasCanonicalTarget({
     inputScheme: 'metafile',
     aliasName: 'file.sunny.eth',
-    canonicalUri: `metafile://${validPinId}`,
+    canonicalUri: 'metafile://not-a-pin',
   }).code, 'invalid_name_alias_target');
 
   assert.equal(validateNameAliasCanonicalTarget({
@@ -103,9 +137,9 @@ test('canonical target validation rejects scheme mismatch, recursive aliases, an
   }).code, 'name_alias_recursive');
 });
 
-test('name alias resolution skips unsupported schemes before provider lookup', async () => {
+test('name alias resolution skips non-ENS ids before provider lookup', async () => {
   let called = false;
-  const parsed = parseBrowserUri('metafile://sunny.eth');
+  const parsed = parseBrowserUri('metaid://idq1fixturebot');
   const result = await resolveBrowserNameAlias({
     parsed,
     providers: [{
@@ -113,7 +147,7 @@ test('name alias resolution skips unsupported schemes before provider lookup', a
       supportsName: () => true,
       async resolveNameAlias() {
         called = true;
-        throw new Error('should not resolve metafile aliases');
+        throw new Error('should not resolve non-ENS ids');
       },
     }],
   });
@@ -121,6 +155,36 @@ test('name alias resolution skips unsupported schemes before provider lookup', a
   assert.equal(result.ok, true);
   assert.equal(result.data, null);
   assert.equal(called, false);
+});
+
+test('name alias resolution returns canonical metafile alias context after provider validation', async () => {
+  const parsed = parseBrowserUri('metafile://file.sunny.eth');
+  const result = await resolveBrowserNameAlias({
+    parsed,
+    providers: [{
+      id: 'ens',
+      supportsName: (name) => name === 'file.sunny.eth',
+      async resolveNameAlias() {
+        return {
+          ok: true,
+          state: 'success',
+          data: {
+            provider: 'ens',
+            normalizedName: 'file.sunny.eth',
+            textKey: OPEN_AGENT_INTERNET_ENS_TEXT_KEY,
+            canonicalUri: `metafile://video/${validPinId}`,
+            resolvedAt: 123,
+            verificationState: 'verified',
+          },
+        };
+      },
+    }],
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.aliasUri, 'metafile://file.sunny.eth');
+  assert.equal(result.data.canonicalUri, `metafile://video/${validPinId}`);
+  assert.equal(result.data.canonicalParsed.normalizedUri, `metafile://video/${validPinId}`);
 });
 
 test('name alias resolution reports unavailable provider with alias context', async () => {

@@ -48,6 +48,21 @@ function parseMapNameAliasUri(input: string): ParsedBrowserUri | null {
   };
 }
 
+function parsePinNameAliasUri(input: string): ParsedBrowserUri | null {
+  const originalUri = String(input ?? '').trim();
+  const match = originalUri.match(/^pin:\/\/([^/?#]+)$/iu);
+  if (!match || !isSupportedNameAliasId(match[1])) {
+    return null;
+  }
+  const id = match[1];
+  return {
+    originalUri,
+    normalizedUri: `pin://${id}`,
+    scheme: 'pin',
+    id,
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -298,7 +313,12 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
     if (mapNameAlias) {
       parsed = mapNameAlias;
     } else {
-      return browserCommandFailed('invalid_browser_uri', error instanceof Error ? error.message : String(error));
+      const pinNameAlias = parsePinNameAliasUri(botPageOverride.resolveUri);
+      if (pinNameAlias) {
+        parsed = pinNameAlias;
+      } else {
+        return browserCommandFailed('invalid_browser_uri', error instanceof Error ? error.message : String(error));
+      }
     }
   }
 

@@ -45,6 +45,7 @@ test('standalone Browser server serves Browser pages and shared CSS', async (t) 
     '/',
     '/browser',
     '/ui/browser',
+    '/browser/sunnyfung.eth',
     '/browser/metaid/idq1fixturebot',
     `/browser/pin/${pinId}?version=0`,
     '/browser/map/buzz.sunny.eth',

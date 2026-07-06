@@ -809,6 +809,64 @@ test('resolveBrowserResource resolves metaapp ENS aliases through MetaApp resolv
   assert.equal(result.data.source.raw.nameAlias.canonicalUri, `metaapp://${validEnsMetaAppPinId}`);
 });
 
+test('resolveBrowserResource resolves pin ENS aliases through pin resolver', async () => {
+  const result = await resolveBrowserResource({
+    uri: 'pin://pin.sunny.eth',
+    config: browserConfig(),
+    nameAliasProviders: [ensProvider(`pin://${validEnsMetaAppPinId}`)],
+    fetch: async (url) => {
+      assert.equal(String(url), `https://man.example.test/pin/${validEnsMetaAppPinId}`);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            id: validEnsMetaAppPinId,
+            path: '/protocols/skill-service',
+            operation: 'create',
+            contentType: 'application/json',
+            content: JSON.stringify({ name: 'Evidence Skill' }),
+          },
+        }),
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.uri, 'pin://pin.sunny.eth');
+  assert.equal(result.data.normalizedUri, 'pin://pin.sunny.eth');
+  assert.equal(result.data.resourceType, 'pin');
+  assert.equal(result.data.source.raw.nameAlias.canonicalUri, `pin://${validEnsMetaAppPinId}`);
+});
+
+test('resolveBrowserResource resolves metafile ENS aliases through metafile resolver', async () => {
+  const result = await resolveBrowserResource({
+    uri: 'metafile://file.sunny.eth',
+    config: browserConfig(),
+    nameAliasProviders: [ensProvider(`metafile://${validEnsMetaAppPinId}.pdf`)],
+    fetch: async (url) => {
+      assert.equal(String(url), `https://man.example.test/pin/${validEnsMetaAppPinId}`);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          data: {
+            id: validEnsMetaAppPinId,
+            path: 'document.pdf',
+          },
+        }),
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.uri, 'metafile://file.sunny.eth');
+  assert.equal(result.data.normalizedUri, 'metafile://file.sunny.eth');
+  assert.equal(result.data.resourceType, 'pdf');
+  assert.equal(result.data.renderer.type, 'pdf');
+  assert.equal(result.data.source.raw.nameAlias.canonicalUri, `metafile://${validEnsMetaAppPinId}.pdf`);
+});
+
 test('resolveBrowserResource dispatches map ENS aliases to injected map resolver', async () => {
   const canonicalMapUri = `map://simplebuzz/pin/${validEnsMetaAppPinId}`;
   const result = await resolveBrowserResource({

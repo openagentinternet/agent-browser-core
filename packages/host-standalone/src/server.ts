@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { parseBrowserUri } from '@openagentinternet/agent-browser-core';
 import { browserFailure } from '@openagentinternet/agent-browser-host-contract';
 import { renderBrowserPageHtml } from '@openagentinternet/agent-browser-ui';
 import {
@@ -30,10 +31,28 @@ async function loadInitialPage(): Promise<string> {
   return renderBrowserPageHtml();
 }
 
+function isBareBrowserPagePath(pathname: string): boolean {
+  const match = pathname.match(/^\/browser\/([^/?#]+)$/u);
+  if (!match) {
+    return false;
+  }
+  try {
+    const decoded = decodeURIComponent(match[1]).trim();
+    if (!decoded || decoded.includes('://')) {
+      return false;
+    }
+    parseBrowserUri(decoded);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isBrowserPage(pathname: string): boolean {
   return pathname === '/' ||
     pathname === '/browser' ||
     pathname === '/ui/browser' ||
+    isBareBrowserPagePath(pathname) ||
     /^\/browser\/(?:metaid|metaapp|metafile|pin)\/[^/?#]+$/.test(pathname) ||
     /^\/browser\/map\/.+$/.test(pathname);
 }
