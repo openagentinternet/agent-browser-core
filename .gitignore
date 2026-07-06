@@ -10,3 +10,7 @@ coverage/
 
 # Brainstorming visual companion
 .superpowers/
+
+# Playwright tooling cache
+.playwright-cli/
+.playwright-mcp/
