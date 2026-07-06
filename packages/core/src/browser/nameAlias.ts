@@ -1,4 +1,5 @@
-import { parseBrowserUri, isValidGlobalMetaId, parseMapUri, type ParsedBrowserUri } from './uri.js';
+import { parseBrowserUri, isValidGlobalMetaId, parseMapUri, parsePinUri, type ParsedBrowserUri } from './uri.js';
+import { normalizeMetafilePinId } from './metafileResolver.js';
 import {
   browserCommandFailed,
   browserCommandSuccess,
@@ -13,8 +14,9 @@ import {
 export const OPEN_AGENT_INTERNET_ENS_TEXT_KEY = 'org.openagentinternet.uri';
 
 const PIN_ID_PATTERN = /^[0-9a-f]{64}i0$/iu;
-const EXPLICIT_ALIAS_TARGET_PATTERN = /^(metaid|metaapp|map):\/\//iu;
-const SUPPORTED_NAME_ALIAS_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'map']);
+const EXPLICIT_ALIAS_TARGET_PATTERN = /^(metaid|metaapp|metafile|map|pin):\/\//iu;
+const CANONICAL_METAFILE_TARGET_PATTERN = /^(?:[0-9a-f]{64}i0(?:\.[A-Za-z0-9]+)?|[a-z0-9-]+\/[0-9a-f]{64}i0(?:\.[A-Za-z0-9]+)?)$/iu;
+const SUPPORTED_NAME_ALIAS_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'metafile', 'map', 'pin']);
 
 export interface ValidateNameAliasCanonicalTargetInput {
   inputScheme: BrowserUriScheme;
@@ -59,6 +61,22 @@ function isCanonicalMapTarget(parsed: ParsedBrowserUri): boolean {
   }
 }
 
+function isCanonicalPinTarget(parsed: ParsedBrowserUri): boolean {
+  if (parsed.scheme !== 'pin') return false;
+  try {
+    parsePinUri(parsed.normalizedUri);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isCanonicalMetafileTarget(parsed: ParsedBrowserUri): boolean {
+  if (parsed.scheme !== 'metafile') return false;
+  const id = parsed.id.trim();
+  return CANONICAL_METAFILE_TARGET_PATTERN.test(id) && normalizeMetafilePinId(id) !== '';
+}
+
 function isSupportedNameAliasScheme(scheme: BrowserUriScheme): boolean {
   return SUPPORTED_NAME_ALIAS_SCHEMES.has(scheme);
 }
@@ -68,7 +86,7 @@ function isRecursiveAlias(parsed: ParsedBrowserUri): boolean {
 }
 
 function parseExplicitRecursiveAliasTarget(value: string): { scheme: BrowserUriScheme; name: string } | null {
-  const match = value.match(/^(metaid|metaapp|map):\/\/([^/?#]+)$/iu);
+  const match = value.match(/^(metaid|metaapp|metafile|map|pin):\/\/([^/?#]+)$/iu);
   if (!match || !isSupportedNameAliasId(match[2])) return null;
   return {
     scheme: match[1].toLowerCase() as BrowserUriScheme,
@@ -167,6 +185,20 @@ export function validateNameAliasCanonicalTarget(
 
   if (parsed.scheme === 'metaapp' && !isCanonicalMetaAppId(parsed.id)) {
     return browserCommandFailed('invalid_name_alias_target', 'ENS metaapp target must contain a canonical pin id.', {
+      aliasName: input.aliasName,
+      canonicalUri: parsed.normalizedUri,
+    });
+  }
+
+  if (parsed.scheme === 'pin' && !isCanonicalPinTarget(parsed)) {
+    return browserCommandFailed('invalid_name_alias_target', 'ENS pin target must contain a canonical pin URI.', {
+      aliasName: input.aliasName,
+      canonicalUri: parsed.normalizedUri,
+    });
+  }
+
+  if (parsed.scheme === 'metafile' && !isCanonicalMetafileTarget(parsed)) {
+    return browserCommandFailed('invalid_name_alias_target', 'ENS metafile target must contain a canonical metafile URI.', {
       aliasName: input.aliasName,
       canonicalUri: parsed.normalizedUri,
     });
