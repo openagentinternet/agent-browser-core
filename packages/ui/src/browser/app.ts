@@ -813,6 +813,18 @@ function metaIdBotPageOverrideQuery(search) {
     : '';
 }
 
+function isBareGlobalMetaIdPathInput(value) {
+  return /^id[qpzryt]1[qpzry9x8gf2tvdw0s3jn54khce6mua7l]+$/i.test(textValue(value));
+}
+
+function isBareDomainAliasPathInput(value) {
+  return /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.)+[a-z]{2,63}$/i.test(textValue(value));
+}
+
+function isBarePinPathInput(value) {
+  return /^[0-9a-f]{64}i[0-9]+$/i.test(textValue(value));
+}
+
 function browserUriFromPath(pathname, search) {
   var path = textValue(pathname);
   var match = path.match(/^\\/browser\\/(metaid|metaapp|metafile|pin)\\/([^/?#]+)$/);
@@ -825,10 +837,22 @@ function browserUriFromPath(pathname, search) {
   }
 
   var mapMatch = path.match(/^\\/browser\\/map\\/(.+)$/);
-  if (!mapMatch) return '';
-  var mapPath = mapMatch[1].split('/').map(decodeURIComponentSafe).join('/');
-  var mapId = textValue(mapPath);
-  return mapId ? 'map://' + mapId + textValue(search) : '';
+  if (mapMatch) {
+    var mapPath = mapMatch[1].split('/').map(decodeURIComponentSafe).join('/');
+    var mapId = textValue(mapPath);
+    return mapId ? 'map://' + mapId + textValue(search) : '';
+  }
+
+  var bareMatch = path.match(/^\\/browser\\/([^/?#]+)$/);
+  if (!bareMatch) return '';
+  var bareInput = textValue(decodeURIComponentSafe(bareMatch[1]));
+  if (isBarePinPathInput(bareInput)) {
+    return 'pin://' + bareInput + textValue(search);
+  }
+  if (isBareGlobalMetaIdPathInput(bareInput) || isBareDomainAliasPathInput(bareInput)) {
+    return 'metaid://' + bareInput + metaIdBotPageOverrideQuery(search);
+  }
+  return '';
 }
 
 function findBrowserMenuItem(itemId) {
