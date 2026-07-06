@@ -2962,14 +2962,19 @@ function openUsingIdentitySelector() {
       var name = textValue(actorData && actorData.label) || actorId || 'Actor';
       var globalMetaId = textValue(actorData && actorData.globalMetaId);
       var selected = state.actorId && actorId === state.actorId;
-      return '<button type="button" data-browser-actor-id="' + escapeHtml(actorId) + '"' + (selected ? ' aria-current="true"' : '') + '>' +
-        '<span style="display:inline-flex;align-items:center;gap:8px;min-width:0;">' +
-          avatarHtml(actorData && actorData.avatar, name, 'browser-chip-avatar') +
-          '<span class="browser-chip-copy"><span class="browser-chip-title">' + escapeHtml(name) + '</span>' +
-            (globalMetaId ? '<span class="browser-chip-subtitle">' + escapeHtml(globalMetaId) + '</span>' : '') +
+      return '<div class="browser-using-option"' + (selected ? ' data-browser-using-option-selected' : '') + '>' +
+        '<button type="button" data-browser-actor-id="' + escapeHtml(actorId) + '"' + (selected ? ' aria-current="true"' : '') + '>' +
+          '<span style="display:inline-flex;align-items:center;gap:8px;min-width:0;">' +
+            avatarHtml(actorData && actorData.avatar, name, 'browser-chip-avatar') +
+            '<span class="browser-chip-copy"><span class="browser-chip-title">' + escapeHtml(name) + '</span>' +
+              (globalMetaId ? '<span class="browser-chip-subtitle">' + escapeHtml(globalMetaId) + '</span>' : '') +
+            '</span>' +
           '</span>' +
-        '</span>' +
-        '</button>';
+        '</button>' +
+        '<button type="button" class="browser-using-option-open browser-primary-action" data-browser-actor-open="' + escapeHtml(actorId) + '"' +
+          (globalMetaId ? '' : ' disabled aria-disabled="true" title="Open homepage is unavailable without a Global MetaID"') +
+          '>' + escapeHtml(browserText('actorChip.open', 'Open')) + '</button>' +
+      '</div>';
     }).join('') + '</div></div></section>';
 }
 
@@ -3033,6 +3038,26 @@ async function selectUsingIdentity(slug) {
   // selection. It must NOT navigate or touch the address bar — the selected
   // actor is applied at action time (resolveUrl / endpointWithActor).
   return selected;
+}
+
+async function openActorHomepage(slug) {
+  var selectedId = textValue(slug);
+  var actors = runtimeActors();
+  var actor = null;
+  for (var index = 0; index < actors.length; index += 1) {
+    if (textValue(actors[index] && actors[index].id) === selectedId) {
+      actor = effectiveActor(actors[index]);
+      break;
+    }
+  }
+  var globalMetaId = textValue(actor && actor.globalMetaId);
+  closeModal();
+  if (!globalMetaId) {
+    setStatus('error', runtimeLabel('actorChip', 'Actor') + ' Global MetaID is missing.');
+    return Promise.resolve();
+  }
+  closeInspector();
+  return navigateTo('metaid://' + globalMetaId);
 }
 
 function usingLabel() {
@@ -4624,6 +4649,11 @@ async function initialize() {
       }
       if (closestWithAttribute(event && event.target, 'data-browser-wallet-install')) {
         installWalletProvider();
+        return;
+      }
+      var openActorHome = closestWithAttribute(event && event.target, 'data-browser-actor-open');
+      if (openActorHome) {
+        openActorHomepage(openActorHome.getAttribute('data-browser-actor-open'));
         return;
       }
       var target = closestWithAttribute(event && event.target, 'data-browser-modal-action') ||
