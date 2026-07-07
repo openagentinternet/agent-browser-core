@@ -129,8 +129,8 @@ function getLlmProvider(providerId) {
 }
 var CUSTOM_BOT_PAGE_HELP = 'When enabled, Bot Pages can render the custom MetaApp or Metafile declared on /info/homepage. When disabled, Browser always uses the selected built-in template.';
 var OFFICIAL_RECOMMENDATIONS = [
-  { uri: 'metaapp://765570486edfc94bb0b393bfb8c48d100fb84be9fcf2b9b0b39df68e997135c1i0', title: 'Agent Browser', kind: 'official' },
-  { uri: 'metaid://idq1skptl242lfuuqq8f0z9mhu88tgj0e0kvlqd6vk', title: 'Docs Bot', kind: 'official' }
+  { uri: 'metaapp://765570486edfc94bb0b393bfb8c48d100fb84be9fcf2b9b0b39df68e997135c1i0', title: 'A/I YellowPaper', kind: 'official' },
+  { uri: 'metaid://idq1skptl242lfuuqq8f0z9mhu88tgj0e0kvlqd6vk', title: 'Agent_Internet', kind: 'official' }
 ];
 var browserEndpoints = {
   runtime: '/api/browser/runtime',

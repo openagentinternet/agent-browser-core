@@ -192,8 +192,8 @@ test('welcome page shows the two official recommendations', async () => {
   const html = elements['[data-browser-viewport]'].innerHTML;
   assert.match(html, /metaapp:\/\/765570486edfc94bb0b393bfb8c48d100fb84be9fcf2b9b0b39df68e997135c1i0/);
   assert.match(html, /metaid:\/\/idq1skptl242lfuuqq8f0z9mhu88tgj0e0kvlqd6vk/);
-  assert.match(html, /Agent Browser/);
-  assert.match(html, /Docs Bot/);
+  assert.match(html, /A\/I YellowPaper/);
+  assert.match(html, /Agent_Internet/);
 });
 
 test('welcome page official tiles use data-browser-map-link so viewport delegation navigates', async () => {
@@ -211,7 +211,7 @@ test('welcome page with seeded bookmarks shows bookmark tiles before official ti
   await waitFor(() => elements['[data-browser-viewport]'].innerHTML.includes('browser-welcome'), 'welcome render');
   const html = elements['[data-browser-viewport]'].innerHTML;
   const alicePos = html.indexOf('Alice Bot');
-  const officialPos = html.indexOf('Agent Browser');
+  const officialPos = html.indexOf('A/I YellowPaper');
   assert.ok(alicePos > -1, 'bookmark tile rendered');
   assert.ok(officialPos > -1, 'official tile rendered');
   assert.ok(alicePos < officialPos, 'bookmark tile precedes official tile');
