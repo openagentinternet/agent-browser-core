@@ -211,6 +211,7 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   // profile.llm.payload.primaryProvider ("codex") renders a Primary provider chip
   // with the Codex brand icon inside the Overview section.
   assert.match(html, /LLM:<\/strong>/);
+  assert.match(html, /<div class="browser-overview-meta"><strong class="browser-overview-label">LLM:<\/strong><div class="browser-service-meta browser-llm-chips">/);
   assert.match(html, /browser-llm-provider-chip/);
   assert.match(html, /Primary/);
   assert.match(html, /Codex/);
@@ -278,6 +279,7 @@ test('bot-page Overview renders both Primary and Fallback LLM provider chips', a
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Overview'), 'llm chips render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
   assert.match(html, /LLM:<\/strong>/);
+  assert.match(html, /<div class="browser-overview-meta"><strong class="browser-overview-label">LLM:<\/strong><div class="browser-service-meta browser-llm-chips">/);
   assert.match(html, /browser-llm-chips/);
   assert.match(html, /Primary/);
   assert.match(html, /Codex/);
@@ -861,6 +863,9 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-card button \{\n        justify-self: end;\n        white-space: nowrap;\n        border-color: #cfe0ff;\n        background: #eaf1ff;/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-meta,\s+\.browser-metaapp-facts \{\n        display: flex;\n        flex-wrap: wrap;\n        gap: 6px;\n        min-width: 0;/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-provider,\s+\.browser-card-chip,\s+\.browser-metaapp-fact \{\n        min-width: 0;\n        display: inline-flex;[\s\S]*?border-radius: 999px;[\s\S]*?font-size: 11px;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-overview-label \{\n        color: var\(--browser-muted\);\n        font-weight: 700;\n      \}/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-overview-meta \{\n        display: flex;\n        align-items: center;\n        gap: 8px;\n        min-width: 0;\n        flex-wrap: nowrap;\n      \}/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-overview-meta \.browser-llm-chips \{\n        margin-top: 0;\n        flex-wrap: nowrap;\n      \}/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-metaapp-actions \{\n        display: grid;\n        grid-template-columns: 64px 30px;\n        gap: 6px;\n        justify-self: end;\n        align-self: center;\n        width: 100px;/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-card,\s+\.browser-metaapp-card \{/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-actions \{/);
