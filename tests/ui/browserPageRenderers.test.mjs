@@ -206,8 +206,11 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   assert.match(html, /Builds Agent Browser fixtures/);
   assert.match(html, /Overview/);
   assert.match(html, /Recent Activity/);
+  assert.doesNotMatch(html, /browser-bot-summary/);
+  assert.match(html, /Bio:<\/strong>\s*Builds Agent Browser fixtures/);
   // profile.llm.payload.primaryProvider ("codex") renders a Primary provider chip
   // with the Codex brand icon inside the Overview section.
+  assert.match(html, /LLM:<\/strong>/);
   assert.match(html, /browser-llm-provider-chip/);
   assert.match(html, /Primary/);
   assert.match(html, /Codex/);
@@ -274,6 +277,7 @@ test('bot-page Overview renders both Primary and Fallback LLM provider chips', a
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Overview'), 'llm chips render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /LLM:<\/strong>/);
   assert.match(html, /browser-llm-chips/);
   assert.match(html, /Primary/);
   assert.match(html, /Codex/);
@@ -307,8 +311,10 @@ test('bot-page Overview hides LLM provider chips when profile.llm is absent or e
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Overview'), 'no-llm render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /Bio:<\/strong>\s*No provider configured\./);
   assert.doesNotMatch(html, /browser-llm-provider-chip/);
   assert.doesNotMatch(html, /browser-llm-chips/);
+  assert.doesNotMatch(html, /LLM:<\/strong>/);
   assert.doesNotMatch(html, /Primary/);
   assert.doesNotMatch(html, /Fallback/);
 });
@@ -335,11 +341,13 @@ test('bot-page Overview hides LLM provider chips when profile.llm.payload is nul
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Overview'), 'null-llm render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /Bio:<\/strong>\s*Empty LLM payload\./);
   assert.doesNotMatch(html, /browser-llm-provider-chip/);
   assert.doesNotMatch(html, /browser-llm-chips/);
+  assert.doesNotMatch(html, /LLM:<\/strong>/);
 });
 
-test('bot-page document template keeps long profile bio visible in header summary and Overview', async () => {
+test('bot-page document template keeps long profile bio visible once in Overview', async () => {
   const longBio = 'Agent Internet is a convenient name for an emerging permissionless network of Agents. On this network, Agents can create identities without permission, discover other Agents, and communicate and collaborate without relying on any central party or fixed Web2 infrastructure. It is a decentralized, self-growing network.';
   const homepage = {
     schemaVersion: 'botHomepage.v3',
@@ -362,7 +370,36 @@ test('bot-page document template keeps long profile bio visible in header summar
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Overview'), 'long bio render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
-  assert.equal((html.match(new RegExp(escapeRegExp(longBio), 'g')) || []).length, 2);
+  assert.doesNotMatch(html, /browser-bot-summary/);
+  assert.match(html, /Bio:<\/strong>/);
+  assert.equal((html.match(new RegExp(escapeRegExp(longBio), 'g')) || []).length, 1);
+});
+
+test('bot-page document template hides Bio and LLM labels when no overview content exists', async () => {
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1emptyoverviewbot' },
+    profile: { name: 'Empty Overview Bot' },
+    sections: [],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    uri: 'metaid://idq1emptyoverviewbot',
+    normalizedUri: 'metaid://idq1emptyoverviewbot',
+    resourceType: 'bot',
+    title: 'Empty Overview Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1emptyoverviewbot', name: 'Empty Overview Bot', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Overview'), 'empty overview render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /This Bot has not published an overview yet\./);
+  assert.doesNotMatch(html, /Bio:<\/strong>/);
+  assert.doesNotMatch(html, /LLM:<\/strong>/);
 });
 
 test('bot-page renderer does not create pin detail links from non-pin service ids', async () => {

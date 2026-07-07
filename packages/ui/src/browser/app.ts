@@ -2583,6 +2583,18 @@ function renderLlmProviderChips(payload) {
   return chips.length ? '<div class="browser-service-meta browser-llm-chips">' + chips.join('') + '</div>' : '';
 }
 
+function renderDocumentOverviewSection(payload) {
+  var summaryText = textValue(payload.summary && payload.summary.text);
+  var overviewHtml = summaryText
+    ? '<p><strong class="browser-overview-label">Bio:</strong> ' + escapeHtml(summaryText) + '</p>'
+    : '<p>' + escapeHtml(payload.summary.overview) + '</p>';
+  var llmChipsHtml = renderLlmProviderChips(payload);
+  var llmHtml = llmChipsHtml
+    ? '<div class="browser-overview-meta"><strong class="browser-overview-label">LLM:</strong>' + llmChipsHtml + '</div>'
+    : '';
+  return '<section class="browser-document-section"><h3>Overview</h3>' + overviewHtml + llmHtml + '</section>';
+}
+
 function renderServiceRows(services) {
   return services.length
     ? services.map(function (service) {
@@ -2722,10 +2734,9 @@ function renderBotHomepageDocumentTemplate(payload, current) {
     '<header class="browser-bot-header">' +
     avatarHtml(identity.avatar, identity.name, 'browser-bot-avatar') +
     '<div class="browser-bot-identity"><div class="browser-bot-title-line"><h2>' + escapeHtml(identity.name) + '</h2></div>' +
-    (identity.globalMetaId ? '<p class="browser-globalmetaid">' + escapeHtml(identity.globalMetaId) + '</p>' : '') +
-    (payload.summary.text ? '<p class="browser-bot-summary">' + escapeHtml(payload.summary.text) + '</p>' : '') + '</div>' +
+    (identity.globalMetaId ? '<p class="browser-globalmetaid">' + escapeHtml(identity.globalMetaId) + '</p>' : '') + '</div>' +
     renderBotPageActionButtons(current.actions) + '</header>' +
-    '<section class="browser-document-section"><h3>Overview</h3><p>' + escapeHtml(payload.summary.overview) + '</p>' + renderLlmProviderChips(payload) + '</section>' +
+    renderDocumentOverviewSection(payload) +
     servicesSection +
     metaappsSection +
     '<section class="browser-document-section browser-bot-activity"><h3>Recent Activity</h3>' + renderActivityRows(payload) + '</section>' +
