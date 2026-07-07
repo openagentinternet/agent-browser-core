@@ -4762,12 +4762,14 @@ async function initialize() {
     });
   }
   if (elements.menuTrigger) {
-    elements.menuTrigger.addEventListener('click', function () {
+    elements.menuTrigger.addEventListener('click', function (event) {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
       toggleBrowserMenu();
     });
   }
   if (elements.menu) {
     elements.menu.addEventListener('click', function (event) {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
       var target = closestWithAttribute(event && event.target, 'data-browser-menu-item');
       if (!target) return;
       handleBrowserMenuAction(target.getAttribute('data-browser-menu-item')).catch(function (error) {
@@ -4823,6 +4825,7 @@ async function initialize() {
     });
   }
   document.addEventListener('click', function () {
+    if (state.menuOpen) closeBrowserMenu();
     if (state.ownerPanelOpen) closeOwnerPanel();
     if (state.actorPanelOpen) closeStandaloneActorPanel();
   });

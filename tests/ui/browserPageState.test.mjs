@@ -248,6 +248,7 @@ function createBrowserContext(options = {}) {
   const elements = createElements();
   const fetchCalls = [];
   const openCalls = [];
+  const documentListeners = new Map();
   const runtimeResponse = options.runtimeResponse ?? runtimePayload();
   const resolveResponse = options.resolveResponse ?? ((uri) => resolvedBot(uri));
   const settingsData = options.settingsData ?? {
@@ -330,7 +331,10 @@ function createBrowserContext(options = {}) {
       readyState: 'complete',
       querySelector: (selector) => elements[selector] ?? null,
       querySelectorAll: () => [],
-      addEventListener: () => {},
+      addEventListener: (eventName, handler) => {
+        if (!documentListeners.has(eventName)) documentListeners.set(eventName, []);
+        documentListeners.get(eventName).push(handler);
+      },
     },
     fetch: async (url, fetchOptions = {}) => {
       fetchCalls.push(String(url));
@@ -384,7 +388,7 @@ function createBrowserContext(options = {}) {
   };
   context.globalThis = context;
   vm.runInNewContext(buildBrowserPageDefinition().script, context);
-  return { context, elements, fetchCalls, openCalls };
+  return { context, elements, fetchCalls, openCalls, documentListeners };
 }
 
 test('Browser query URI is decoded into the address bar and resolved', async () => {
@@ -1074,6 +1078,42 @@ test('Browser menu is data-driven and opens cache management settings', async ()
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /2 artifacts/);
   assert.equal(fetchCalls.at(-2), '/api/browser/settings');
   assert.equal(fetchCalls.at(-1), '/api/browser/cache?actorId=worker');
+});
+
+test('Browser menu matches owner panel outside-click dismissal behavior', async () => {
+  const { elements, fetchCalls, documentListeners } = createBrowserContext();
+
+  await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
+
+  const triggerClick = elements['[data-browser-menu-trigger]'].listeners.get('click');
+  const menuClick = elements['[data-browser-menu]'].listeners.get('click');
+  const documentClick = documentListeners.get('click')?.at(-1);
+  assert.equal(typeof triggerClick, 'function');
+  assert.equal(typeof menuClick, 'function');
+  assert.equal(typeof documentClick, 'function');
+
+  let triggerStopped = false;
+  triggerClick({
+    stopPropagation() {
+      triggerStopped = true;
+    },
+  });
+  assert.equal(triggerStopped, true);
+  assert.equal(elements['[data-browser-menu]'].hidden, false);
+  assert.equal(elements['[data-browser-menu-trigger]'].getAttribute('aria-expanded'), 'true');
+
+  let menuStopped = false;
+  menuClick({
+    stopPropagation() {
+      menuStopped = true;
+    },
+    target: eventTargetWithAttribute('data-browser-menu'),
+  });
+  assert.equal(menuStopped, true);
+
+  documentClick({});
+  assert.equal(elements['[data-browser-menu]'].hidden, true);
+  assert.equal(elements['[data-browser-menu-trigger]'].getAttribute('aria-expanded'), 'false');
 });
 
 test('Browser base URL settings show only resolver base URL fields', async () => {
