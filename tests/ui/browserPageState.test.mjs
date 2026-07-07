@@ -1091,6 +1091,8 @@ test('Browser base URL settings show only resolver base URL fields', async () =>
   assert.match(html, /Metaso P2P Base URL/);
   assert.match(html, /Metafile Content Base URL/);
   assert.match(html, /ManAPI Base URL/);
+  assert.match(html, /The infrastructure of the Open Agent Internet is decentralized\./);
+  assert.match(html, /Build your own via <a href="https:\/\/github\.com\/orgs\/openagentinternet\/repositories" target="_blank" rel="noopener">GitHub<\/a>\./);
   assert.doesNotMatch(html, /Block Explorer Base URL/);
   assert.doesNotMatch(html, /Wallet API Base URL/);
 });

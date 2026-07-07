@@ -1050,7 +1050,7 @@ function renderBaseUrlSettings() {
         '<input data-browser-setting-field="' + escapeHtml(key) + '" value="' + escapeHtml(value) + '" placeholder="' + escapeHtml(placeholder) + '" />' +
       '</label>';
     }).join('') +
-    '<p class="browser-settings-note">Empty values reset to defaults. Changes apply globally.</p>' +
+    '<p class="browser-settings-note">The infrastructure of the Open Agent Internet is decentralized. Build your own via <a href="https://github.com/orgs/openagentinternet/repositories" target="_blank" rel="noopener">GitHub</a>.</p>' +
   '</form>';
 }
 
