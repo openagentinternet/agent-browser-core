@@ -579,6 +579,8 @@ function proofTxid(proof) {
   return textValue(proof.txid) || txidFromPinId(proof.pinId);
 }
 
+var BOT_HOMEPAGE_SUMMARY_MAX_LENGTH = 1024;
+
 function compactText(value, limit) {
   var text = textValue(value).replace(/\\s+/g, ' ');
   var maxLength = limit || 260;
@@ -587,7 +589,7 @@ function compactText(value, limit) {
   return (truncated || text.slice(0, maxLength - 3)) + '...';
 }
 
-function readableText(value) {
+function readableText(value, limit) {
   var text = textValue(value);
   if (!text) return '';
   var first = text.charAt(0);
@@ -603,13 +605,13 @@ function readableText(value) {
           textValue(parsed.goal),
           textValue(parsed.soul)
         ].filter(Boolean);
-        if (preferred.length) return compactText(preferred.slice(0, 2).join(' '));
+        if (preferred.length) return compactText(preferred.slice(0, 2).join(' '), limit);
       }
     } catch (error) {
-      return compactText(text);
+      return compactText(text, limit);
     }
   }
-  return compactText(text);
+  return compactText(text, limit);
 }
 
 function truncateBuzzDetail(value) {
@@ -2480,7 +2482,7 @@ function normalizeBotHomepagePayload(current) {
   var v3Chats = botHomepageSectionItems(data, 'chats');
   var v3Metaapps = botHomepageSectionItems(data, 'apps');
   var name = textValue(profile.name) || textValue(homepage.title) || textValue(current.title);
-  var summary = readableText(homepage.summary) || readableText(profile.bio);
+  var summary = readableText(homepage.summary, BOT_HOMEPAGE_SUMMARY_MAX_LENGTH) || readableText(profile.bio, BOT_HOMEPAGE_SUMMARY_MAX_LENGTH);
   var llmPayload = objectValue(objectValue(profile.llm).payload);
   var primaryProvider = textValue(llmPayload.primaryProvider);
   var fallbackProvider = textValue(llmPayload.fallbackProvider);

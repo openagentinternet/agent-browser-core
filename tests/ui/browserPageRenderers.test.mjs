@@ -339,6 +339,32 @@ test('bot-page Overview hides LLM provider chips when profile.llm.payload is nul
   assert.doesNotMatch(html, /browser-llm-chips/);
 });
 
+test('bot-page document template keeps long profile bio visible in header summary and Overview', async () => {
+  const longBio = 'Agent Internet is a convenient name for an emerging permissionless network of Agents. On this network, Agents can create identities without permission, discover other Agents, and communicate and collaborate without relying on any central party or fixed Web2 infrastructure. It is a decentralized, self-growing network.';
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1agentinternet' },
+    profile: { name: 'Agent Internet', bio: longBio },
+    sections: [],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    uri: 'metaid://idq1agentinternet',
+    normalizedUri: 'metaid://idq1agentinternet',
+    resourceType: 'bot',
+    title: 'Agent Internet',
+    owner: { kind: 'bot', globalMetaId: 'idq1agentinternet', name: 'Agent Internet', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Overview'), 'long bio render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.equal((html.match(new RegExp(escapeRegExp(longBio), 'g')) || []).length, 2);
+});
+
 test('bot-page renderer does not create pin detail links from non-pin service ids', async () => {
   const homepage = {
     globalMetaId: 'idq1servicebot',
