@@ -141,6 +141,9 @@ function createBrowserContext(options = {}) {
   if (options.seedBookmarks) {
     storage.setItem('agent-browser:bookmarks', JSON.stringify(options.seedBookmarks));
   }
+  if (options.seedHistory) {
+    storage.setItem('agent-browser:history', JSON.stringify(options.seedHistory));
+  }
   const context = {
     console, URL, URLSearchParams, JSON, encodeURIComponent, decodeURIComponent,
     Promise, String, Error, setTimeout, clearTimeout,
@@ -187,8 +190,8 @@ test('welcome page shows the two official recommendations', async () => {
   const { elements } = createBrowserContext();
   await waitFor(() => elements['[data-browser-viewport]'].innerHTML.includes('browser-welcome'), 'welcome render');
   const html = elements['[data-browser-viewport]'].innerHTML;
-  assert.match(html, /metaapp:\/\/agent-browser/);
-  assert.match(html, /metaid:\/\/docsbot/);
+  assert.match(html, /metaapp:\/\/765570486edfc94bb0b393bfb8c48d100fb84be9fcf2b9b0b39df68e997135c1i0/);
+  assert.match(html, /metaid:\/\/idq1skptl242lfuuqq8f0z9mhu88tgj0e0kvlqd6vk/);
   assert.match(html, /Agent Browser/);
   assert.match(html, /Docs Bot/);
 });
@@ -212,6 +215,31 @@ test('welcome page with seeded bookmarks shows bookmark tiles before official ti
   assert.ok(alicePos > -1, 'bookmark tile rendered');
   assert.ok(officialPos > -1, 'official tile rendered');
   assert.ok(alicePos < officialPos, 'bookmark tile precedes official tile');
+});
+
+test('welcome page caps real shortcuts at 10, keeps recommendations last, and puts latest visits first', async () => {
+  const seedHistory = Array.from({ length: 11 }, (_, index) => ({
+    uri: `metaid://idq1recent${index + 1}`,
+    title: `Recent ${index + 1}`,
+    resourceType: 'bot',
+  }));
+  const { elements } = createBrowserContext({
+    seedBookmarks: [
+      { uri: 'metaid://idq1bookmark1', title: 'Bookmark 1', resourceType: 'bot' },
+      { uri: 'metaid://idq1bookmark2', title: 'Bookmark 2', resourceType: 'bot' },
+    ],
+    seedHistory,
+  });
+  await waitFor(() => elements['[data-browser-viewport]'].innerHTML.includes('browser-welcome'), 'welcome render');
+  const html = elements['[data-browser-viewport]'].innerHTML;
+  const tileUris = Array.from(html.matchAll(/href="([^"]+)"/g), (match) => match[1]);
+  const tileCount = Array.from(html.matchAll(/<a class="browser-welcome-tile(?: is-official)?"/g)).length;
+  assert.equal(tileCount, 12);
+  assert.equal(tileUris[0], 'metaid://idq1recent11');
+  assert.deepEqual(tileUris.slice(-2), [
+    'metaapp://765570486edfc94bb0b393bfb8c48d100fb84be9fcf2b9b0b39df68e997135c1i0',
+    'metaid://idq1skptl242lfuuqq8f0z9mhu88tgj0e0kvlqd6vk',
+  ]);
 });
 
 test('submitting an empty address bar re-renders the welcome page', async () => {

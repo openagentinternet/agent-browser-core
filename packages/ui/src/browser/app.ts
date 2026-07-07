@@ -129,8 +129,8 @@ function getLlmProvider(providerId) {
 }
 var CUSTOM_BOT_PAGE_HELP = 'When enabled, Bot Pages can render the custom MetaApp or Metafile declared on /info/homepage. When disabled, Browser always uses the selected built-in template.';
 var OFFICIAL_RECOMMENDATIONS = [
-  { uri: 'metaapp://agent-browser', title: 'Agent Browser', kind: 'official' },
-  { uri: 'metaid://docsbot', title: 'Docs Bot', kind: 'official' }
+  { uri: 'metaapp://765570486edfc94bb0b393bfb8c48d100fb84be9fcf2b9b0b39df68e997135c1i0', title: 'Agent Browser', kind: 'official' },
+  { uri: 'metaid://idq1skptl242lfuuqq8f0z9mhu88tgj0e0kvlqd6vk', title: 'Docs Bot', kind: 'official' }
 ];
 var browserEndpoints = {
   runtime: '/api/browser/runtime',
@@ -1696,11 +1696,11 @@ function renderUsingIdentity() {
 
 function buildWelcomeShortcutTiles() {
   var tiles = [];
-  var seenUris = {};
+  var seenRealUris = {};
+  var realCount = 0;
   function pushTile(item, kind) {
     var uri = textValue(item.uri);
-    if (!uri || seenUris[uri]) return;
-    seenUris[uri] = true;
+    if (!uri) return false;
     var resourceName = textValue(item.title) || shortId(uri);
     var resourceType = textValue(item.resourceType);
     var iconName = kind === 'official'
@@ -1712,10 +1712,17 @@ function buildWelcomeShortcutTiles() {
       '<span class="browser-welcome-tile-label">' + escapeHtml(resourceName) + '</span>' +
       '<span class="browser-welcome-tile-uri">' + escapeHtml(shortId(uri)) + '</span>' +
       '</a>');
+    return true;
   }
-  for (var i = 0; i < state.bookmarks.length; i += 1) pushTile(state.bookmarks[i], 'bookmark');
+  function pushRealTile(item, kind) {
+    var uri = textValue(item && item.uri);
+    if (!uri || seenRealUris[uri] || realCount >= 10) return;
+    seenRealUris[uri] = true;
+    if (pushTile(item, kind)) realCount += 1;
+  }
   var recent = uniqueRecent();
-  for (var j = 0; j < recent.length; j += 1) pushTile(recent[j], 'recent');
+  for (var i = 0; i < recent.length; i += 1) pushRealTile(recent[i], 'recent');
+  for (var j = 0; j < state.bookmarks.length; j += 1) pushRealTile(state.bookmarks[j], 'bookmark');
   for (var k = 0; k < OFFICIAL_RECOMMENDATIONS.length; k += 1) pushTile(OFFICIAL_RECOMMENDATIONS[k], 'official');
   return tiles.join('');
 }
@@ -1828,7 +1835,7 @@ function recordVisit(current) {
 function uniqueRecent(type) {
   var seen = {};
   var output = [];
-  var limit = type === 'bot' ? RECENT_BOT_MAX : 6;
+  var limit = type === 'bot' ? RECENT_BOT_MAX : WELCOME_SHORTCUT_MAX;
   for (var index = state.visits.length - 1; index >= 0; index -= 1) {
     var visit = state.visits[index];
     if (type && visit.resourceType !== type) continue;
@@ -1885,6 +1892,7 @@ function saveBookmarks() {
 var HISTORY_STORAGE_KEY = 'agent-browser:history';
 var HISTORY_MAX = 20;
 var RECENT_BOT_MAX = 5;
+var WELCOME_SHORTCUT_MAX = 10;
 var HISTORY_PROTOCOLS = ['metaid://', 'metaapp://', 'metafile://', 'map://', 'pin://'];
 
 function isHistoryUri(uri) {
