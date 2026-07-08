@@ -20,6 +20,7 @@ test('Browser root API renders the mature fixed chrome shell asynchronously', as
   assert.match(html, /Agent Internet Browser/);
   assert.match(html, /data-browser-shell/);
   assert.match(html, /class="browser-titlebar"/);
+  assert.match(html, /data-browser-page-title/);
   assert.match(html, /class="browser-topbar"/);
   assert.match(html, /data-browser-uri-input/);
   assert.match(html, /data-browser-using-selector/);

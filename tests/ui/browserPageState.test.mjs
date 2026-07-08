@@ -106,6 +106,7 @@ function waitFor(condition, label) {
 function createElements() {
   return {
     '[data-browser-shell]': new FakeElement(),
+    '[data-browser-page-title]': new FakeElement(),
     '[data-browser-uri-input]': new FakeElement(),
     '[data-browser-address-form]': new FakeElement(),
     '[data-browser-back]': new FakeElement(),
@@ -329,6 +330,7 @@ function createBrowserContext(options = {}) {
     },
     document: {
       readyState: 'complete',
+      title: 'Agent Internet Browser',
       querySelector: (selector) => elements[selector] ?? null,
       querySelectorAll: () => [],
       addEventListener: (eventName, handler) => {
@@ -464,6 +466,8 @@ test('Browser displays disabled MetaApp resolver failures in the centered failur
   assert.equal(context.state.current, null);
   assert.equal(context.state.lastResolveError.code, 'browser_resource_disabled');
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metaapp%3A%2F%2F${pinId}&actorId=worker`);
+  assert.equal(elements['[data-browser-page-title]'].textContent, 'Resolve failed');
+  assert.equal(context.document.title, 'Resolve failed - Bot Browser');
   assert.match(elements['[data-browser-viewport]'].innerHTML, /<h2>Resolve failed<\/h2>/);
   assert.match(elements['[data-browser-viewport]'].innerHTML, /MetaApp disabled by owner/);
 });
@@ -634,6 +638,8 @@ test('Browser preserves metaid address when resolver returns custom target resou
   assert.equal(fetchCalls.some((call) => call.includes('metaapp%3A%2F%2F')), false);
   assert.deepEqual(elements['[data-browser-uri-input]'].valueHistory, [aliasUri, aliasUri, aliasUri]);
   assert.equal(elements['[data-browser-uri-input]'].valueHistory.includes(customHomepageUri), false);
+  assert.equal(elements['[data-browser-page-title]'].textContent, 'Custom MetaApp');
+  assert.equal(context.document.title, 'Custom MetaApp - Bot Browser');
 });
 
 test('Browser Metafile deep link path is decoded into the address bar and resolved', async () => {

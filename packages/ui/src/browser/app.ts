@@ -43,6 +43,7 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
             </span>
             <span>Bot Browser</span>
           </div>
+          <span class="browser-window-page-title" data-browser-page-title title="Agent Internet Browser">Agent Internet Browser</span>
         </div>
         <header class="browser-topbar" data-browser-topbar>
           <nav class="browser-nav" aria-label="Browser navigation">
@@ -141,6 +142,8 @@ var browserEndpoints = {
   actions: '/api/browser/actions',
   metafileUpload: '/api/browser/metafile-upload',
 };
+var BROWSER_PAGE_DEFAULT_TITLE = 'Agent Internet Browser';
+var BROWSER_WINDOW_TITLE_SUFFIX = 'Bot Browser';
 
 var state = {
   history: [],
@@ -182,6 +185,30 @@ function textValue(value) {
 
 function browserText(key, fallback) {
   return fallback;
+}
+
+function currentDisplayTitle(current, fallback) {
+  var title = textValue(current && current.title);
+  if (title) return title;
+  title = textValue(current && current.owner && current.owner.name);
+  if (title) return title;
+  title = textValue(current && (current.normalizedUri || current.uri));
+  if (title) return title;
+  return textValue(fallback);
+}
+
+function syncBrowserPageTitle(pageTitle) {
+  var title = textValue(pageTitle);
+  var displayTitle = title || BROWSER_PAGE_DEFAULT_TITLE;
+  if (elements.pageTitle) {
+    elements.pageTitle.textContent = displayTitle;
+    if (typeof elements.pageTitle.setAttribute === 'function') {
+      elements.pageTitle.setAttribute('title', displayTitle);
+    }
+  }
+  if (typeof document === 'object' && document) {
+    document.title = title ? (title + ' - ' + BROWSER_WINDOW_TITLE_SUFFIX) : BROWSER_PAGE_DEFAULT_TITLE;
+  }
 }
 
 function escapeHtml(value) {
@@ -703,6 +730,7 @@ function closestWithAttribute(target, attributeName) {
 function bindElements() {
   elements = {
     shell: document.querySelector('[data-browser-shell]'),
+    pageTitle: document.querySelector('[data-browser-page-title]'),
     input: document.querySelector('[data-browser-uri-input]'),
     form: document.querySelector('[data-browser-address-form]'),
     back: document.querySelector('[data-browser-back]'),
@@ -1732,6 +1760,7 @@ function buildWelcomeShortcutTiles() {
 function renderWelcome() {
   setStatus('ready', '');
   state.current = null;
+  syncBrowserPageTitle(browserText('welcome.windowTitle', 'Welcome'));
   if (elements.resourceChip) {
     elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar');
     elements.resourceChip.disabled = true;
@@ -1765,6 +1794,7 @@ function renderNoLocalBot() {
   var actionLabel = browserText('runtime.noActorAction.label', action && typeof action === 'object' ? textValue(action.label) : '');
   setStatus('ready', '');
   state.current = null;
+  syncBrowserPageTitle(title);
   if (elements.resourceChip) {
     elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar');
     elements.resourceChip.disabled = true;
@@ -1791,11 +1821,13 @@ function pushHistory(uri) {
 function renderCurrent() {
   var current = state.current;
   if (!current) return;
+  var resourceTitle = currentDisplayTitle(current, 'Resource');
   var ownerName = textValue(current.owner && current.owner.name) || textValue(current.title) || 'Resource';
   var ownerId = textValue(current.owner && (current.owner.globalMetaId || current.owner.metaid || current.owner.address)) || textValue(current.normalizedUri || current.uri);
   var ownerAvatar = textValue(current.owner && current.owner.avatar);
   var rendererType = textValue(current.renderer && current.renderer.type) || 'unsupported';
   var txid = proofTxid(current.proof);
+  syncBrowserPageTitle(resourceTitle);
   if (elements.resourceChip) {
     elements.resourceChip.innerHTML = avatarHtml(ownerAvatar, ownerName, 'browser-chip-avatar');
     elements.resourceChip.disabled = false;
@@ -1827,7 +1859,7 @@ function recordVisit(current) {
   }
   state.visits.push({
     uri: uri,
-    title: textValue(current.title) || textValue(current.owner && current.owner.name) || uri,
+    title: currentDisplayTitle(current, uri),
     resourceType: textValue(current.resourceType)
   });
   while (state.visits.length > HISTORY_MAX) state.visits.shift();
@@ -1987,7 +2019,7 @@ function addBookmark() {
   if (findBookmarkIndex(uri) !== -1) return false;
   state.bookmarks.push({
     uri: uri,
-    title: textValue(state.current.title) || textValue(state.current.owner && state.current.owner.name) || 'Current resource',
+    title: currentDisplayTitle(state.current, 'Current resource'),
     resourceType: textValue(state.current.resourceType)
   });
   saveBookmarks();
@@ -4525,6 +4557,7 @@ async function resolveUri(uri, options) {
     };
     setStatus('error', error && error.message ? error.message : 'Resolve failed.');
     state.current = null;
+    syncBrowserPageTitle('Resolve failed');
     if (elements.viewport) {
       elements.viewport.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(state.error) + '</p></section>';
     }
