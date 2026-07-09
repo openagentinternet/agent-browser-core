@@ -203,6 +203,7 @@ test('bot-page renderer shows profile, services, and trusted buttons from homepa
   const html = nodes['[data-browser-viewport]'].innerHTML;
   assert.match(html, /Fixture Bot/);
   assert.match(html, /idq1fixturebot/);
+  assert.match(html, /<p class="browser-globalmetaid">idq1fixturebot<\/p><span class="browser-presence-tag" aria-label="Online status"><span class="browser-presence-dot" aria-hidden="true"><\/span><span>online<\/span><\/span>/);
   assert.match(html, /Builds Agent Browser fixtures/);
   assert.match(html, /Overview/);
   assert.match(html, /Recent Activity/);
@@ -863,6 +864,8 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-card button \{\n        justify-self: end;\n        white-space: nowrap;\n        border-color: #cfe0ff;\n        background: #eaf1ff;/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-meta,\s+\.browser-metaapp-facts \{\n        display: flex;\n        flex-wrap: wrap;\n        gap: 6px;\n        min-width: 0;/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-service-provider,\s+\.browser-card-chip,\s+\.browser-metaapp-fact \{\n        min-width: 0;\n        display: inline-flex;[\s\S]*?border-radius: 999px;[\s\S]*?font-size: 11px;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-presence-tag \{\n        justify-self: start;\n        display: inline-flex;[\s\S]*?border-radius: 999px;[\s\S]*?font-size: 11px;/);
+  assert.match(BROWSER_INDEX_HTML, /\.browser-presence-dot \{\n        width: 7px;\n        height: 7px;[\s\S]*?box-shadow: 0 0 0 2px rgba\(34, 197, 94, \.16\), 0 0 10px rgba\(34, 197, 94, \.42\);/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-overview-label \{\n        color: var\(--browser-muted\);\n        font-weight: 700;\n      \}/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-overview-meta \{\n        display: flex;\n        align-items: center;\n        gap: 8px;\n        min-width: 0;\n        flex-wrap: nowrap;\n      \}/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-overview-meta \.browser-llm-chips \{\n        margin-top: 0;\n        flex-wrap: nowrap;\n      \}/);

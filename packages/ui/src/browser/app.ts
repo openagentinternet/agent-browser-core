@@ -640,6 +640,11 @@ function readableText(value, limit) {
   return compactText(text, limit);
 }
 
+function botHomepagePresenceOnline(data) {
+  var presence = objectValue(data && data.presence);
+  return textValue(presence.state).toLowerCase() === 'online';
+}
+
 function truncateBuzzDetail(value) {
   var text = textValue(value);
   var limit = 200;
@@ -2564,6 +2569,7 @@ function normalizeBotHomepagePayload(current) {
       name: name || 'Bot',
       globalMetaId: textValue(identity.globalMetaId) || textValue(data.globalMetaId) || textValue(owner.globalMetaId),
       avatar: identityAvatar,
+      online: botHomepagePresenceOnline(data),
       proofState: textValue(current.status && current.status.verificationState) || 'unverified'
     },
     summary: {
@@ -2624,6 +2630,12 @@ function renderDocumentOverviewSection(payload) {
     ? '<div class="browser-overview-meta"><strong class="browser-overview-label">LLM:</strong>' + llmChipsHtml + '</div>'
     : '';
   return '<section class="browser-document-section"><h3>Overview</h3>' + overviewHtml + llmHtml + '</section>';
+}
+
+function renderPresenceTag(isOnline) {
+  return isOnline
+    ? '<span class="browser-presence-tag" aria-label="Online status"><span class="browser-presence-dot" aria-hidden="true"></span><span>online</span></span>'
+    : '';
 }
 
 function renderServiceRows(services) {
@@ -2765,7 +2777,8 @@ function renderBotHomepageDocumentTemplate(payload, current) {
     '<header class="browser-bot-header">' +
     avatarHtml(identity.avatar, identity.name, 'browser-bot-avatar') +
     '<div class="browser-bot-identity"><div class="browser-bot-title-line"><h2>' + escapeHtml(identity.name) + '</h2></div>' +
-    (identity.globalMetaId ? '<p class="browser-globalmetaid">' + escapeHtml(identity.globalMetaId) + '</p>' : '') + '</div>' +
+    (identity.globalMetaId ? '<p class="browser-globalmetaid">' + escapeHtml(identity.globalMetaId) + '</p>' : '') +
+    renderPresenceTag(identity.online) + '</div>' +
     renderBotPageActionButtons(current.actions) + '</header>' +
     renderDocumentOverviewSection(payload) +
     servicesSection +
