@@ -41,9 +41,8 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
             <span class="browser-brand-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8"></circle><path d="M4 12h16M12 4c2.2 2.3 3.3 5 3.3 8S14.2 17.7 12 20M12 4C9.8 6.3 8.7 9 8.7 12s1.1 5.7 3.3 8"></path></svg>
             </span>
-            <span>Bot Browser</span>
+            <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Bot Browser - <span class="browser-window-page-title" data-browser-page-title title="Agent Internet Browser">Agent Internet Browser</span></span>
           </div>
-          <span class="browser-window-page-title" data-browser-page-title title="Agent Internet Browser">Agent Internet Browser</span>
         </div>
         <header class="browser-topbar" data-browser-topbar>
           <nav class="browser-nav" aria-label="Browser navigation">
