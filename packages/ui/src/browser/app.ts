@@ -998,7 +998,7 @@ function renderOwnerPanel() {
       '<button type="button" role="menuitem" class="browser-owner-panel-item" data-browser-owner-panel-action="visit-home">' +
         iconHtml('external') + '<span>' + escapeHtml(visitHomeText) + '</span>' +
       '</button>' +
-      '<button type="button" role="menuitem" class="browser-owner-panel-item" data-browser-owner-panel-action="send-message" disabled>' +
+      '<button type="button" role="menuitem" class="browser-owner-panel-item" data-browser-owner-panel-action="send-message">' +
         iconHtml('message') + '<span>' + escapeHtml(sendMessageText) + '</span>' +
       '</button>' +
     '</div>';
@@ -1047,6 +1047,9 @@ function handleOwnerPanelAction(action) {
       closeInspector();
       return navigateTo(creatorUri);
     }
+  }
+  if (action === 'send-message') {
+    return handleTrustedAction({ id: 'owner-send-message', kind: 'private-chat' });
   }
   return Promise.resolve();
 }

@@ -647,4 +647,33 @@ test('owner panel omits the Follow menu item', () => {
   const html = nodes['[data-browser-owner-panel]'].innerHTML;
   assert.doesNotMatch(html, /data-browser-owner-panel-action="follow"/);
   assert.match(html, /data-browser-owner-panel-action="visit-home"/);
+  assert.match(html, /data-browser-owner-panel-action="send-message"/);
+  assert.doesNotMatch(html, /data-browser-owner-panel-action="send-message" disabled/);
+});
+
+test('owner panel Send Message opens the existing private-chat composer in a host runtime', async () => {
+  const { context, nodes, requests } = createContext();
+  context.openOwnerPanel();
+
+  await context.handleOwnerPanelAction('send-message');
+
+  assert.equal(nodes['[data-browser-owner-panel]'].hidden, true);
+  assert.equal(requests.length, 0);
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Private Chat/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Target Bot/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /data-browser-private-chat-message/);
+});
+
+test('owner panel Send Message opens the unsupported modal in standalone', async () => {
+  const { context, nodes, requests } = createContext();
+  context.state.runtime = standaloneRuntime();
+  context.openOwnerPanel();
+
+  await context.handleOwnerPanelAction('send-message');
+
+  assert.equal(nodes['[data-browser-owner-panel]'].hidden, true);
+  assert.equal(requests.length, 0);
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /standalone-unsupported/);
 });
