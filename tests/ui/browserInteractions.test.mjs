@@ -58,6 +58,8 @@ test('client script includes custom homepage iframe navigation bridge', () => {
   assert.match(script, /agent-browser:request/);
   assert.match(script, /agent-browser:response/);
   assert.match(script, /browser\.actor\.current/);
+  assert.match(script, /browser\.privateChat\.compose/);
+  assert.match(script, /function handleBridgePrivateChatCompose\(sourceWindow, id\)/);
   assert.match(script, /metaid\.pin\.write/);
   assert.match(script, /metafile\.upload/);
   assert.match(script, /window\.addEventListener\('message', handleBrowserBridgeMessage\)/);

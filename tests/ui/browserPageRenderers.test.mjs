@@ -1187,6 +1187,84 @@ test('html-iframe bridge responds with sanitized current actor', async () => {
   assert.equal(fetchCalls.some((url) => String(url).includes('/api/browser/actions')), false);
 });
 
+test('html-iframe bridge opens the Browser private-chat composer for the current Bot owner', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const targetGlobalMetaId = 'idq1targetbot';
+  const { context, nodes, fetchCalls, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }, {
+    uri: `metaid://${targetGlobalMetaId}`,
+    normalizedUri: `metaid://${targetGlobalMetaId}`,
+    owner: {
+      kind: 'bot',
+      globalMetaId: targetGlobalMetaId,
+      name: 'Target Bot',
+      verificationState: 'partial',
+    },
+  }), {
+    runtime: {
+      host: { kind: 'oac', name: 'Open Agent Connect', localMode: true },
+      actors: [{
+        id: 'worker',
+        label: 'Worker',
+        kind: 'oac-bot',
+        globalMetaId: 'idq1worker',
+        isDefault: true,
+        capabilities: ['private-chat'],
+      }],
+      defaultActor: {
+        id: 'worker',
+        label: 'Worker',
+        kind: 'oac-bot',
+        globalMetaId: 'idq1worker',
+        isDefault: true,
+        capabilities: ['private-chat'],
+      },
+      defaultUri: null,
+      features: { privateChat: true, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'private-chat-compose-1',
+      method: 'browser.privateChat.compose',
+      params: {
+        to: 'idq1forgedtarget',
+        content: 'must not be accepted from iframe content',
+      },
+    },
+  });
+
+  await waitFor(() => activeFrameWindow.postMessageCalls.length === 1, 'private-chat composer bridge response');
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Private Chat/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Target Bot/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /data-browser-private-chat-message/);
+  assert.equal(context.state.pendingPrivateChat.to, targetGlobalMetaId);
+  assert.equal(fetchCalls.some((url) => String(url).includes('/api/browser/actions')), false);
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'private-chat-compose-1',
+    ok: true,
+    result: { opened: true },
+  });
+});
+
 test('html-iframe bridge ignores actor requests from inactive frames', async () => {
   const activeFrameWindow = {
     postMessageCalls: [],

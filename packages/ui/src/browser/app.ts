@@ -530,6 +530,34 @@ async function handleBridgeMetafileUpload(sourceWindow, id, params) {
   }
 }
 
+function handleBridgePrivateChatCompose(sourceWindow, id) {
+  if (isStandaloneHostRuntime() || runtimeFeatures().privateChat !== true) {
+    if (isStandaloneHostRuntime()) openStandaloneUnsupportedModal();
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: 'unsupported_method',
+      message: 'Private chat is not supported in this Browser host.'
+    }));
+    return;
+  }
+  var owner = objectValue(state.current && state.current.owner);
+  if (!textValue(owner.globalMetaId)) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: 'invalid_request',
+      message: 'The current Browser resource does not have a private-chat target.'
+    }));
+    return;
+  }
+  openPrivateChatModal();
+  if (!state.pendingPrivateChat) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: 'invalid_request',
+      message: 'The Browser private-chat composer could not be opened.'
+    }));
+    return;
+  }
+  bridgePostMessage(sourceWindow, bridgeResponse(id, true, { opened: true }));
+}
+
 function handleBrowserBridgeMessage(event) {
   var data = event && event.data && typeof event.data === 'object' ? event.data : null;
   if (!data || data.version !== 1) return;
@@ -546,6 +574,10 @@ function handleBrowserBridgeMessage(event) {
   if (!id) return;
   if (textValue(data.method) === 'browser.actor.current') {
     bridgePostMessage(sourceWindow, bridgeResponse(id, true, { actor: sanitizedActorSnapshot(selectedActor()) }));
+    return;
+  }
+  if (textValue(data.method) === 'browser.privateChat.compose') {
+    handleBridgePrivateChatCompose(sourceWindow, id);
     return;
   }
   if (textValue(data.method) === 'metaid.pin.write') {

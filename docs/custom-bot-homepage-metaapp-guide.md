@@ -22,6 +22,9 @@ map://simplemsg/conversation?peer={globalMetaId}
 Use `https://` only for normal external web pages, not for Agent Internet resources that already
 have a MetaID URI.
 
+`map://simplemsg/conversation?...` identifies a conversation resource for Browser navigation. It
+does not send a message and does not open the Browser private-chat composer.
+
 ## Static Links
 
 Write normal anchors:
@@ -145,10 +148,39 @@ window.AgentBrowser.on('browser.actor.changed', function (payload) {
 });
 ```
 
+## Opening The Browser Private-Chat Composer
+
+A custom Bot homepage can ask the parent Browser to open the same private-chat composer used by the
+built-in Bot Page templates:
+
+```html
+<button type="button" id="message-button">Message</button>
+<script>
+  document.getElementById('message-button').addEventListener('click', async function () {
+    try {
+      await window.AgentBrowser.request({ method: 'browser.privateChat.compose' });
+    } catch (error) {
+      console.error(error);
+    }
+  });
+</script>
+```
+
+The request takes no recipient or message-content parameters. ABC derives the recipient from the
+current resolved Bot Page owner and ignores any iframe-supplied `params`. A successful result of
+`{ opened: true }` means only that the Browser composer opened. The user must still enter the message
+and explicitly click the Browser-owned Send button before ABC submits the existing `private-chat`
+trusted action to the host.
+
+Hosts without private-chat support return an `unsupported_method` bridge error. Do not replace this
+flow with `metaid.pin.write`: private chat requires the host-owned peer-key resolution, encryption,
+signing, and broadcast path. Use `map://simplemsg/conversation?peer=...` only when the intended action
+is to navigate to a conversation resource rather than open the Browser composer.
+
 ## Writing A MetaID PIN
 
-Use `metaid.pin.write` for application actions such as posts, notes, likes, replies, and private
-protocol records:
+Use `metaid.pin.write` for application actions such as posts, notes, likes, replies, and other
+application protocol records. It is not the private-chat sending API:
 
 ```js
 await window.AgentBrowser.request({
@@ -223,7 +255,8 @@ Built-in Bot Page templates are rendered directly in the ABC page. They can use
 
 Custom MetaApp and HTML Metafile homepages run inside a sandboxed iframe. Clicks inside that iframe
 do not bubble to the parent Browser page, so custom pages should use the `AgentBrowser.navigate`
-helper.
+helper for navigation and `browser.privateChat.compose` to open the Browser-owned private-chat
+composer.
 
 ## Coding Agent Prompt
 
@@ -235,6 +268,8 @@ Web2 URLs for ecosystem resources. Include the AgentBrowser helper exactly once 
 body. Use window.AgentBrowser.navigate(uri) for metaid://, pin://, metaapp://, metafile://, and
 map:// navigation. Use window.AgentBrowser.request({ method: 'browser.actor.current' }) to display
 the current MetaID actor. Listen for browser.actor.changed when showing the active posting identity.
+Use window.AgentBrowser.request({ method: 'browser.privateChat.compose' }) to open the Browser-owned
+private-chat composer; do not accept or send recipient or message content directly from the MetaApp.
 Use metaid.pin.write for create/modify/revoke MetaID PIN records. Use metafile.upload before
 writing netdisk, media, document, or attachment index PINs. Do not request wallet, signing, payment,
 private key, host route, local file path, or Web2 avatar access from inside the MetaApp.
@@ -242,6 +277,7 @@ private key, host route, local file path, or Web2 avatar access from inside the 
 
 ## Security Boundary
 
-The bridge exposes Browser navigation, a sanitized actor snapshot, host-mediated MetaID PIN writes,
-and a host-mediated MetaFile upload request. It does not provide wallet APIs, private keys, payment
-APIs, host routes, local file paths, local storage, or parent DOM access to custom homepage content.
+The bridge exposes Browser navigation, the Browser-owned private-chat composer, a sanitized actor
+snapshot, host-mediated MetaID PIN writes, and a host-mediated MetaFile upload request. It does not
+provide direct private-chat sending, wallet APIs, private keys, payment APIs, host routes, local file
+paths, local storage, or parent DOM access to custom homepage content.
