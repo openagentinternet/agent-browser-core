@@ -3819,6 +3819,7 @@ var PIN_INSPECTOR_PAGE_STYLE = '<style>' +
   '.browser-pin-meta-pills { display: flex; flex-wrap: wrap; gap: 8px; }' +
   '.browser-pin-meta-pill { display: inline-flex; align-items: center; min-height: 26px; max-width: 100%; padding: 4px 9px; border: 1px solid #d9e1ed; border-radius: 999px; background: #fff; color: #4c5b6f; font-size: 12px; font-weight: 700; overflow-wrap: anywhere; }' +
   '.browser-pin-page-actions { display: flex; align-items: flex-start; flex-shrink: 0; gap: 8px; }' +
+  '.browser-pin-page-actions .browser-metaapp-run { padding: 0 14px; }' +
   '.browser-pin-page-actions button { min-height: 34px; border: 1px solid #cfd9e6; border-radius: 8px; background: #fff; color: #162132; padding: 7px 12px; font-size: 12px; font-weight: 700; }' +
   '.browser-pin-page-actions button:first-child { background: #eaf1ff; border-color: #cfe0ff; color: #2e6fed; }' +
   '.browser-pin-page-grid { display: grid; grid-template-columns: minmax(0, 1.58fr) minmax(300px, 320px); gap: 16px; align-items: start; }' +

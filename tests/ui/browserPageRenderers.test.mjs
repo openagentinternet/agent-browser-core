@@ -1889,8 +1889,8 @@ test('pin-inspector renderer uses payload-first mature shell sections', async ()
   assert.doesNotMatch(html, /why-this-direction/);
   assert.doesNotMatch(html, /Raw MAN pin record/);
   assert.doesNotMatch(html, /data-browser-pin-raw-record/);
-  assert.doesNotMatch(html, /browser-metaapp-run/);
-  assert.doesNotMatch(html, /browser-metaapp-download/);
+  assert.doesNotMatch(html, /<a class="browser-metaapp-run"/);
+  assert.doesNotMatch(html, /<a class="browser-metaapp-download"/);
 });
 
 test('pin-inspector adds Run and download actions for MetaApp protocol pins', async () => {
