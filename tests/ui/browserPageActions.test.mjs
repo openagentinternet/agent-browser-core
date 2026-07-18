@@ -345,6 +345,36 @@ test('private-chat sends only after modal confirmation with Browser action contr
   assert.equal(Object.prototype.hasOwnProperty.call(requests[0].body.payload, 'message'), false);
 });
 
+test('private-chat modal shows avatars beside the Using and Target bot names', async () => {
+  const { context, nodes } = createContext();
+
+  await context.handleTrustedAction({ id: 'message', kind: 'private-chat' });
+
+  const html = nodes['[data-browser-modal-root]'].innerHTML;
+  assert.match(html, /<dd class="browser-modal-value-with-avatar"/, 'Using row must use the avatar value layout');
+  const valueRows = html.match(/<dd class="browser-modal-value-with-avatar"[\s\S]*?<\/dd>/g) || [];
+  assert.equal(valueRows.length, 2, 'both Using and Target rows must render with an avatar');
+  assert.match(valueRows[0], /browser-modal-value-avatar/, 'Using avatar element must render');
+  assert.match(valueRows[0], />Worker Bot</, 'Using row must show the Using bot name');
+  assert.match(valueRows[1], /browser-modal-value-avatar/, 'Target avatar element must render');
+  assert.match(valueRows[1], />Target Bot</, 'Target row must show the Target bot name');
+});
+
+test('private-chat Send is blocked when the Using and Target bots are the same', async () => {
+  const { context, nodes, requests } = createContext();
+  context.state.current.owner = { kind: 'bot', globalMetaId: 'idq1worker', name: 'Worker Bot', verificationState: 'partial' };
+
+  await context.handleTrustedAction({ id: 'message', kind: 'private-chat' });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false, 'modal stays open so the user can change selection');
+
+  await context.confirmPrivateChat('Hello from Browser');
+
+  assert.equal(requests.length, 0, 'no action request is posted when Using and Target are the same bot');
+  assert.match(nodes['[data-browser-status-state]'].textContent, /error/i);
+  assert.match(context.state.error, /cannot be the same/i);
+});
+
+
 test('private-chat success shows a confirmation modal with a conversation link', async () => {
   const { context, nodes, requests } = createContext({
     actionResponse: {
