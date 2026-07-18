@@ -70,6 +70,10 @@ host support for local/public Browser previews.
   Prefer `createBrowserSettingsSnapshot()` for `getSettings()`/`updateSettings()` so the returned
   `defaults` always reflects core. Behavioral fields (`localMode`, `renderCustomBotPages`,
   `nameResolution`) are specialized per host and are not constrained.
+- Served Browser page code lives in `packages/ui/src/browser/`. The top-level
+  `browserStyles.ts`, `browserShell.ts`, `browserClientScript.ts`, `pageDefinition.ts`,
+  `browserTypes.ts`, and `menuModel.ts` in `packages/ui/src/` are a legacy parity stack
+  kept only for conformance and packaging tests; do not extend or restyle them.
 
 ## Commit and Merge Rules
 

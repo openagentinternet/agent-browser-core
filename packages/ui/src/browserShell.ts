@@ -1,6 +1,14 @@
+/**
+ * Legacy Browser parity stack — NOT on the served path.
+ * The served Browser page is built from ./browser/ (page.ts + indexHtml.ts).
+ * This file is retained only for conformance and packaging tests; keep it
+ * stable and do not extend or restyle it. Browser UI changes belong in
+ * ./browser/.
+ */
 import { escapeHtml } from './renderers.js';
 import type { BrowserShellInput } from './browserTypes.js';
 
+/** @deprecated Legacy parity stack; not the served Browser page. Retained for tests only. */
 export function buildBrowserShellHtml(input: BrowserShellInput): string {
   return `<section class="browser-shell" data-browser-shell>
       <header class="browser-topbar" data-browser-topbar>

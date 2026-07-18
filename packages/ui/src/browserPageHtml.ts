@@ -1,3 +1,10 @@
+/**
+ * Legacy Browser parity stack — NOT on the served path.
+ * The served Browser page is built from ./browser/ (page.ts + indexHtml.ts).
+ * This file is retained only for conformance and packaging tests; keep it
+ * stable and do not extend or restyle it. Browser UI changes belong in
+ * ./browser/.
+ */
 import { BROWSER_PAGE_STYLES } from './browserStyles.js';
 import { buildBrowserPageDefinition } from './pageDefinition.js';
 import type { BrowserPageDefinition } from './browserTypes.js';
@@ -12,6 +19,7 @@ function escapeHtml(value: unknown): string {
   })[char] ?? char);
 }
 
+/** @deprecated Legacy parity stack; use renderBrowserPageHtml from ./browser/page.js for the served page. */
 export function renderBrowserPageHtml(definition: BrowserPageDefinition = buildBrowserPageDefinition()): string {
   return `<!doctype html>
 <html lang="en">

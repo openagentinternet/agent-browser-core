@@ -1,3 +1,10 @@
+/**
+ * Legacy Browser parity stack — NOT on the served path.
+ * The served Browser page is built from ./browser/ (page.ts + indexHtml.ts).
+ * This file is retained only for conformance and packaging tests; keep it
+ * stable and do not extend or restyle it. Browser UI changes belong in
+ * ./browser/.
+ */
 import type { BrowserClientScriptInput } from './browserTypes.js';
 import {
   BROWSER_BASE_URL_FIELDS,
@@ -10,6 +17,7 @@ function jsonScript(value: unknown): string {
   return JSON.stringify(value).replace(/</g, '\\u003c');
 }
 
+/** @deprecated Legacy parity stack; not the served Browser page. Retained for tests only. */
 export function buildBrowserClientScript(input: BrowserClientScriptInput): string {
   return `(() => {
   const apiBasePath = ${jsonScript(input.apiBasePath)};

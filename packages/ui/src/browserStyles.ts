@@ -1,3 +1,11 @@
+/**
+ * Legacy Browser parity stack — NOT on the served path.
+ * The served Browser page is built from ./browser/ (page.ts + indexHtml.ts).
+ * This file is retained only for conformance and packaging tests; keep it
+ * stable and do not extend or restyle it. Browser UI changes belong in
+ * ./browser/.
+ */
+/** @deprecated Legacy parity fixture; served styles live in ./browser/indexHtml.ts. Retained for tests only. */
 export const BROWSER_PAGE_STYLES = `
     html, body { height: 100%; margin: 0; }
     body:has(.browser-shell) { overflow: hidden; }

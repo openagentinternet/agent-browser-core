@@ -1,8 +1,16 @@
+/**
+ * Legacy Browser parity stack — NOT on the served path.
+ * The served Browser page is built from ./browser/ (page.ts + indexHtml.ts).
+ * This file is retained only for conformance and packaging tests; keep it
+ * stable and do not extend or restyle it. Browser UI changes belong in
+ * ./browser/.
+ */
 import { buildBrowserClientScript } from './browserClientScript.js';
 import { buildBrowserShellHtml } from './browserShell.js';
 import type { BrowserPageDefinition, BrowserPageDefinitionInput } from './browserTypes.js';
 import { renderResourceHtml } from './renderers.js';
 
+/** @deprecated Legacy parity stack; not the served Browser page. Retained for tests only. */
 export function buildBrowserPageDefinition(input: BrowserPageDefinitionInput = {}): BrowserPageDefinition {
   const apiBasePath = input.apiBasePath ?? '/api/browser';
   const initialUri = input.initialUri ?? input.runtime?.defaultUri ?? 'metaid://idq1fixturebot';
