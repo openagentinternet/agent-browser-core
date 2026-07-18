@@ -1057,10 +1057,11 @@ test('Browser menu is data-driven and opens cache management settings', async ()
   await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
 
   assert.ok(Array.isArray(context.browserMenuSections));
-  assert.equal(context.browserMenuSections[0].items[0].id, 'settings');
-  assert.equal(context.browserMenuSections[0].items[1].id, 'name-resolution');
-  assert.equal(context.browserMenuSections[0].items[2].id, 'templates');
-  assert.equal(context.browserMenuSections[0].items[3].id, 'cache');
+  const mainMenuSection = context.browserMenuSections.find((section) => section.id === 'main');
+  assert.equal(mainMenuSection.items[0].id, 'settings');
+  assert.equal(mainMenuSection.items[1].id, 'name-resolution');
+  assert.equal(mainMenuSection.items[2].id, 'templates');
+  assert.equal(mainMenuSection.items[3].id, 'cache');
 
   elements['[data-browser-menu-trigger]'].click();
   assert.equal(elements['[data-browser-menu]'].hidden, false);
@@ -1080,6 +1081,41 @@ test('Browser menu is data-driven and opens cache management settings', async ()
   assert.match(elements['[data-browser-modal-root]'].innerHTML, /2 artifacts/);
   assert.equal(fetchCalls.at(-2), '/api/browser/settings');
   assert.equal(fetchCalls.at(-1), '/api/browser/cache?actorId=worker');
+});
+
+test('Browser menu mobile-only items fold toolbar actions on narrow layouts', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext();
+
+  await waitFor(() => fetchCalls.length === 2, 'initial Browser load');
+
+  const mobileSection = context.browserMenuSections.find((section) => section.id === 'mobile-navigation');
+  assert.ok(mobileSection);
+  assert.equal(
+    mobileSection.items.map((item) => item.id).join(','),
+    'forward,reload,bookmark,drawer,identity',
+  );
+  assert.ok(mobileSection.items.every((item) => item.mobileOnly === true));
+
+  elements['[data-browser-menu-trigger]'].click();
+  const menuHtml = elements['[data-browser-menu]'].innerHTML;
+  assert.match(menuHtml, /browser-menu-section-mobile/);
+  assert.match(menuHtml, /class="browser-menu-item-mobile" data-browser-menu-item="forward"/);
+  assert.match(menuHtml, /Forward/);
+  assert.match(menuHtml, /Reload/);
+  assert.match(menuHtml, /Bookmark this page/);
+  assert.match(menuHtml, /Bookmarks and history/);
+  assert.match(menuHtml, /Switch identity/);
+
+  assert.equal(context.state.drawerOpen, false);
+  await context.handleBrowserMenuAction('drawer');
+  assert.equal(context.state.drawerOpen, true);
+  await context.handleBrowserMenuAction('drawer');
+  assert.equal(context.state.drawerOpen, false);
+
+  const fetchesBeforeReload = fetchCalls.length;
+  await context.handleBrowserMenuAction('reload');
+  assert.ok(fetchCalls.length > fetchesBeforeReload);
+  assert.match(fetchCalls.at(-1), /^\/api\/browser\/resolve\?uri=/);
 });
 
 test('Browser menu matches owner panel outside-click dismissal behavior', async () => {

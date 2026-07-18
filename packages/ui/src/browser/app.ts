@@ -712,6 +712,7 @@ function iconHtml(name) {
     database: '<ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>',
     download: '<path d="M12 3v12"></path><path d="M8 11l4 4 4-4"></path><path d="M2 17v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2"></path>',
     play: '<path d="M8 5v14l11-7-11-7z"></path>',
+    reload: '<path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 5v6h-6"></path>',
     service: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"></path><path d="M4.4 7.8L12 12l7.6-4.2M12 12v8.5"></path>',
     settings: '<circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.8 1.8 0 0 0 .4 2l.1.1-2.1 2.1-.1-.1a1.8 1.8 0 0 0-2-.4 1.8 1.8 0 0 0-1.1 1.7V21h-3v-.2a1.8 1.8 0 0 0-1.1-1.7 1.8 1.8 0 0 0-2 .4l-.1.1-2.1-2.1.1-.1a1.8 1.8 0 0 0 .4-2 1.8 1.8 0 0 0-1.7-1.1H5v-3h.2a1.8 1.8 0 0 0 1.7-1.1 1.8 1.8 0 0 0-.4-2l-.1-.1 2.1-2.1.1.1a1.8 1.8 0 0 0 2 .4 1.8 1.8 0 0 0 1.1-1.7V3h3v.2a1.8 1.8 0 0 0 1.1 1.7 1.8 1.8 0 0 0 2-.4l.1-.1 2.1 2.1-.1.1a1.8 1.8 0 0 0-.4 2 1.8 1.8 0 0 0 1.7 1.1h.2v3h-.2a1.8 1.8 0 0 0-1.8 1.3z"></path>',
     shield: '<path d="M12 3l7 3v5c0 4.1-2.8 7.9-7 10-4.2-2.1-7-5.9-7-10V6l7-3z"></path><path d="M8.8 12l2.1 2.1 4.5-4.7"></path>',
@@ -939,9 +940,10 @@ function renderBrowserMenu() {
   if (!elements.menu) return;
   elements.menu.innerHTML = browserMenuSections.map(function (section) {
     var items = Array.isArray(section.items) ? section.items : [];
-    return '<div class="browser-menu-section" data-browser-menu-section="' + escapeHtml(textValue(section.id)) + '">' +
+    var sectionMobile = items.length > 0 && items.every(function (item) { return item && item.mobileOnly; });
+    return '<div class="browser-menu-section' + (sectionMobile ? ' browser-menu-section-mobile' : '') + '" data-browser-menu-section="' + escapeHtml(textValue(section.id)) + '">' +
       items.map(function (item) {
-        return '<button type="button" role="menuitem" data-browser-menu-item="' + escapeHtml(textValue(item.id)) + '">' +
+        return '<button type="button" role="menuitem"' + (item.mobileOnly ? ' class="browser-menu-item-mobile"' : '') + ' data-browser-menu-item="' + escapeHtml(textValue(item.id)) + '">' +
           iconHtml(textValue(item.icon) || 'settings') +
           '<span>' + escapeHtml(textValue(item.label) || textValue(item.id)) + '</span>' +
         '</button>';
@@ -1290,6 +1292,16 @@ async function handleBrowserMenuAction(itemId) {
   closeBrowserMenu();
   if (item.action === 'open-settings') {
     await openBrowserSettings(item.settingsTab);
+  } else if (item.action === 'go-forward') {
+    goForward();
+  } else if (item.action === 'reload') {
+    reloadCurrent();
+  } else if (item.action === 'toggle-bookmark') {
+    toggleBookmark();
+  } else if (item.action === 'toggle-drawer') {
+    toggleDrawer();
+  } else if (item.action === 'identity') {
+    handleUsingIdentityClick();
   }
   return item;
 }

@@ -7,8 +7,10 @@ export interface BrowserMenuItemDefinition {
   id: string;
   label: string;
   icon: string;
-  action: 'open-settings';
-  settingsTab: 'baseUrls' | 'templates' | 'nameResolution' | 'cache';
+  action: 'open-settings' | 'go-forward' | 'reload' | 'toggle-bookmark' | 'toggle-drawer' | 'identity';
+  settingsTab?: 'baseUrls' | 'templates' | 'nameResolution' | 'cache';
+  /** Items shown only on narrow (mobile) layouts; hidden on desktop via CSS. */
+  mobileOnly?: boolean;
 }
 
 export interface BrowserMenuSectionDefinition {
@@ -28,6 +30,48 @@ export interface BrowserBaseUrlFieldDefinition {
 }
 
 export const BROWSER_MENU_SECTIONS: BrowserMenuSectionDefinition[] = [
+  {
+    // Folded toolbar actions surfaced inside the chrome menu on mobile layouts
+    // only; every item carries mobileOnly so desktop rendering stays unchanged.
+    id: 'mobile-navigation',
+    items: [
+      {
+        id: 'forward',
+        label: 'Forward',
+        icon: 'chevronRight',
+        action: 'go-forward',
+        mobileOnly: true,
+      },
+      {
+        id: 'reload',
+        label: 'Reload',
+        icon: 'reload',
+        action: 'reload',
+        mobileOnly: true,
+      },
+      {
+        id: 'bookmark',
+        label: 'Bookmark this page',
+        icon: 'star',
+        action: 'toggle-bookmark',
+        mobileOnly: true,
+      },
+      {
+        id: 'drawer',
+        label: 'Bookmarks and history',
+        icon: 'history',
+        action: 'toggle-drawer',
+        mobileOnly: true,
+      },
+      {
+        id: 'identity',
+        label: 'Switch identity',
+        icon: 'bot',
+        action: 'identity',
+        mobileOnly: true,
+      },
+    ],
+  },
   {
     id: 'main',
     items: [
