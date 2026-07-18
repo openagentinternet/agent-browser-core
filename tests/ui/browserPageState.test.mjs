@@ -222,7 +222,7 @@ function standaloneWalletRuntimePayload(overrides = {}) {
       actorChip: 'Wallet',
       noActorTitle: 'No Wallet',
       noActorBody: 'Connect Metalet to use standalone Browser.',
-      walletConnect: 'Connect Wallet',
+      walletConnect: 'Connect Bot',
       walletSelectTitle: 'Select a wallet to connect',
       walletPrimaryProviderId: 'metalet',
       walletPrimaryProviderLabel: 'Connect to Metalet',
@@ -853,29 +853,25 @@ test('Browser safeUrl keeps data and blob avatar URLs', async () => {
   assert.equal(context.safeUrl('javascript:alert(1)'), '');
 });
 
-test('standalone wallet chip opens wallet picker before provider-specific connect', async () => {
+test('standalone disconnected chip shows Connect Bot and opens the unsupported modal', async () => {
   const { context, elements } = createBrowserContext({
     runtimeResponse: standaloneWalletRuntimePayload(),
   });
 
   await waitFor(() => context.state.runtime, 'standalone runtime load');
 
-  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Connect Wallet/);
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Connect Bot/);
   assert.doesNotMatch(elements['[data-browser-using-selector]'].innerHTML, /browser-chip-avatar/);
   assert.doesNotMatch(elements['[data-browser-using-selector]'].innerHTML, /Wallet:/);
 
   elements['[data-browser-using-selector]'].click();
 
   assert.equal(elements['[data-browser-modal-root]'].hidden, false);
-  assert.match(elements['[data-browser-modal-root]'].innerHTML, /Select a wallet to connect/);
-  assert.match(elements['[data-browser-modal-root]'].innerHTML, /class="browser-icon-button" data-browser-modal-close/);
-  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, />Close<\/button>/);
-  assert.match(elements['[data-browser-modal-root]'].innerHTML, /Connect to Metalet/);
-  assert.match(elements['[data-browser-modal-root]'].innerHTML, /Connect to MetaMask/);
-  assert.match(elements['[data-browser-modal-root]'].innerHTML, /data-browser-wallet-provider="metalet"/);
-  assert.match(elements['[data-browser-modal-root]'].innerHTML, /data-browser-wallet-provider="metamask"/);
-  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, /Install Metalet/);
-  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, /data-browser-actor-id/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /This feature is not supported in the web version\./);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /standalone-unsupported/);
+  assert.match(elements['[data-browser-modal-root]'].innerHTML, /install Open Agent Connect from openagentinternet\.org\./);
+  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, /Select a wallet to connect/);
+  assert.doesNotMatch(elements['[data-browser-modal-root]'].innerHTML, /data-browser-wallet-provider/);
 });
 
 test('standalone MetaMask wallet option reports coming soon', async () => {
@@ -1051,7 +1047,7 @@ test('standalone wallet actor menu visits homepage and logs out', async () => {
 
   assert.equal(context.state.actorId, 'standalone-wallet');
   assert.equal(context.state.runtime.defaultActor.id, 'standalone-wallet');
-  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Connect Wallet/);
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Connect Bot/);
   assert.doesNotMatch(elements['[data-browser-using-selector]'].innerHTML, /browser-chip-avatar/);
 });
 

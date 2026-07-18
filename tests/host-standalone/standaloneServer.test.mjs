@@ -59,7 +59,7 @@ test('standalone Browser server serves Browser shell and health route', async (t
     actorChip: 'Wallet',
     noActorTitle: 'No Wallet',
     noActorBody: 'Standalone Browser is running with a development wallet actor.',
-    walletConnect: 'Connect Wallet',
+    walletConnect: 'Connect Bot',
     walletSelectTitle: 'Select a wallet to connect',
     walletPrimaryProviderId: 'metalet',
     walletPrimaryProviderLabel: 'Connect to Metalet',

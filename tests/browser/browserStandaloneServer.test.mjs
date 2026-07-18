@@ -375,7 +375,7 @@ test('standalone Browser server exposes runtime, settings, cache, and action rou
     actorChip: 'Wallet',
     noActorTitle: 'No Wallet',
     noActorBody: 'Standalone Browser is running with a development wallet actor.',
-    walletConnect: 'Connect Wallet',
+    walletConnect: 'Connect Bot',
     walletSelectTitle: 'Select a wallet to connect',
     walletPrimaryProviderId: 'metalet',
     walletPrimaryProviderLabel: 'Connect to Metalet',

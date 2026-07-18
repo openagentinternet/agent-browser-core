@@ -501,7 +501,7 @@ export function createStandaloneBrowserHostAdapter(
         actorChip: 'Wallet',
         noActorTitle: 'No Wallet',
         noActorBody: 'Standalone Browser is running with a development wallet actor.',
-        walletConnect: 'Connect Wallet',
+        walletConnect: 'Connect Bot',
         walletSelectTitle: 'Select a wallet to connect',
         walletPrimaryProviderId: WALLET_PROVIDER_ID,
         walletPrimaryProviderLabel: `Connect to ${WALLET_PROVIDER_NAME}`,

@@ -3070,7 +3070,7 @@ function handleUsingIdentityClick(event) {
       toggleStandaloneActorPanel();
       return;
     }
-    openStandaloneWalletSelector();
+    openStandaloneUnsupportedModal();
     return;
   }
   openUsingIdentitySelector();
