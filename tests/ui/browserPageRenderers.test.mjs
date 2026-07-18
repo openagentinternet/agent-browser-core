@@ -1889,6 +1889,64 @@ test('pin-inspector renderer uses payload-first mature shell sections', async ()
   assert.doesNotMatch(html, /why-this-direction/);
   assert.doesNotMatch(html, /Raw MAN pin record/);
   assert.doesNotMatch(html, /data-browser-pin-raw-record/);
+  assert.doesNotMatch(html, /browser-metaapp-run/);
+  assert.doesNotMatch(html, /browser-metaapp-download/);
+});
+
+test('pin-inspector adds Run and download actions for MetaApp protocol pins', async () => {
+  const { nodes } = runWithResolve(result({
+    type: 'pin-inspector',
+    contentType: 'application/vnd.metaid+json; charset=utf-8',
+    data: {
+      rendererId: 'generic.pin-inspector',
+      version: {
+        requestedPinId: metaAppPinId,
+        resolvedPinId: metaAppPinId,
+        versionSelector: 'latest',
+      },
+      pin: {
+        pinId: metaAppPinId,
+        path: '/protocols/metaapp',
+        contentType: 'application/vnd.metaid+json; charset=utf-8',
+        operation: 'create',
+        chainName: 'mvc',
+        encryption: 'public',
+        version: '1',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+      payload: {
+        title: 'Fixture MetaApp',
+        appName: 'fixture-app',
+        version: '1.0.0',
+      },
+      rawPinRecord: {
+        path: '/protocols/metaapp',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+        contentSummary: JSON.stringify({
+          title: 'Fixture MetaApp',
+          content: `metafile://${metaAppCodePinId}.zip`,
+        }),
+      },
+    },
+  }, {
+    uri: `pin://${metaAppPinId}`,
+    normalizedUri: `pin://${metaAppPinId}`,
+    resourceType: 'pin',
+    title: 'Fixture MetaApp',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-pin-page'), 'pin page render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, new RegExp(`<a class="browser-metaapp-run" href="metaapp://${metaAppPinId}" data-browser-map-link>`));
+  assert.match(html, new RegExp(`<a class="browser-metaapp-download" href="https://file\\.metaid\\.io/metafile-indexer/api/v1/files/accelerate/content/${metaAppCodePinId}"`));
+  assert.ok(html.indexOf('browser-metaapp-run') > -1, 'MetaApp Run action is rendered');
+  assert.ok(
+    html.indexOf('browser-metaapp-run') < html.indexOf('data-browser-open-raw-record'),
+    'MetaApp actions render before View Raw Record',
+  );
 });
 
 test('pin-inspector renderer treats extensionless metafile references as image previews', async () => {

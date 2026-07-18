@@ -4493,6 +4493,39 @@ function openPinRawRecord(trigger) {
   return true;
 }
 
+function pinInspectorMetaAppProtocol(record) {
+  if (!record) return null;
+  var parsed = pinInspectorParseJsonPayload(record.contentSummary || record.contentBody || record.content);
+  var protocol = objectValue(parsed);
+  return Object.keys(protocol).length ? protocol : null;
+}
+
+function pinInspectorMetaAppContentReference(protocol) {
+  var value = protocol && (protocol.content || protocol.code || protocol.metafile || protocol.file);
+  if (!value) return '';
+  if (typeof value === 'string') return textValue(value);
+  var object = objectValue(value);
+  return textValue(object.uri || object.url || object.metafileUri || object.metafile || object.pinId);
+}
+
+// MetaApp protocol pins (/protocols/metaapp) get Run/Download actions ahead of
+// View Raw Record, reusing the Bot Page MetaApp item button styles.
+function pinInspectorMetaAppActionsHtml(current, path) {
+  if (textValue(path).toLowerCase() !== '/protocols/metaapp') return '';
+  var record = pinInspectorRawPinRecord(current);
+  var pinId = pinInspectorNormalizePinId(current && (current.normalizedUri || current.uri)) ||
+    pinInspectorNormalizePinId(record && (record.id || record.pinId));
+  var runHref = metaAppHref(pinId);
+  var downloadHref = buildMetafileDownloadHref(pinInspectorMetaAppContentReference(pinInspectorMetaAppProtocol(record)));
+  var runHtml = runHref
+    ? '<a class="browser-metaapp-run" href="' + escapeHtml(runHref) + '" data-browser-map-link>' + iconHtml('play') + '<span>Run</span></a>'
+    : '';
+  var downloadHtml = downloadHref
+    ? '<a class="browser-metaapp-download" href="' + escapeHtml(downloadHref) + '" target="_blank" rel="noopener" download aria-label="Download MetaApp code zip" title="Download MetaApp code zip">' + iconHtml('download') + '</a>'
+    : '';
+  return runHtml + downloadHtml;
+}
+
 function renderPinInspectorPage(current) {
   var pin = pinInspectorPin(current);
   var version = pinInspectorVersion(current);
@@ -4525,6 +4558,7 @@ function renderPinInspectorPage(current) {
         (metaPills ? '<div class="browser-pin-meta-pills">' + metaPills + '</div>' : '') +
       '</div>' +
       '<div class="browser-pin-page-actions">' +
+        pinInspectorMetaAppActionsHtml(current, path) +
         '<button type="button" class="browser-pin-primary-action" data-browser-open-raw-record>View Raw Record</button>' +
       '</div>' +
     '</header>' +
