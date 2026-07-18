@@ -32,6 +32,14 @@ export const BROWSER_PAGE_STYLES = `
     .browser-bot-hero { display: flex; gap: 12px; align-items: center; min-width: 0; margin-bottom: 16px; }
     .browser-bot-hero > div { min-width: 0; max-width: 100%; }
     .browser-bot-avatar { width: 56px; height: 56px; border-radius: 8px; object-fit: cover; background: #e5e7eb; }
+    .browser-chip-avatar, .browser-owner-panel-avatar, .browser-modal-value-avatar { flex: 0 0 auto; overflow: hidden; background: #e5e7eb; }
+    .browser-chip-avatar, .browser-owner-panel-avatar, .browser-avatar-fallback { display: inline-flex; align-items: center; justify-content: center; color: #344054; font-size: 11px; font-weight: 700; }
+    .browser-chip-avatar { width: 28px; height: 28px; border-radius: 7px; }
+    .browser-owner-panel-avatar { width: 40px; height: 40px; border-radius: 8px; }
+    .browser-avatar-image { width: 100%; height: 100%; display: block; object-fit: cover; }
+    .browser-modal-value-with-avatar { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+    .browser-modal-value-avatar { width: 18px; height: 18px; border-radius: 4px; }
+    .browser-modal-value-name { min-width: 0; overflow-wrap: anywhere; }
     .browser-action-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
     .browser-action-row button { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; min-width: 0; white-space: normal; overflow-wrap: anywhere; word-break: break-word; border: 1px solid #d1d5db; background: #fff; padding: 6px 10px; }
     .browser-resource-sections { display: grid; gap: 12px; min-width: 0; }

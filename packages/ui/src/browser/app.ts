@@ -2173,6 +2173,15 @@ function keyValue(label, value) {
   return '<dt>' + escapeHtml(label) + '</dt><dd>' + escapeHtml(text) + '</dd>';
 }
 
+function keyValueWithAvatar(label, avatarUrl, value) {
+  var text = textValue(value);
+  if (!text) return '';
+  return '<dt>' + escapeHtml(label) + '</dt><dd class="browser-modal-value-with-avatar">' +
+    avatarHtml(avatarUrl, text, 'browser-modal-value-avatar') +
+    '<span class="browser-modal-value-name">' + escapeHtml(text) + '</span>' +
+    '</dd>';
+}
+
 function requiredKeyValue(label, value) {
   var text = textValue(value) || '-';
   return '<dt>' + escapeHtml(label) + '</dt><dd>' + escapeHtml(text) + '</dd>';
@@ -3280,14 +3289,21 @@ function openPrivateChatModal() {
       conversationPayload.peerName = textValue(state.current.owner.name);
     }
   }
+  var actor = selectedActor();
+  var actorLabel = usingLabel();
+  var targetName = textValue(state.current.owner.name) || textValue(state.current.title) || state.current.owner.globalMetaId;
   state.pendingPrivateChat = {
     to: state.current.owner.globalMetaId,
-    targetName: textValue(state.current.owner.name) || textValue(state.current.title) || state.current.owner.globalMetaId,
+    fromGlobalMetaId: textValue(actor && actor.globalMetaId),
+    targetName: targetName,
     conversationPayload: conversationPayload
   };
   renderModal(
     'Private Chat',
-    '<dl>' + keyValue('using', usingLabel()) + keyValue('target', state.pendingPrivateChat.targetName) + '</dl>' +
+    '<dl>' +
+      keyValueWithAvatar('using', actor && actor.avatar, actorLabel) +
+      keyValueWithAvatar('target', state.current.owner.avatar, targetName) +
+      '</dl>' +
       '<textarea data-browser-private-chat-message rows="5" placeholder="Message"></textarea>',
     'Send',
     'private-chat',
@@ -3319,6 +3335,11 @@ async function confirmPrivateChat(messageText) {
   var content = textValue(messageText);
   if (!pending || !content) {
     setStatus('error', 'Message is required.');
+    return null;
+  }
+  if (textValue(pending.fromGlobalMetaId) && textValue(pending.to) &&
+    textValue(pending.fromGlobalMetaId) === textValue(pending.to)) {
+    setStatus('error', 'The Using Bot and the Target Bot cannot be the same Bot.');
     return null;
   }
   var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
