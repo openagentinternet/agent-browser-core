@@ -3263,9 +3263,12 @@ function openCreatorFromChip() {
 }
 
 function openStandaloneUnsupportedModal() {
+  var installGuideHref = 'https://openagentinternet.org/';
   renderModal(
     browserText('standaloneUnsupported.title', 'Not supported'),
-    '<p>' + escapeHtml(browserText('status.standaloneUnsupported', 'This feature is not supported in the web version.')) + '</p>',
+    '<p>' + escapeHtml(browserText('status.standaloneUnsupported', 'This feature is not supported in the web version.')) + '</p>' +
+      '<p class="browser-modal-note">' + escapeHtml(browserText('standaloneUnsupported.installGuide', 'To use the full features, install Open Agent Connect from openagentinternet.org.')) + ' ' +
+      '<a class="browser-modal-link" href="' + escapeHtml(installGuideHref) + '" target="_blank" rel="noopener">' + escapeHtml(browserText('standaloneUnsupported.installGuideLink', 'Go to openagentinternet.org')) + '</a>.</p>',
     browserText('modal.ok', 'OK'),
     'standalone-unsupported'
   );

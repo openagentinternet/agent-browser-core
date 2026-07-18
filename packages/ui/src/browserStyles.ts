@@ -140,6 +140,11 @@ export const BROWSER_PAGE_STYLES = `
     .browser-pin-pre-wrap > .browser-pin-copy-btn { position: absolute; top: 8px; left: 8px; z-index: 2; margin: 0; }
     .browser-pin-pre-wrap > .browser-pin-copy-btn .browser-icon { display: block; }
     .browser-modal-footer-start, .browser-modal-footer-end { display: inline-flex; align-items: center; gap: 12px; }
+    .browser-modal-body p { margin: 0; }
+    .browser-modal-body p + p { margin-top: 8px; }
+    .browser-modal-note { color: #4b5563; font-size: 13px; }
+    .browser-modal-link { color: #2563eb; text-decoration: underline; }
+    .browser-modal-link:hover, .browser-modal-link:focus { text-decoration: underline; }
     .browser-loading, .browser-settings-error { padding: 12px; border: 1px solid #d1d5db; background: #f9fafb; }
     .browser-settings-error { border-color: #fca5a5; color: #991b1b; }
     .browser-settings-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }

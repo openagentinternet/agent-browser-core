@@ -620,6 +620,18 @@ for (const action of [
   });
 }
 
+test('standalone unsupported modal offers an install guide with a link to openagentinternet.org', async () => {
+  const { context, nodes } = createContext();
+  context.state.runtime = standaloneRuntime();
+
+  await context.handleTrustedAction({ id: 'message', kind: 'private-chat' });
+
+  const html = nodes['[data-browser-modal-root]'].innerHTML;
+  assert.match(html, /This feature is not supported in the web version\./);
+  assert.match(html, /install Open Agent Connect from openagentinternet\.org\./);
+  assert.match(html, /<a class="browser-modal-link" href="https:\/\/openagentinternet\.org\/" target="_blank" rel="noopener">Go to openagentinternet\.org<\/a>/);
+});
+
 test('standalone unsupported modal closes on confirm without posting', async () => {
   const { context, nodes, requests } = createContext();
   context.state.runtime = standaloneRuntime();
