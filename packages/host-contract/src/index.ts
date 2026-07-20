@@ -138,6 +138,15 @@ export interface BrowserMetaIdPinWriteResult {
   actor: BrowserMetaAppBridgeActor;
 }
 
+export interface BrowserSimpleMsgComposeRequest {
+  to: string;
+  content: string;
+}
+
+export interface BrowserSimpleMsgComposeResult {
+  opened: true;
+}
+
 export interface BrowserMetaFileUploadResult {
   files: Array<{
     pinId: string;

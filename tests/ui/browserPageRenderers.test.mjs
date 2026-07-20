@@ -1265,6 +1265,122 @@ test('html-iframe bridge opens the Browser private-chat composer for the current
   });
 });
 
+test('html-iframe bridge validates and opens a Browser-confirmed simplemsg composer', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const targetGlobalMetaId = 'idq1cust0mtarget';
+  const { context, nodes, fetchCalls, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'oac', name: 'Open Agent Connect', localMode: true },
+      actors: [{
+        id: 'worker',
+        label: 'Worker',
+        kind: 'oac-bot',
+        globalMetaId: 'idq1worker',
+        isDefault: true,
+        capabilities: ['private-chat'],
+      }],
+      defaultActor: {
+        id: 'worker',
+        label: 'Worker',
+        kind: 'oac-bot',
+        globalMetaId: 'idq1worker',
+        isDefault: true,
+        capabilities: ['private-chat'],
+      },
+      defaultUri: null,
+      features: { privateChat: true, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'simplemsg-compose-empty',
+      method: 'browser.simplemsg.compose',
+      params: { to: targetGlobalMetaId, content: '  ' },
+    },
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'simplemsg-compose-empty',
+    ok: false,
+    error: {
+      code: 'invalid_params',
+      message: 'Simplemsg content is required.',
+    },
+  });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, true);
+
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'simplemsg-compose-invalid-target',
+      method: 'browser.simplemsg.compose',
+      params: { to: 'not-a-global-metaid', content: 'Hello' },
+    },
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[1])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'simplemsg-compose-invalid-target',
+    ok: false,
+    error: {
+      code: 'invalid_params',
+      message: 'A valid simplemsg target Global MetaID is required.',
+    },
+  });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, true);
+
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'simplemsg-compose-1',
+      method: 'browser.simplemsg.compose',
+      params: {
+        to: targetGlobalMetaId,
+        content: 'Hello & goodbye </textarea>',
+      },
+    },
+  });
+
+  await waitFor(() => activeFrameWindow.postMessageCalls.length === 3, 'simplemsg composer bridge response');
+  const modalHtml = nodes['[data-browser-modal-root]'].innerHTML;
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+  assert.match(modalHtml, /Private Chat/);
+  assert.match(modalHtml, new RegExp(targetGlobalMetaId));
+  assert.match(modalHtml, /Hello &amp; goodbye &lt;\/textarea&gt;/);
+  assert.equal(context.state.pendingPrivateChat.to, targetGlobalMetaId);
+  assert.equal(fetchCalls.some((url) => String(url).includes('/api/browser/actions')), false);
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[2])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'simplemsg-compose-1',
+    ok: true,
+    result: { opened: true },
+  });
+});
+
 test('html-iframe bridge ignores actor requests from inactive frames', async () => {
   const activeFrameWindow = {
     postMessageCalls: [],

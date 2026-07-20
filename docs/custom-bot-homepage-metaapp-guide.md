@@ -19,11 +19,14 @@ map://{protocol}/pin/{pinId}?version={historyIndex}
 map://simplemsg/conversation?peer={globalMetaId}
 ```
 
-Use `https://` only for normal external web pages, not for Agent Internet resources that already
-have a MetaID URI.
+Use the exact `http://` or `https://` URL supplied by a service for a normal external web
+destination. Do not invent a Web URL for an Agent Internet resource that already has a MetaID URI.
+Normal Web anchors load inside the sandboxed custom-homepage iframe; opening a new top-level tab or
+window is not part of the current MetaApp bridge contract.
 
 `map://simplemsg/conversation?...` identifies a conversation resource for Browser navigation. It
-does not send a message and does not open the Browser private-chat composer.
+is not an IDChat Web URL, does not send a message, and does not open the Browser private-chat
+composer. Do not label such a link as though it opens an external IDChat website.
 
 ## Static Links
 
@@ -177,10 +180,35 @@ flow with `metaid.pin.write`: private chat requires the host-owned peer-key reso
 signing, and broadcast path. Use `map://simplemsg/conversation?peer=...` only when the intended action
 is to navigate to a conversation resource rather than open the Browser composer.
 
+## Composing Simplemsg With Custom Content
+
+When a MetaApp owns the recipient input and message field, ask the Browser to open a trusted,
+prefilled simplemsg composer:
+
+```js
+const result = await window.AgentBrowser.request({
+  method: 'browser.simplemsg.compose',
+  params: {
+    to: 'idq1example',
+    content: document.querySelector('#message').value
+  }
+});
+```
+
+`to` must be a valid Global MetaID and `content` must be non-empty. A result of `{ opened: true }`
+means only that ABC opened its own composer with those values. The user must review the recipient
+and content and click the Browser-owned Send button. The host then performs peer-key resolution,
+ECDH encryption, signing, and broadcast through the existing `private-chat` trusted action.
+
+Use `browser.privateChat.compose` for a general Message button aimed at the current Bot Page owner;
+use `browser.simplemsg.compose` only when the MetaApp intentionally supplies custom content or an
+explicit recipient. Neither method sends directly from iframe code.
+
 ## Writing A MetaID PIN
 
 Use `metaid.pin.write` for application actions such as posts, notes, likes, replies, and other
-application protocol records. It is not the private-chat sending API:
+application protocol records. It is not the private-chat sending API, and a MetaApp must not use it
+to construct `/protocols/simplemsg` PINs:
 
 ```js
 await window.AgentBrowser.request({
@@ -255,8 +283,9 @@ Built-in Bot Page templates are rendered directly in the ABC page. They can use
 
 Custom MetaApp and HTML Metafile homepages run inside a sandboxed iframe. Clicks inside that iframe
 do not bubble to the parent Browser page, so custom pages should use the `AgentBrowser.navigate`
-helper for navigation and `browser.privateChat.compose` to open the Browser-owned private-chat
-composer.
+helper for navigation, `browser.privateChat.compose` for the current Bot Page owner, and
+`browser.simplemsg.compose` for a Browser-confirmed composer with an explicit recipient and
+prefilled content.
 
 ## Coding Agent Prompt
 
@@ -269,15 +298,19 @@ body. Use window.AgentBrowser.navigate(uri) for metaid://, pin://, metaapp://, m
 map:// navigation. Use window.AgentBrowser.request({ method: 'browser.actor.current' }) to display
 the current MetaID actor. Listen for browser.actor.changed when showing the active posting identity.
 Use window.AgentBrowser.request({ method: 'browser.privateChat.compose' }) to open the Browser-owned
-private-chat composer; do not accept or send recipient or message content directly from the MetaApp.
-Use metaid.pin.write for create/modify/revoke MetaID PIN records. Use metafile.upload before
-writing netdisk, media, document, or attachment index PINs. Do not request wallet, signing, payment,
-private key, host route, local file path, or Web2 avatar access from inside the MetaApp.
+private-chat composer for the current Bot Page owner. When the MetaApp owns a recipient and message
+input, use window.AgentBrowser.request({ method: 'browser.simplemsg.compose', params: { to, content }
+}) to open a prefilled Browser-owned composer; never treat { opened: true } as sent. Use exact
+http:// or https:// anchors for real external Web destinations, and never present a map:// URI as an
+IDChat Web URL. Use metaid.pin.write for create/modify/revoke application PIN records, but never for
+/protocols/simplemsg. Use metafile.upload before writing netdisk, media, document, or attachment
+index PINs. Do not request wallet, signing, payment, private key, host route, local file path, or
+Web2 avatar access from inside the MetaApp.
 ```
 
 ## Security Boundary
 
-The bridge exposes Browser navigation, the Browser-owned private-chat composer, a sanitized actor
-snapshot, host-mediated MetaID PIN writes, and a host-mediated MetaFile upload request. It does not
-provide direct private-chat sending, wallet APIs, private keys, payment APIs, host routes, local file
-paths, local storage, or parent DOM access to custom homepage content.
+The bridge exposes Browser navigation, Browser-owned private-chat and simplemsg composers, a
+sanitized actor snapshot, host-mediated MetaID PIN writes, and a host-mediated MetaFile upload
+request. It does not provide direct private-chat sending, wallet APIs, private keys, payment APIs,
+host routes, local file paths, local storage, or parent DOM access to custom homepage content.
