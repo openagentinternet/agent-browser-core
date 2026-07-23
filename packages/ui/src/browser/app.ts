@@ -48,8 +48,8 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
               <span class="browser-tab-title" data-browser-page-title title="Agent Internet Browser">Agent Internet Browser</span>
               <button type="button" class="browser-tab-close" data-tab-close="0" aria-label="Close tab" tabindex="-1">×</button>
             </div>
+            <button type="button" class="browser-tab-new" data-browser-tab-new aria-label="New tab" title="New tab">+</button>
           </div>
-          <button type="button" class="browser-tab-new" data-browser-tab-new aria-label="New tab" title="New tab">+</button>
         </div>
         <header class="browser-topbar" data-browser-topbar>
           <nav class="browser-nav" aria-label="Browser navigation">
@@ -223,11 +223,86 @@ function createTab() {
     historyIndex: -1,
     status: 'idle',
     error: null,
+    loading: false,
+    painted: false,
     enrichToken: 0
   };
   state.nextTabId += 1;
   state.tabs.push(tab);
   return tab;
+}
+
+// Each tab owns a persistent content pane inside .browser-viewport. Rendering
+// writes into the active tab's pane; switching tabs only toggles pane visibility
+// and NEVER rebuilds a pane's DOM, so iframe/game/video/scroll state survives a
+// round-trip through another tab (Chrome behavior). Panes are created lazily and
+// removed when their tab is closed.
+function activeViewportPane() {
+  if (!elements.viewport) return null;
+  var tab = activeTab();
+  if (!tab) return null;
+  var paneAttr = 'data-tab-pane';
+  var wanted = String(tab.id);
+  var existing = null;
+  // Find or create this tab's pane among the viewport children.
+  var child = elements.viewport.firstElementChild;
+  while (child) {
+    if (typeof child.getAttribute === 'function' && child.getAttribute(paneAttr) === wanted) {
+      existing = child;
+    }
+    child = child.nextElementSibling;
+  }
+  var pane = existing;
+  if (!pane && typeof document === 'object' && document && typeof document.createElement === 'function') {
+    pane = document.createElement('div');
+    pane.className = 'browser-tab-pane';
+    pane.setAttribute(paneAttr, wanted);
+    elements.viewport.appendChild(pane);
+  }
+  if (!pane) return null;
+  // Hide every pane, then reveal the active one. This is the ONLY visibility
+  // switch — pane DOM is left intact.
+  var sibling = elements.viewport.firstElementChild;
+  while (sibling) {
+    if (typeof sibling.setAttribute === 'function') {
+      var isThis = sibling === pane;
+      if (isThis) sibling.removeAttribute('hidden');
+      else sibling.setAttribute('hidden', '');
+    }
+    sibling = sibling.nextElementSibling;
+  }
+  return pane;
+}
+
+// Remove a tab's content pane (on close). Silent if it does not exist.
+function removeTabPane(id) {
+  if (!elements.viewport) return;
+  var paneAttr = 'data-tab-pane';
+  var wanted = String(id);
+  var child = elements.viewport.firstElementChild;
+  while (child) {
+    var next = child.nextElementSibling;
+    if (typeof child.getAttribute === 'function' && child.getAttribute(paneAttr) === wanted) {
+      if (typeof elements.viewport.removeChild === 'function') elements.viewport.removeChild(child);
+    }
+    child = next;
+  }
+}
+
+// Reflect the active tab's loading state on the shared reload button.
+function syncLoadingButton() {
+  var tab = activeTab();
+  var loading = !!(tab && tab.loading);
+  state.loading = loading;
+  if (elements.reload) {
+    if (loading) {
+      elements.reload.classList.add('is-loading');
+      elements.reload.disabled = true;
+    } else {
+      elements.reload.classList.remove('is-loading');
+      elements.reload.disabled = false;
+    }
+  }
 }
 
 function tabToInfo(tab) {
@@ -262,9 +337,10 @@ function openTab(uri) {
   return tab.id;
 }
 
-// Close a tab by id. If it was the last tab, create a fresh empty one. If it
-// was active, activate a neighbor (prefer right, else left) and re-render its
-// content from cache (no fetch).
+// Close a tab by id. Its content pane is removed from the DOM. If it was the
+// last tab, create a fresh empty one. If it was active, activate a neighbor
+// (prefer right, else left) and reveal THAT tab's existing pane without
+// rebuilding it (no fetch, state preserved).
 function closeTab(id) {
   var idx = -1;
   for (var i = 0; i < state.tabs.length; i += 1) {
@@ -273,6 +349,7 @@ function closeTab(id) {
   if (idx === -1) return;
   var wasActive = state.tabs[idx].id === state.activeTabId;
   state.tabs.splice(idx, 1);
+  removeTabPane(id);
   if (!state.tabs.length) {
     var fresh = createTab();
     state.activeTabId = fresh.id;
@@ -286,14 +363,30 @@ function closeTab(id) {
     var neighbor = state.tabs[idx] || state.tabs[idx - 1];
     state.activeTabId = neighbor.id;
     applyActiveTabState();
-    if (state.current) renderCurrent();
-    else renderWelcome();
+    // Reveal the neighbor's existing pane (no rebuild). If the neighbor somehow
+    // has no pane yet (e.g. brand-new), paint it appropriately.
+    activeViewportPane();
+    var neighborTab = activeTab();
+    if (!neighborTab.painted) {
+      if (state.current) renderCurrent();
+      else renderWelcome();
+      neighborTab.painted = true;
+    } else {
+      var title = neighborTab.current ? currentDisplayTitle(neighborTab.current, '')
+        : (neighborTab.status === 'error' ? 'Resolve failed'
+          : (neighborTab.status === 'loading' ? '' : browserText('welcome.windowTitle', 'Welcome')));
+      applyBrowserPageTitle(title);
+    }
     syncToolbarForActiveTab();
   }
   renderTabs();
 }
 
-// Activate a tab by id. Render its cached content (no fetch) and sync toolbar.
+// Activate a tab by id. Switching ONLY reveals that tab's existing content pane
+// (via activeViewportPane) and syncs the shared toolbar — it never re-renders
+// content, so iframe/game/video/scroll state in the pane is preserved across a
+// round-trip through another tab (Chrome behavior). A fetch only happens when a
+// navigation is actually triggered.
 function switchTab(id) {
   var tab = null;
   for (var i = 0; i < state.tabs.length; i += 1) {
@@ -303,9 +396,31 @@ function switchTab(id) {
   state.activeTabId = tab.id;
   applyActiveTabState();
   renderTabs();
-  if (state.current) renderCurrent();
-  else if (state.status === 'loading') showLoadingState();
-  else renderWelcome();
+  // Reveal the active pane (creates it lazily if missing). If the pane has
+  // already been painted, reveal it WITHOUT rebuilding DOM, so iframe/game/
+  // video/scroll state survives. If it was never painted — e.g. a background
+  // tab whose resolve completed while another tab was active — paint it now
+  // from its cached data (still no fetch).
+  if (!tab.painted) {
+    if (state.status === 'error') {
+      syncBrowserPageTitle('Resolve failed');
+      var errorPane = activeViewportPane();
+      if (errorPane) {
+        errorPane.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(state.error) + '</p></section>';
+      }
+      tab.painted = true;
+    } else if (state.current) {
+      renderCurrent();
+    } else {
+      renderWelcome();
+    }
+  } else {
+    activeViewportPane();
+    var title = tab.current ? currentDisplayTitle(tab.current, '')
+      : (tab.status === 'error' ? 'Resolve failed'
+        : (tab.status === 'loading' ? '' : browserText('welcome.windowTitle', 'Welcome')));
+    applyBrowserPageTitle(title);
+  }
   syncToolbarForActiveTab();
 }
 
@@ -319,7 +434,8 @@ function syncToolbarForActiveTab() {
   if (elements.back) elements.back.disabled = !tab || tab.historyIndex <= 0;
   if (elements.forward) elements.forward.disabled = !tab || tab.historyIndex >= (tab ? tab.history.length - 1 : -1);
   renderBookmarkStar();
-  syncActiveTabTitle();
+  // The reload button's spinning state belongs to the active tab.
+  syncLoadingButton();
 }
 
 function textValue(value) {
@@ -368,7 +484,7 @@ function applyBrowserPageTitle(title) {
 
 function renderTabs() {
   if (!elements.tabsContainer) return;
-  var html = state.tabs.map(function (tab) {
+  var tabsHtml = state.tabs.map(function (tab) {
     var isActive = tab.id === state.activeTabId;
     var title = tab.current ? currentDisplayTitle(tab.current, '') : '';
     var label = title || browserText('tab.newTab', 'New Tab');
@@ -378,7 +494,10 @@ function renderTabs() {
       '<button type="button" class="browser-tab-close" data-tab-close="' + tab.id + '" aria-label="Close tab" tabindex="-1">×</button>' +
       '</div>';
   }).join('');
-  elements.tabsContainer.innerHTML = html;
+  // The new-tab "+" follows the last tab (Chrome-like), inside the container so
+  // it stays right after the newest tab instead of being pushed to the row end.
+  tabsHtml += '<button type="button" class="browser-tab-new" data-browser-tab-new aria-label="New tab" title="New tab">+</button>';
+  elements.tabsContainer.innerHTML = tabsHtml;
 }
 
 function syncBrowserPageTitle(pageTitle) {
@@ -1145,22 +1264,19 @@ function setStatus(nextStatus, message) {
 }
 
 function showLoadingState() {
-  state.loading = true;
-  if (elements.viewport) {
-    elements.viewport.innerHTML = '';
-  }
-  if (elements.reload) {
-    elements.reload.classList.add('is-loading');
-    elements.reload.disabled = true;
-  }
+  var tab = activeTab();
+  if (tab) tab.loading = true;
+  // Ensure the active pane exists and clear it (a new navigation replaces the
+  // previous content of THIS tab's pane). Other tabs' panes are untouched.
+  var pane = activeViewportPane();
+  if (pane) pane.innerHTML = '';
+  syncLoadingButton();
 }
 
 function clearLoadingState() {
-  state.loading = false;
-  if (elements.reload) {
-    elements.reload.classList.remove('is-loading');
-    elements.reload.disabled = false;
-  }
+  var tab = activeTab();
+  if (tab) tab.loading = false;
+  syncLoadingButton();
 }
 
 function triggerEnterAnimation(node) {
@@ -2139,8 +2255,9 @@ function renderWelcome() {
   }
   if (elements.statusRenderer) elements.statusRenderer.textContent = browserText('status.rendererNone', 'renderer: none');
   if (elements.statusTxid) elements.statusTxid.textContent = 'TXID: -';
-  if (elements.viewport) {
-    elements.viewport.innerHTML = '<section class="browser-welcome" data-browser-welcome>' +
+  var pane = activeViewportPane();
+  if (pane) {
+    pane.innerHTML = '<section class="browser-welcome" data-browser-welcome>' +
       '<div class="browser-welcome-hero">' +
         '<h1 class="browser-welcome-title">' + escapeHtml(browserText('welcome.title', 'Agent Internet')) + '</h1>' +
         '<p class="browser-welcome-subtitle">' + escapeHtml(browserText('welcome.subtitle', 'Enter a metaid:// URI in the address bar to visit a resource.')) + '</p>' +
@@ -2156,6 +2273,8 @@ function renderWelcome() {
     '</section>';
   }
   renderBookmarkStar();
+  var paintedTab = activeTab();
+  if (paintedTab) paintedTab.painted = true;
 }
 
 function renderNoLocalBot() {
@@ -2175,13 +2294,16 @@ function renderNoLocalBot() {
   }
   if (elements.statusRenderer) elements.statusRenderer.textContent = browserText('status.rendererNone', 'renderer: none');
   if (elements.statusTxid) elements.statusTxid.textContent = 'TXID: -';
-  if (elements.viewport) {
-    elements.viewport.innerHTML = '<section class="browser-empty-state" data-browser-empty-state><h2>' + escapeHtml(title) + '</h2>' +
+  var pane = activeViewportPane();
+  if (pane) {
+    pane.innerHTML = '<section class="browser-empty-state" data-browser-empty-state><h2>' + escapeHtml(title) + '</h2>' +
       '<p>' + escapeHtml(body) + '</p>' +
       (actionHref && actionLabel ? '<a class="browser-primary-action" href="' + escapeHtml(actionHref) + '">' + escapeHtml(actionLabel) + '</a>' : '') +
       '</section>';
   }
   renderBookmarkStar();
+  var paintedTab = activeTab();
+  if (paintedTab) paintedTab.painted = true;
 }
 
 function pushHistory(uri) {
@@ -2212,14 +2334,17 @@ function renderCurrent() {
   }
   if (elements.statusRenderer) elements.statusRenderer.textContent = 'renderer: ' + rendererType;
   if (elements.statusTxid) elements.statusTxid.textContent = 'TXID: ' + (shortId(txid) || '-');
-  if (elements.viewport) {
-    elements.viewport.innerHTML = renderRenderer(current);
-    enhancePinMediaPreviews(elements.viewport);
+  var pane = activeViewportPane();
+  if (pane) {
+    pane.innerHTML = renderRenderer(current);
+    enhancePinMediaPreviews(pane);
     if (rendererType === 'pin-inspector') {
       pinInspectorHydrateRelatedEntityProfiles(current);
     }
-    triggerEnterAnimation(elements.viewport);
+    triggerEnterAnimation(pane);
   }
+  var paintedTab = activeTab();
+  if (paintedTab) paintedTab.painted = true;
   renderBookmarkStar();
   syncPanelState();
 }
@@ -5040,6 +5165,16 @@ async function resolveUri(uri, options) {
     renderWelcome();
     return null;
   }
+  // Capture the originating tab once: the user may switch (or close) tabs while
+  // the resolve fetch is in flight. The resolved result/error must land on the
+  // tab that navigated, not whatever tab is active when the fetch settles.
+  var originTabId = state.activeTabId;
+  function findOriginTab() {
+    for (var i = 0; i < state.tabs.length; i += 1) {
+      if (state.tabs[i].id === originTabId) return state.tabs[i];
+    }
+    return null;
+  }
   var shouldRecord = !options || options.record !== false;
   if (elements.input) elements.input.value = normalizedUri;
   if (shouldRecord) pushHistory(normalizedUri);
@@ -5049,19 +5184,27 @@ async function resolveUri(uri, options) {
   try {
     var result = await api(resolveUrl(normalizedUri));
     var resolvedUri = textValue(result && (result.normalizedUri || result.uri)) || normalizedUri;
-    if (elements.input) elements.input.value = resolvedUri;
-    var resolvedTab = activeTab();
-    if (resolvedTab) {
-      if (shouldRecord && resolvedTab.historyIndex >= 0) resolvedTab.history[resolvedTab.historyIndex] = resolvedUri;
-      resolvedTab.current = result;
-      resolvedTab.status = 'resolved';
-      resolvedTab.error = null;
-      applyActiveTabState();
-    } else {
-      state.current = result;
+    var resolvedTab = findOriginTab();
+    if (!resolvedTab) {
+      // Originating tab was closed mid-flight; nothing to record onto.
+      clearLoadingState();
+      return result;
     }
+    if (shouldRecord && resolvedTab.historyIndex >= 0) resolvedTab.history[resolvedTab.historyIndex] = resolvedUri;
+    resolvedTab.current = result;
+    resolvedTab.status = 'resolved';
+    resolvedTab.error = null;
     state.lastResolveError = null;
     recordVisit(result);
+    // Only sync the read-only mirrors + render the viewport if the originating
+    // tab is still the one the user is looking at. Otherwise, leave the active
+    // tab's mirrors and viewport untouched (switchTab re-renders from cache).
+    if (originTabId !== state.activeTabId) {
+      clearLoadingState();
+      return result;
+    }
+    if (elements.input) elements.input.value = resolvedUri;
+    applyActiveTabState();
     setStatus('resolved', '');
     renderCurrent();
     clearLoadingState();
@@ -5071,26 +5214,34 @@ async function resolveUri(uri, options) {
     return result;
   } catch (error) {
     clearLoadingState();
+    var errorMessage = error && error.message ? error.message : 'Resolve failed.';
     state.lastResolveError = {
       inputUri: normalizedUri,
       code: error && error.payload && error.payload.code,
-      message: error && error.message ? error.message : 'Resolve failed.',
+      message: errorMessage,
       data: error && error.payload && error.payload.data
     };
-    var errorTab = activeTab();
-    if (errorTab) {
-      errorTab.current = null;
-      errorTab.status = 'error';
-      errorTab.error = error && error.message ? error.message : 'Resolve failed.';
-      applyActiveTabState();
-    } else {
-      state.current = null;
+    var errorTab = findOriginTab();
+    if (!errorTab) {
+      // Originating tab was closed mid-flight; nothing to record onto.
+      return null;
     }
-    setStatus('error', error && error.message ? error.message : 'Resolve failed.');
+    errorTab.current = null;
+    errorTab.status = 'error';
+    errorTab.error = errorMessage;
+    // Only sync mirrors + render when the originating tab is still active.
+    if (originTabId !== state.activeTabId) {
+      return null;
+    }
+    applyActiveTabState();
+    setStatus('error', errorMessage);
     syncBrowserPageTitle('Resolve failed');
-    if (elements.viewport) {
-      elements.viewport.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(state.error) + '</p></section>';
+    var errorPane = activeViewportPane();
+    if (errorPane) {
+      errorPane.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(state.error) + '</p></section>';
     }
+    var errorPaintedTab = activeTab();
+    if (errorPaintedTab) errorPaintedTab.painted = true;
     if (state.inspectorOpen) {
       renderResolveErrorInspector();
     }
@@ -5392,11 +5543,17 @@ async function initialize() {
       navigateTo(elements.input ? elements.input.value : '');
     });
   }
-  if (elements.tabNew) {
-    elements.tabNew.addEventListener('click', function () { openTab(); });
-  }
   if (elements.tabsContainer) {
     elements.tabsContainer.addEventListener('click', function (event) {
+      // The "+" new-tab button lives inside the container and is re-rendered by
+      // renderTabs(), so handle it via delegation (not a direct binding that goes
+      // stale when innerHTML is replaced).
+      var newTabTarget = closestWithAttribute(event && event.target, 'data-browser-tab-new');
+      if (newTabTarget) {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        openTab();
+        return;
+      }
       var closeTarget = closestWithAttribute(event && event.target, 'data-tab-close');
       if (closeTarget) {
         if (event && typeof event.stopPropagation === 'function') event.stopPropagation();

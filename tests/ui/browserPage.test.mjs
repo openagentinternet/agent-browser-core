@@ -142,14 +142,16 @@ test('Browser client script exposes loading-state helpers', () => {
   assert.match(definition.script, /function clearLoadingState\(\)/);
   assert.match(definition.script, /function triggerEnterAnimation\(node\)/);
 
-  // Loading state clears the viewport to the browser background (no skeleton markup).
-  assert.match(definition.script, /elements\.viewport\.innerHTML = '';/);
+  // Loading state clears the active tab's content pane (no skeleton markup) and
+  // sets the per-tab loading flag so the reload spinner reflects this tab only.
+  assert.match(definition.script, /pane\.innerHTML = '';/);
+  assert.match(definition.script, /function syncLoadingButton\(/);
 
-  assert.match(definition.script, /elements\.reload\.classList\.add\('is-loading'\)/);
-  assert.match(definition.script, /elements\.reload\.disabled = true;/);
+  assert.match(definition.script, /function clearLoadingState\(\) \{[\s\S]*?syncLoadingButton\(\);/);
   assert.match(definition.script, /elements\.reload\.classList\.remove\('is-loading'\)/);
   assert.match(definition.script, /void node\.offsetWidth;/);
-  assert.match(definition.script, /triggerEnterAnimation\(elements\.viewport\);/);
+  // Enter animation now targets the active tab's pane (per-tab content model).
+  assert.match(definition.script, /triggerEnterAnimation\(pane\);/);
 });
 
 test('Browser resolveUri wires showLoadingState before await and clearLoadingState in both paths', () => {

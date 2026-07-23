@@ -16,6 +16,9 @@ class FakeElement {
     this.disabled = false;
     this.listeners = new Map();
     this.attrs = {};
+    this.children = [];
+    this._parent = null;
+    this.childrenBySelector = new Map();
     this.classList = {
       add: (...names) => {
         for (const name of names) this.attrs[`class:${name}`] = true;
@@ -42,12 +45,32 @@ class FakeElement {
   }
 
   get innerHTML() {
+    if (this.children && this.children.length) {
+      return this.children
+        .filter((c) => !(typeof c.hasAttribute === 'function' && c.hasAttribute('hidden')))
+        .map((c) => c.innerHTML)
+        .join('');
+    }
     return this._innerHTML;
   }
 
   set innerHTML(value) {
     this._innerHTML = String(value);
     this.textContent = this._innerHTML.replace(/<[^>]*>/g, '');
+  }
+
+  appendChild(child) { child._parent = this; this.children.push(child); return child; }
+  removeChild(child) {
+    const idx = this.children.indexOf(child);
+    if (idx !== -1) { this.children.splice(idx, 1); child._parent = null; }
+    return child;
+  }
+  get firstElementChild() { return (this.children && this.children.length) ? this.children[0] : null; }
+  get nextElementSibling() {
+    if (!this._parent) return null;
+    const idx = this._parent.children.indexOf(this);
+    if (idx === -1) return null;
+    return idx + 1 < this._parent.children.length ? this._parent.children[idx + 1] : null;
   }
 
   addEventListener(eventName, handler) {
@@ -66,14 +89,17 @@ class FakeElement {
     return Object.prototype.hasOwnProperty.call(this.attrs, name);
   }
 
+  removeAttribute(name) {
+    delete this.attrs[name];
+  }
+
   querySelector(selector) {
     const match = String(selector).match(/^\[([^=\]]+)(?:="([^"]+)")?\]$/);
     if (!match) return null;
     const [, attribute, value] = match;
     const key = value === undefined ? attribute : `${attribute}:${value}`;
-    if (!this.children) this.children = new Map();
-    if (!this.children.has(key)) this.children.set(key, new FakeElement());
-    return this.children.get(key);
+    if (!this.childrenBySelector.has(key)) this.childrenBySelector.set(key, new FakeElement());
+    return this.childrenBySelector.get(key);
   }
 
   click() {
@@ -337,6 +363,7 @@ function createBrowserContext(options = {}) {
         if (!documentListeners.has(eventName)) documentListeners.set(eventName, []);
         documentListeners.get(eventName).push(handler);
       },
+      createElement: () => new FakeElement(),
     },
     fetch: async (url, fetchOptions = {}) => {
       fetchCalls.push(String(url));

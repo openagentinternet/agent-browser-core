@@ -15,6 +15,9 @@ class FakeElement {
     this.disabled = false;
     this.listeners = new Map();
     this.attrs = {};
+    this.children = [];
+    this._parent = null;
+    this.childrenBySelector = new Map();
     this.classList = {
       add: (...names) => { for (const name of names) this.attrs[`class:${name}`] = true; },
       remove: (...names) => { for (const name of names) delete this.attrs[`class:${name}`]; },
@@ -25,8 +28,33 @@ class FakeElement {
       contains: (name) => Boolean(this.attrs[`class:${name}`]),
     };
   }
-  get innerHTML() { return this._innerHTML; }
+  get innerHTML() {
+    // Pane model: rendered content lives in child panes. Reflect the VISIBLE
+    // (non-hidden) panes' markup so existing viewport.innerHTML assertions keep
+    // working AND tab-isolation checks (which expect only the active tab's
+    // content) are not polluted by hidden sibling panes.
+    if (this.children && this.children.length) {
+      return this.children
+        .filter((c) => !(typeof c.hasAttribute === 'function' && c.hasAttribute('hidden')))
+        .map((c) => c.innerHTML)
+        .join('');
+    }
+    return this._innerHTML;
+  }
   set innerHTML(value) { this._innerHTML = String(value); this.textContent = this._innerHTML.replace(/<[^>]*>/g, ''); }
+  appendChild(child) { child._parent = this; this.children.push(child); return child; }
+  removeChild(child) {
+    const idx = this.children.indexOf(child);
+    if (idx !== -1) { this.children.splice(idx, 1); child._parent = null; }
+    return child;
+  }
+  get firstElementChild() { return (this.children && this.children.length) ? this.children[0] : null; }
+  get nextElementSibling() {
+    if (!this._parent) return null;
+    const idx = this._parent.children.indexOf(this);
+    if (idx === -1) return null;
+    return idx + 1 < this._parent.children.length ? this._parent.children[idx + 1] : null;
+  }
   addEventListener(eventName, handler) { this.listeners.set(eventName, handler); }
   setAttribute(name, value) { this.attrs[name] = String(value); }
   getAttribute(name) { return this.attrs[name] || ''; }
@@ -37,9 +65,8 @@ class FakeElement {
     if (!match) return null;
     const [, attribute, value] = match;
     const key = value === undefined ? attribute : `${attribute}:${value}`;
-    if (!this.children) this.children = new Map();
-    if (!this.children.has(key)) this.children.set(key, new FakeElement());
-    return this.children.get(key);
+    if (!this.childrenBySelector.has(key)) this.childrenBySelector.set(key, new FakeElement());
+    return this.childrenBySelector.get(key);
   }
   click() { this.listeners.get('click')?.({ preventDefault() {}, stopPropagation() {} }); }
   submit() { this.listeners.get('submit')?.({ preventDefault() {} }); }
@@ -157,6 +184,7 @@ function createBrowserContext(options = {}) {
       querySelector: (selector) => elements[selector] ?? null,
       querySelectorAll: () => [],
       addEventListener: () => {},
+      createElement: () => new FakeElement(),
     },
     fetch: async (url) => {
       fetchCalls.push(String(url));
