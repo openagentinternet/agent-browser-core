@@ -999,6 +999,8 @@ async function commandApi(url, options) {
 function setStatus(nextStatus, message) {
   state.status = nextStatus;
   state.error = message || '';
+  var tab = activeTab();
+  if (tab) { tab.status = nextStatus; tab.error = message || ''; }
   if (elements.statusState) elements.statusState.textContent = nextStatus;
 }
 
@@ -1987,7 +1989,9 @@ function buildWelcomeShortcutTiles() {
 
 function renderWelcome() {
   setStatus('ready', '');
-  state.current = null;
+  var welcomeTab = activeTab();
+  if (welcomeTab) { welcomeTab.current = null; welcomeTab.status = 'ready'; welcomeTab.error = null; applyActiveTabState(); }
+  else { state.current = null; }
   syncBrowserPageTitle(browserText('welcome.windowTitle', 'Welcome'));
   if (elements.resourceChip) {
     elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar');
@@ -2021,7 +2025,9 @@ function renderNoLocalBot() {
   var actionHref = action && typeof action === 'object' ? safeUrl(action.href) : '';
   var actionLabel = browserText('runtime.noActorAction.label', action && typeof action === 'object' ? textValue(action.label) : '');
   setStatus('ready', '');
-  state.current = null;
+  var noActorTab = activeTab();
+  if (noActorTab) { noActorTab.current = null; noActorTab.status = 'ready'; noActorTab.error = null; applyActiveTabState(); }
+  else { state.current = null; }
   syncBrowserPageTitle(title);
   if (elements.resourceChip) {
     elements.resourceChip.innerHTML = avatarHtml('', 'Resource', 'browser-chip-avatar');
@@ -2040,10 +2046,13 @@ function renderNoLocalBot() {
 
 function pushHistory(uri) {
   if (!uri) return;
-  if (state.history[state.historyIndex] === uri) return;
-  state.history = state.history.slice(0, state.historyIndex + 1);
-  state.history.push(uri);
-  state.historyIndex = state.history.length - 1;
+  var tab = activeTab();
+  if (!tab) return;
+  if (tab.history[tab.historyIndex] === uri) return;
+  tab.history = tab.history.slice(0, tab.historyIndex + 1);
+  tab.history.push(uri);
+  tab.historyIndex = tab.history.length - 1;
+  applyActiveTabState();
 }
 
 function renderCurrent() {
@@ -4901,8 +4910,16 @@ async function resolveUri(uri, options) {
     var result = await api(resolveUrl(normalizedUri));
     var resolvedUri = textValue(result && (result.normalizedUri || result.uri)) || normalizedUri;
     if (elements.input) elements.input.value = resolvedUri;
-    if (shouldRecord && state.historyIndex >= 0) state.history[state.historyIndex] = resolvedUri;
-    state.current = result;
+    var resolvedTab = activeTab();
+    if (resolvedTab) {
+      if (shouldRecord && resolvedTab.historyIndex >= 0) resolvedTab.history[resolvedTab.historyIndex] = resolvedUri;
+      resolvedTab.current = result;
+      resolvedTab.status = 'resolved';
+      resolvedTab.error = null;
+      applyActiveTabState();
+    } else {
+      state.current = result;
+    }
     state.lastResolveError = null;
     recordVisit(result);
     setStatus('resolved', '');
@@ -4920,8 +4937,16 @@ async function resolveUri(uri, options) {
       message: error && error.message ? error.message : 'Resolve failed.',
       data: error && error.payload && error.payload.data
     };
+    var errorTab = activeTab();
+    if (errorTab) {
+      errorTab.current = null;
+      errorTab.status = 'error';
+      errorTab.error = error && error.message ? error.message : 'Resolve failed.';
+      applyActiveTabState();
+    } else {
+      state.current = null;
+    }
     setStatus('error', error && error.message ? error.message : 'Resolve failed.');
-    state.current = null;
     syncBrowserPageTitle('Resolve failed');
     if (elements.viewport) {
       elements.viewport.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(state.error) + '</p></section>';
@@ -4938,20 +4963,25 @@ function navigateTo(uri) {
 }
 
 function reloadCurrent() {
-  var uri = state.history[state.historyIndex] || (elements.input && elements.input.value) || '';
+  var tab = activeTab();
+  var uri = (tab && tab.history[tab.historyIndex]) || (elements.input && elements.input.value) || '';
   return resolveUri(uri, { record: false });
 }
 
 function goBack() {
-  if (state.historyIndex <= 0) return null;
-  state.historyIndex -= 1;
-  return resolveUri(state.history[state.historyIndex], { record: false });
+  var tab = activeTab();
+  if (!tab || tab.historyIndex <= 0) return null;
+  tab.historyIndex -= 1;
+  applyActiveTabState();
+  return resolveUri(tab.history[tab.historyIndex], { record: false });
 }
 
 function goForward() {
-  if (state.historyIndex >= state.history.length - 1) return null;
-  state.historyIndex += 1;
-  return resolveUri(state.history[state.historyIndex], { record: false });
+  var tab = activeTab();
+  if (!tab || tab.historyIndex >= tab.history.length - 1) return null;
+  tab.historyIndex += 1;
+  applyActiveTabState();
+  return resolveUri(tab.history[tab.historyIndex], { record: false });
 }
 
 async function loadRuntime() {
@@ -4984,6 +5014,17 @@ function handleCopyValue(event) {
 
 async function initialize() {
   bindElements();
+  if (!state.tabs.length) {
+    var bootSeedTab = createTab();
+    bootSeedTab.current = state.current;
+    bootSeedTab.history = state.history;
+    bootSeedTab.historyIndex = state.historyIndex;
+    bootSeedTab.status = state.status;
+    bootSeedTab.error = state.error;
+    bootSeedTab.enrichToken = state.enrichToken;
+    state.activeTabId = state.tabs[0].id;
+    applyActiveTabState();
+  }
   if (!state.bridgeMessageListenerBound && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
     // One listener dispatches both host theme messages and MetaApp bridge
     // messages (see handleBrowserMessage).
@@ -5270,9 +5311,11 @@ async function initialize() {
   }
   // Seed the welcome page as the history origin so the back button can return
   // to it. An empty URI resolves to the welcome page (see resolveUri).
-  if (state.historyIndex < 0) {
-    state.history = [''];
-    state.historyIndex = 0;
+  var bootTab = activeTab();
+  if (bootTab && bootTab.historyIndex < 0) {
+    bootTab.history = [''];
+    bootTab.historyIndex = 0;
+    applyActiveTabState();
   }
   renderWelcome();
 }
