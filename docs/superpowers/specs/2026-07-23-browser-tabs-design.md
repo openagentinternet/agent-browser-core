@@ -46,26 +46,39 @@ type BrowserTab = {
 };
 ```
 
-`state` refactor — per-tab fields move into each tab; shared fields stay global:
+`state` refactor — source of truth is `tabs[]`; shared fields stay global:
 
 | Field | Ownership | Notes |
 |------|-----------|-------|
-| `tabs: BrowserTab[]` | new (per-tab container) | all tabs |
+| `tabs: BrowserTab[]` | new (per-tab container, **source of truth**) | all tabs; each owns current/history/historyIndex/status/error |
 | `activeTabId: number` | new | currently active tab |
 | `nextTabId: number` | new | id allocator |
-| `current` / `history` / `historyIndex` | **removed** | sink into each tab |
-| `status` / `error` | **removed** | sink into each tab so switching reflects each tab's loading/error |
-| `enrichToken` | **per-tab** | prevents stale async enrichment of tab A from polluting tab B after a switch |
+| `current` / `history` / `historyIndex` | **read-only mirrors** | reflect `activeTab()`; refreshed by `applyActiveTabState()`. Kept (not removed) so the ~40 existing `state.current` read sites stay untouched |
+| `status` / `error` | **read-only mirrors** | reflect active tab |
+| `enrichToken` | **per-tab** (mirror of active tab's) | prevents stale async enrichment of tab A from polluting tab B after a switch |
 | `actorId` / `runtime` / `standaloneWalletPlaceholderActor` | **global** | identity shared across tabs |
 | `bookmarks` / `visits` | **global** | shared across tabs; still persisted |
 | `drawerOpen` / `inspectorOpen` / `menuOpen` / panels | **global** | UI panels shared |
 
+**Mirror approach (Option 2, chosen):** `state.tabs[]` is the single source of truth.
+`state.current/history/historyIndex/status/error/enrichToken` remain on `state` as
+read-only mirrors of the active tab, refreshed by one helper `applyActiveTabState()`
+after every mutation (nav) and every tab switch. Rationale: there are ~40 read-only
+`state.current` sites across ~20 functions (owner panel, inspector, bookmark logic,
+pin-inspector, resource chip). Routing all 43 through an accessor is high-risk churn.
+With mirrors, those ~40 readers are untouched; only the ~8 *write* sites
+(`resolveUri`, `renderCurrent`, `renderWelcome`, `renderNoLocalBot`, `pushHistory`,
+`goBack`, `goForward`, `reloadCurrent`) and the tab mutation functions write to the
+active tab first, then call `applyActiveTabState()` to sync the mirrors. Behavior is
+identical to a full "removed" model: per-tab ownership + instant cache-hit switching.
+
 Helper functions:
 
 - `activeTab()` → returns the tab whose `id === state.activeTabId`.
-- All content/history functions (`resolveUri`, `renderCurrent`, `navigateTo`,
-  `goBack`, `goForward`, `reloadCurrent`) read/write through `activeTab()` instead of
-  `state` directly.
+- `applyActiveTabState()` → copies the active tab's
+  `current/history/historyIndex/status/error/enrichToken` onto the `state` mirrors.
+  Called after every navigation write and every `switchTab`.
+- Write sites (nav functions) write to `activeTab()` then call `applyActiveTabState()`.
 - `syncToolbarForActiveTab()` → after a switch, sync the address-bar input value,
   back/forward disabled states, page title, and bookmark star to the active tab's
   state. The toolbar is shared but always reflects the active tab (Chrome behavior).
