@@ -36,13 +36,20 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
     panels: [],
     contentHtml: `
       <section class="browser-shell" data-browser-shell>
-        <div class="browser-titlebar" aria-label="Agent Internet Browser">
-          <div class="browser-window-brand">
+        <div class="browser-tabstrip" data-browser-tabstrip aria-label="Agent Internet Browser">
+          <div class="browser-tabstrip-brand">
             <span class="browser-brand-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="8"></circle><path d="M4 12h16M12 4c2.2 2.3 3.3 5 3.3 8S14.2 17.7 12 20M12 4C9.8 6.3 8.7 9 8.7 12s1.1 5.7 3.3 8"></path></svg>
             </span>
-            <span style="min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Bot Browser - <span class="browser-window-page-title" data-browser-page-title title="Agent Internet Browser">Agent Internet Browser</span></span>
+            <span class="browser-brand-name">Bot Browser</span>
           </div>
+          <div class="browser-tabstrip-tabs" data-browser-tabs-container>
+            <div class="browser-tab is-active" data-tab-id="0" role="tab">
+              <span class="browser-tab-title" data-browser-page-title title="Agent Internet Browser">Agent Internet Browser</span>
+              <button type="button" class="browser-tab-close" data-tab-close="0" aria-label="Close tab" tabindex="-1">×</button>
+            </div>
+          </div>
+          <button type="button" class="browser-tab-new" data-browser-tab-new aria-label="New tab" title="New tab">+</button>
         </div>
         <header class="browser-topbar" data-browser-topbar>
           <nav class="browser-nav" aria-label="Browser navigation">

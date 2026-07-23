@@ -19,8 +19,9 @@ test('Browser root API renders the mature fixed chrome shell asynchronously', as
 
   assert.match(html, /Agent Internet Browser/);
   assert.match(html, /data-browser-shell/);
-  assert.match(html, /class="browser-titlebar"/);
-  assert.match(html, /Bot Browser -\s*<span class="browser-window-page-title" data-browser-page-title title="Agent Internet Browser">Agent Internet Browser<\/span>/);
+  assert.match(html, /class="browser-tabstrip"/);
+  assert.match(html, /data-browser-tabs-container/);
+  assert.match(html, /data-browser-tab-new/);
   assert.match(html, /data-browser-page-title/);
   assert.match(html, /class="browser-topbar"/);
   assert.match(html, /data-browser-uri-input/);
