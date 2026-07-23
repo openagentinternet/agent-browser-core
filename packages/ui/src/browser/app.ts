@@ -249,9 +249,19 @@ function currentDisplayTitle(current, fallback) {
   return textValue(fallback);
 }
 
-function syncBrowserPageTitle(pageTitle) {
-  var title = textValue(pageTitle);
-  var displayTitle = title || BROWSER_PAGE_DEFAULT_TITLE;
+function syncActiveTabTitle() {
+  var tab = activeTab();
+  var derived = tab && tab.current ? currentDisplayTitle(tab.current, '') : '';
+  applyBrowserPageTitle(derived);
+}
+
+// Applies a page title to the [data-browser-page-title] hook, document.title,
+// and the tab strip. title is the explicit page title from the render flow
+// (current resource title, 'Welcome', 'Resolve failed', ...); when empty it
+// falls back to the default. Calls renderTabs() so the active tab label updates.
+function applyBrowserPageTitle(title) {
+  var resolved = textValue(title);
+  var displayTitle = resolved || BROWSER_PAGE_DEFAULT_TITLE;
   if (elements.pageTitle) {
     elements.pageTitle.textContent = displayTitle;
     if (typeof elements.pageTitle.setAttribute === 'function') {
@@ -259,8 +269,28 @@ function syncBrowserPageTitle(pageTitle) {
     }
   }
   if (typeof document === 'object' && document) {
-    document.title = title ? (title + ' - ' + BROWSER_WINDOW_TITLE_SUFFIX) : BROWSER_PAGE_DEFAULT_TITLE;
+    document.title = resolved ? (resolved + ' - ' + BROWSER_WINDOW_TITLE_SUFFIX) : BROWSER_PAGE_DEFAULT_TITLE;
   }
+  renderTabs();
+}
+
+function renderTabs() {
+  if (!elements.tabsContainer) return;
+  var html = state.tabs.map(function (tab) {
+    var isActive = tab.id === state.activeTabId;
+    var title = tab.current ? currentDisplayTitle(tab.current, '') : '';
+    var label = title || browserText('tab.newTab', 'New Tab');
+    var activeClass = isActive ? ' is-active' : '';
+    return '<div class="browser-tab' + activeClass + '" data-tab-id="' + tab.id + '" role="tab">' +
+      '<span class="browser-tab-title" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
+      '<button type="button" class="browser-tab-close" data-tab-close="' + tab.id + '" aria-label="Close tab" tabindex="-1">×</button>' +
+      '</div>';
+  }).join('');
+  elements.tabsContainer.innerHTML = html;
+}
+
+function syncBrowserPageTitle(pageTitle) {
+  applyBrowserPageTitle(pageTitle);
 }
 
 function escapeHtml(value) {
@@ -965,7 +995,10 @@ function bindElements() {
     inspector: document.querySelector('[data-browser-inspector]'),
     modalRoot: document.querySelector('[data-browser-modal-root]'),
     bookmarkStar: document.querySelector('[data-browser-bookmark-star]'),
-    toast: document.querySelector('[data-browser-toast]')
+    toast: document.querySelector('[data-browser-toast]'),
+    tabstrip: document.querySelector('[data-browser-tabstrip]'),
+    tabsContainer: document.querySelector('[data-browser-tabs-container]'),
+    tabNew: document.querySelector('[data-browser-tab-new]')
   };
 }
 

@@ -161,3 +161,10 @@ test('single tab navigation resolves and sets state.current on the active tab', 
   assert.equal(elements['[data-browser-uri-input]'].value, 'metaid://idq1alice');
   assert.equal(fetchCalls[1], '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1alice&actorId=worker');
 });
+
+test('tab title updates to the resolved page title after navigation', async () => {
+  const { elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'resolve');
+  // The tab container innerHTML should mention the resolved bot name.
+  assert.match(elements['[data-browser-tabs-container]'].innerHTML, /Alice Bot/);
+});
