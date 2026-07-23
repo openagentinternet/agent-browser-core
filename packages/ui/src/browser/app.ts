@@ -152,6 +152,12 @@ var BROWSER_PAGE_DEFAULT_TITLE = 'Agent Internet Browser';
 var BROWSER_WINDOW_TITLE_SUFFIX = 'Bot Browser';
 
 var state = {
+  tabs: [],
+  activeTabId: 0,
+  nextTabId: 1,
+  // Read-only mirrors of the active tab, kept in sync by applyActiveTabState().
+  // state.tabs[] is the source of truth; these exist so the ~40 existing
+  // state.current read sites need no change.
   history: [],
   historyIndex: -1,
   current: null,
@@ -185,6 +191,44 @@ var state = {
 };
 
 var elements = {};
+
+function activeTab() {
+  for (var i = 0; i < state.tabs.length; i += 1) {
+    if (state.tabs[i].id === state.activeTabId) return state.tabs[i];
+  }
+  return state.tabs[0] || null;
+}
+
+// Copy the active tab's per-tab fields onto the state mirrors so the existing
+// state.current / state.history / state.historyIndex / state.status / state.error
+// / state.enrichToken read sites reflect the active tab. Call after every
+// navigation write and every switchTab.
+function applyActiveTabState() {
+  var tab = activeTab();
+  if (!tab) return;
+  state.current = tab.current;
+  state.history = tab.history;
+  state.historyIndex = tab.historyIndex;
+  state.status = tab.status;
+  state.error = tab.error;
+  state.enrichToken = tab.enrichToken;
+}
+
+// Create a fresh tab (empty welcome by default) and return it. Does NOT activate it.
+function createTab() {
+  var tab = {
+    id: state.nextTabId,
+    current: null,
+    history: [],
+    historyIndex: -1,
+    status: 'idle',
+    error: null,
+    enrichToken: 0
+  };
+  state.nextTabId += 1;
+  state.tabs.push(tab);
+  return tab;
+}
 
 function textValue(value) {
   if (value === null || value === undefined) return '';
