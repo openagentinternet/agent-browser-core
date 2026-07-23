@@ -227,3 +227,78 @@ test('Ctrl+click on a viewport map-link opens a new tab', async () => {
   await waitFor(() => fetchCalls.length === 3, 'ctrl-click new tab resolve');
   assert.equal(context.AgentBrowserTabs.getTabs().length, beforeCount + 1);
 });
+
+// Bug 1: a resolve that completes AFTER a tab switch must write its result to the
+// ORIGINAL (navigating) tab, not the now-active one.
+test('async resolve writes to the originating tab even after a mid-flight switch', async () => {
+  // Per-uri controllable resolve responses: each returns a thenable we settle
+  // independently, so we can complete alice's resolve while bob's stays pending.
+  const pending = {};
+  const settle = {};
+  const makePending = (key) => {
+    if (!pending[key]) {
+      pending[key] = new Promise((resolve) => { settle[key] = resolve; });
+    }
+    return pending[key];
+  };
+  const { elements, context, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+    resolveResponse: (uri) => makePending(uri),
+  });
+  await waitFor(() => fetchCalls.length === 2, 'runtime and initial resolve');
+
+  // Tab 1 (alice) is navigating and its resolve is still pending.
+  const aliceTabId = context.AgentBrowserTabs.getActiveTab().id;
+  assert.equal(fetchCalls[1], '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1alice&actorId=worker');
+
+  // While alice's resolve is in flight, open a second tab and switch to it.
+  const bobId = context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'bob resolve started');
+  assert.equal(context.AgentBrowserTabs.getActiveTab().id, bobId);
+
+  // Now settle alice's resolve ONLY. Bob is the active tab at this moment.
+  settle['metaid://idq1alice'](resolvedBot('metaid://idq1alice', 'Alice Bot'));
+  // Allow microtasks to flush so the resolveUri .then chain runs.
+  await new Promise((r) => setTimeout(r, 30));
+
+  // The active (bob) tab must NOT have been polluted with alice's result.
+  assert.equal(elements['[data-browser-viewport]'].innerHTML.includes('Alice Bot'), false,
+    'newly-active bob tab must not show the originating tab content');
+
+  // The result must belong to the alice (originating) tab. Switching back to
+  // alice must render her resolved content from cache.
+  context.AgentBrowserTabs.switchTab(aliceTabId);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(elements['[data-browser-viewport]'].innerHTML, /Alice Bot/,
+    'originating tab should show its own resolved content after switching back');
+});
+
+// Bug 2: switching to a tab that is in the error state must restore its error
+// view, not fall through to renderWelcome (which would clobber the error).
+test('switching to an error-state tab restores its error view instead of Welcome', async () => {
+  // First resolve fails; the active tab ends up in the error state.
+  const { elements, context, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+    resolveResponse: () => ({ ok: false, message: 'boom no such resource' }),
+  });
+  await waitFor(() => fetchCalls.length === 2, 'runtime and failing resolve');
+  await new Promise((r) => setTimeout(r, 10));
+  // The active (alice) tab should show the resolve error.
+  assert.match(elements['[data-browser-viewport]'].innerHTML, /Resolve failed/);
+  assert.equal(fetchCalls[1], '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1alice&actorId=worker');
+
+  const errorTabId = context.AgentBrowserTabs.getActiveTab().id;
+
+  // Open a second (welcome) tab and switch to it.
+  context.AgentBrowserTabs.openTab();
+  assert.notEqual(context.AgentBrowserTabs.getActiveTab().id, errorTabId);
+  await new Promise((r) => setTimeout(r, 10));
+
+  // Switch back to the error tab. It must STILL show the error, not Welcome.
+  context.AgentBrowserTabs.switchTab(errorTabId);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.match(elements['[data-browser-viewport]'].innerHTML, /Resolve failed/,
+    'error tab should keep showing its error view after switching back');
+  assert.equal(elements['[data-browser-viewport]'].innerHTML.includes('data-browser-welcome'), false,
+    'error tab must not fall through to Welcome');
+});
