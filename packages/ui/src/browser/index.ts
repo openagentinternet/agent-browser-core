@@ -18,4 +18,17 @@ export {
 } from './menuModel.js';
 export {
   renderBrowserPageHtml,
+  type RenderBrowserPageHtmlOptions,
 } from './page.js';
+export {
+  BROWSER_THEME_MESSAGE_TYPE,
+  BROWSER_THEME_MESSAGE_VERSION,
+  buildBrowserThemeHeadScript,
+  createBrowserThemeMessage,
+  isBrowserThemeMessage,
+  normalizeBrowserTheme,
+  resolveBrowserTheme,
+  type BrowserTheme,
+  type BrowserThemeMessage,
+  type ResolvedBrowserTheme,
+} from './theme.js';

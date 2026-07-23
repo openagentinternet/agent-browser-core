@@ -101,9 +101,10 @@ test('Browser page HTML preserves inline script text containing dollar signs', a
 
   const html = await ui.renderBrowserPageHtml(definition);
 
-  assert.equal((html.match(/<script>/g) || []).length, 1);
-  assert.equal((html.match(/<\/script>/g) || []).length, 1);
-  assert.match(html, /window\.__browserMarker = marker;/);
+  // The body app script (with the dollar-sign content) is preserved verbatim.
+  // The head theme-init script is separate, so there are now two </script>.
+  assert.equal((html.match(/<\/script>/g) || []).length, 2);
+  assert.equal((html.match(/window\.__browserMarker = marker;/g) || []).length, 1);
   assert.doesNotMatch(html, /<body>[\s\S]*<script>\s*const marker = '\$\'';\s*<\/script>[\s\S]*<\/body>/);
 });
 
@@ -111,8 +112,8 @@ test('Browser page HTML remains English-only when a host passes zh-CN', async ()
   const definition = ui.buildBrowserPageDefinition();
   const html = await ui.renderBrowserPageHtml(definition, 'zh-CN');
 
-  assert.match(html, /<html lang="en">/);
-  assert.doesNotMatch(html, /<html lang="zh-CN">/);
+  assert.match(html, /<html lang="en" data-browser-theme="light"/);
+  assert.doesNotMatch(html, /<html lang="zh-CN"/);
   assert.doesNotMatch(html, /[\u4e00-\u9fff]/);
   assert.doesNotMatch(definition.script, /[\u4e00-\u9fff]/);
 });
