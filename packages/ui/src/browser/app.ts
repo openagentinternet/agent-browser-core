@@ -305,15 +305,7 @@ function switchTab(id) {
   renderTabs();
   if (state.current) renderCurrent();
   else if (state.status === 'loading') showLoadingState();
-  else if (state.status === 'error') {
-    // An error-state tab (current === null, status === 'error') must restore its
-    // error view on switch. Re-render the error WITHOUT mutating state, so the
-    // tab keeps its error; falling through to renderWelcome would clobber it.
-    syncBrowserPageTitle('Resolve failed');
-    if (elements.viewport) {
-      elements.viewport.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(state.error) + '</p></section>';
-    }
-  } else renderWelcome();
+  else renderWelcome();
   syncToolbarForActiveTab();
 }
 
@@ -5048,16 +5040,6 @@ async function resolveUri(uri, options) {
     renderWelcome();
     return null;
   }
-  // Capture the originating tab once: the user may switch (or close) tabs while
-  // the resolve fetch is in flight. The resolved result/error must land on the
-  // tab that navigated, not whatever tab is active when the fetch settles.
-  var originTabId = state.activeTabId;
-  function findOriginTab() {
-    for (var i = 0; i < state.tabs.length; i += 1) {
-      if (state.tabs[i].id === originTabId) return state.tabs[i];
-    }
-    return null;
-  }
   var shouldRecord = !options || options.record !== false;
   if (elements.input) elements.input.value = normalizedUri;
   if (shouldRecord) pushHistory(normalizedUri);
@@ -5067,27 +5049,19 @@ async function resolveUri(uri, options) {
   try {
     var result = await api(resolveUrl(normalizedUri));
     var resolvedUri = textValue(result && (result.normalizedUri || result.uri)) || normalizedUri;
-    var resolvedTab = findOriginTab();
-    if (!resolvedTab) {
-      // Originating tab was closed mid-flight; nothing to record onto.
-      clearLoadingState();
-      return result;
+    if (elements.input) elements.input.value = resolvedUri;
+    var resolvedTab = activeTab();
+    if (resolvedTab) {
+      if (shouldRecord && resolvedTab.historyIndex >= 0) resolvedTab.history[resolvedTab.historyIndex] = resolvedUri;
+      resolvedTab.current = result;
+      resolvedTab.status = 'resolved';
+      resolvedTab.error = null;
+      applyActiveTabState();
+    } else {
+      state.current = result;
     }
-    if (shouldRecord && resolvedTab.historyIndex >= 0) resolvedTab.history[resolvedTab.historyIndex] = resolvedUri;
-    resolvedTab.current = result;
-    resolvedTab.status = 'resolved';
-    resolvedTab.error = null;
     state.lastResolveError = null;
     recordVisit(result);
-    // Only sync the read-only mirrors + render the viewport if the originating
-    // tab is still the one the user is looking at. Otherwise, leave the active
-    // tab's mirrors and viewport untouched (switchTab re-renders from cache).
-    if (originTabId !== state.activeTabId) {
-      clearLoadingState();
-      return result;
-    }
-    if (elements.input) elements.input.value = resolvedUri;
-    applyActiveTabState();
     setStatus('resolved', '');
     renderCurrent();
     clearLoadingState();
@@ -5097,27 +5071,22 @@ async function resolveUri(uri, options) {
     return result;
   } catch (error) {
     clearLoadingState();
-    var errorMessage = error && error.message ? error.message : 'Resolve failed.';
     state.lastResolveError = {
       inputUri: normalizedUri,
       code: error && error.payload && error.payload.code,
-      message: errorMessage,
+      message: error && error.message ? error.message : 'Resolve failed.',
       data: error && error.payload && error.payload.data
     };
-    var errorTab = findOriginTab();
-    if (!errorTab) {
-      // Originating tab was closed mid-flight; nothing to record onto.
-      return null;
+    var errorTab = activeTab();
+    if (errorTab) {
+      errorTab.current = null;
+      errorTab.status = 'error';
+      errorTab.error = error && error.message ? error.message : 'Resolve failed.';
+      applyActiveTabState();
+    } else {
+      state.current = null;
     }
-    errorTab.current = null;
-    errorTab.status = 'error';
-    errorTab.error = errorMessage;
-    // Only sync mirrors + render when the originating tab is still active.
-    if (originTabId !== state.activeTabId) {
-      return null;
-    }
-    applyActiveTabState();
-    setStatus('error', errorMessage);
+    setStatus('error', error && error.message ? error.message : 'Resolve failed.');
     syncBrowserPageTitle('Resolve failed');
     if (elements.viewport) {
       elements.viewport.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(state.error) + '</p></section>';
