@@ -230,6 +230,98 @@ function createTab() {
   return tab;
 }
 
+function tabToInfo(tab) {
+  var isActive = tab.id === state.activeTabId;
+  var uri = tab.current ? (textValue(tab.current.uri) || textValue(tab.current.normalizedUri) || null) : null;
+  var title = tab.current ? currentDisplayTitle(tab.current, '') || null : null;
+  return { id: tab.id, uri: uri, title: title, isActive: isActive };
+}
+
+function getTabs() {
+  return state.tabs.map(tabToInfo);
+}
+
+function getActiveTab() {
+  var tab = activeTab();
+  return tab ? tabToInfo(tab) : null;
+}
+
+// Create + activate a new tab. If uri is provided, navigate the new tab to it;
+// otherwise show the welcome page. Returns the new tab id.
+function openTab(uri) {
+  var tab = createTab();
+  state.activeTabId = tab.id;
+  applyActiveTabState();
+  renderTabs();
+  if (uri) {
+    navigateTo(uri);
+  } else {
+    renderWelcome();
+    syncToolbarForActiveTab();
+  }
+  return tab.id;
+}
+
+// Close a tab by id. If it was the last tab, create a fresh empty one. If it
+// was active, activate a neighbor (prefer right, else left) and re-render its
+// content from cache (no fetch).
+function closeTab(id) {
+  var idx = -1;
+  for (var i = 0; i < state.tabs.length; i += 1) {
+    if (state.tabs[i].id === id) { idx = i; break; }
+  }
+  if (idx === -1) return;
+  var wasActive = state.tabs[idx].id === state.activeTabId;
+  state.tabs.splice(idx, 1);
+  if (!state.tabs.length) {
+    var fresh = createTab();
+    state.activeTabId = fresh.id;
+    applyActiveTabState();
+    renderWelcome();
+    syncToolbarForActiveTab();
+    renderTabs();
+    return;
+  }
+  if (wasActive) {
+    var neighbor = state.tabs[idx] || state.tabs[idx - 1];
+    state.activeTabId = neighbor.id;
+    applyActiveTabState();
+    if (state.current) renderCurrent();
+    else renderWelcome();
+    syncToolbarForActiveTab();
+  }
+  renderTabs();
+}
+
+// Activate a tab by id. Render its cached content (no fetch) and sync toolbar.
+function switchTab(id) {
+  var tab = null;
+  for (var i = 0; i < state.tabs.length; i += 1) {
+    if (state.tabs[i].id === id) { tab = state.tabs[i]; break; }
+  }
+  if (!tab) return;
+  state.activeTabId = tab.id;
+  applyActiveTabState();
+  renderTabs();
+  if (state.current) renderCurrent();
+  else if (state.status === 'loading') showLoadingState();
+  else renderWelcome();
+  syncToolbarForActiveTab();
+}
+
+// After a tab switch, sync the shared toolbar (address bar, back/forward, title,
+// bookmark star) to reflect the active tab.
+function syncToolbarForActiveTab() {
+  var tab = activeTab();
+  var uri = '';
+  if (tab && tab.historyIndex >= 0) uri = tab.history[tab.historyIndex] || '';
+  if (elements.input) elements.input.value = uri;
+  if (elements.back) elements.back.disabled = !tab || tab.historyIndex <= 0;
+  if (elements.forward) elements.forward.disabled = !tab || tab.historyIndex >= (tab ? tab.history.length - 1 : -1);
+  renderBookmarkStar();
+  syncActiveTabTitle();
+}
+
 function textValue(value) {
   if (value === null || value === undefined) return '';
   return String(value).trim();
@@ -692,6 +784,21 @@ function handleBrowserMessage(event) {
       applyBrowserTheme(data.theme);
     }
     return;
+  }
+  // Host -> Browser tab messages are accepted only from window.parent.
+  if (window && window.parent && event.source === window.parent && data && typeof data.type === 'string') {
+    if (data.type === 'agent-browser:open-tab') {
+      openTab(textValue(data.uri) || undefined);
+      return;
+    }
+    if (data.type === 'agent-browser:close-tab') {
+      closeTab(Number(data.id));
+      return;
+    }
+    if (data.type === 'agent-browser:switch-tab') {
+      switchTab(Number(data.id));
+      return;
+    }
   }
   handleBrowserBridgeMessage(event);
 }
@@ -5090,7 +5197,10 @@ async function initialize() {
       var mapHref = mapLink && mapLink.getAttribute ? mapLink.getAttribute('href') : '';
       if (mapHref) {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
-        navigateTo(mapHref);
+        var openInNewTab = (event && (event.ctrlKey || event.metaKey)) ||
+          (mapLink && typeof mapLink.getAttribute === 'function' && mapLink.getAttribute('target') === '_blank');
+        if (openInNewTab) openTab(mapHref);
+        else navigateTo(mapHref);
         return;
       }
       if (handleCopyValue(event)) return;
@@ -5282,6 +5392,24 @@ async function initialize() {
       navigateTo(elements.input ? elements.input.value : '');
     });
   }
+  if (elements.tabNew) {
+    elements.tabNew.addEventListener('click', function () { openTab(); });
+  }
+  if (elements.tabsContainer) {
+    elements.tabsContainer.addEventListener('click', function (event) {
+      var closeTarget = closestWithAttribute(event && event.target, 'data-tab-close');
+      if (closeTarget) {
+        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+        var closeId = Number(closeTarget.getAttribute('data-tab-close'));
+        closeTab(closeId);
+        return;
+      }
+      var tabEl = closestWithAttribute(event && event.target, 'data-tab-id');
+      if (tabEl) {
+        switchTab(Number(tabEl.getAttribute('data-tab-id')));
+      }
+    });
+  }
   if (elements.back) elements.back.addEventListener('click', goBack);
   if (elements.forward) elements.forward.addEventListener('click', goForward);
   if (elements.reload) elements.reload.addEventListener('click', reloadCurrent);
@@ -5431,6 +5559,13 @@ globalThis.reloadCurrent = reloadCurrent;
 globalThis.goBack = goBack;
 globalThis.goForward = goForward;
 globalThis.initialize = initialize;
+globalThis.AgentBrowserTabs = {
+  openTab: openTab,
+  closeTab: closeTab,
+  switchTab: switchTab,
+  getTabs: getTabs,
+  getActiveTab: getActiveTab
+};
 
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initialize);

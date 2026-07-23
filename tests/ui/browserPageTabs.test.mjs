@@ -168,3 +168,62 @@ test('tab title updates to the resolved page title after navigation', async () =
   // The tab container innerHTML should mention the resolved bot name.
   assert.match(elements['[data-browser-tabs-container]'].innerHTML, /Alice Bot/);
 });
+
+test('openTab via AgentBrowserTabs creates a new active tab and navigates it', async () => {
+  const { context, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const beforeCount = context.AgentBrowserTabs.getTabs().length;
+  const newId = context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'new tab resolve');
+  const tabs = context.AgentBrowserTabs.getTabs();
+  assert.equal(tabs.length, beforeCount + 1);
+  assert.equal(context.AgentBrowserTabs.getActiveTab().id, newId);
+  assert.equal(fetchCalls[2], '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1bob&actorId=worker');
+});
+
+test('openTab with no uri creates an empty welcome tab without fetching', async () => {
+  const { context, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const fetchesBefore = fetchCalls.length;
+  const newId = context.AgentBrowserTabs.openTab();
+  const tab = context.AgentBrowserTabs.getActiveTab();
+  assert.equal(tab.id, newId);
+  assert.equal(tab.uri, null);
+  assert.equal(fetchCalls.length, fetchesBefore, 'no fetch for empty tab');
+});
+
+test('closeTab on the last tab auto-creates a fresh empty tab', async () => {
+  const { context, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const activeId = context.AgentBrowserTabs.getActiveTab().id;
+  context.AgentBrowserTabs.closeTab(activeId);
+  const tabs = context.AgentBrowserTabs.getTabs();
+  assert.equal(tabs.length, 1);
+  assert.notEqual(tabs[0].id, activeId);
+  assert.equal(tabs[0].uri, null);
+});
+
+test('switchTab restores cached content without fetching', async () => {
+  const { context, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const firstId = context.AgentBrowserTabs.getActiveTab().id;
+  context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'second tab resolve');
+  // switch back to the first tab — no new fetch
+  const fetchesBefore = fetchCalls.length;
+  context.AgentBrowserTabs.switchTab(firstId);
+  assert.equal(context.AgentBrowserTabs.getActiveTab().id, firstId);
+  assert.equal(fetchCalls.length, fetchesBefore, 'switching uses cache, no fetch');
+});
+
+test('Ctrl+click on a viewport map-link opens a new tab', async () => {
+  const { elements, context, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const beforeCount = context.AgentBrowserTabs.getTabs().length;
+  // Build a fake map-link target inside the viewport click handler.
+  const linkTarget = { parentElement: null, getAttribute(n){ return n==='href'?'metaid://idq1bob':(n==='target'?'_blank':null);}, hasAttribute(n){return n==='data-browser-map-link';} };
+  const clickEvent = { target: linkTarget, preventDefault(){}, ctrlKey: true, metaKey: false };
+  elements['[data-browser-viewport]'].listeners.get('click')(clickEvent);
+  await waitFor(() => fetchCalls.length === 3, 'ctrl-click new tab resolve');
+  assert.equal(context.AgentBrowserTabs.getTabs().length, beforeCount + 1);
+});
