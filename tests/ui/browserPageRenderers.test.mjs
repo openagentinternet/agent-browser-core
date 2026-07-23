@@ -591,10 +591,10 @@ test('bot-page renderer mixes buzzes and chats in Recent Activity by descending 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('Recent Activity'), 'mixed recent activity render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
   assert.equal((html.match(/class="browser-activity-row"/g) || []).length, 6);
-  assert.match(html, />Eric<\/span><\/span><span style="color:#667085;"> interacted with <\/span>/);
+  assert.match(html, />Eric<\/span><\/span><span style="color:var\(--browser-muted\);"> interacted with <\/span>/);
   assert.match(html, new RegExp(`href="metaid://${chatPeerSunny}"[^>]*data-browser-map-link`));
   assert.match(html, /AI_Sunny<\/span><\/a>/);
-  assert.match(html, /AI_Sunny<\/span><\/a><span style="color:#667085;"> on 2026-06-19<\/span>/);
+  assert.match(html, /AI_Sunny<\/span><\/a><span style="color:var\(--browser-muted\);"> on 2026-06-19<\/span>/);
   assert.match(html, new RegExp(escapeRegExp(chatPeerSunnyAvatarUrl)));
   assert.match(html, new RegExp(escapeRegExp(chatPeerDonAvatarUrl)));
   assert.doesNotMatch(html, /[\u4e00-\u9fff]/);
@@ -847,7 +847,7 @@ test('bot-page document renders service and MetaApp cards from v3 payload fields
   assert.doesNotMatch(metaAppsSection[1], /class="browser-pin-badge"/);
   assert.match(metaAppsSection[1], new RegExp(`href="https://file\\.metaid\\.io/metafile-indexer/api/v1/files/accelerate/content/${metaAppCodePinId}"`));
 
-  assert.match(html, /href="metaid:\/\/idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz"[^>]*style="[^"]*text-decoration:none;color:#3558c8;"/);
+  assert.match(html, /href="metaid:\/\/idq14hmv23j5fnlx4ccnmvlyldjd38xjsechzwg9xz"[^>]*style="[^"]*text-decoration:none;color:var\(--browser-accent\);"/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-bot-inline-link \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
   assert.match(BROWSER_INDEX_HTML, /\.browser-bot-inline-link:hover,\s+\.browser-bot-inline-link:focus \{\s+color: #3558c8;\s+text-decoration: none;\s+\}/);
   assert.doesNotMatch(BROWSER_INDEX_HTML, /\.browser-metaapp-name\.browser-bot-inline-link \{/);

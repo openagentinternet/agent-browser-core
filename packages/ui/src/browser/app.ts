@@ -172,6 +172,8 @@ var state = {
   pinEntityProfilePending: {},
   enrichToken: 0,
   bridgeMessageListenerBound: false,
+  currentTheme: 'light',
+  themeMediaUnbind: null,
   standaloneWalletPlaceholderActor: null
 };
 
@@ -596,6 +598,23 @@ function handleBridgeSimpleMsgCompose(sourceWindow, id, params) {
   bridgePostMessage(sourceWindow, bridgeResponse(id, true, { opened: true }));
 }
 
+// Single window message dispatcher. Theme messages arrive from window.parent
+// (the host); bridge messages arrive from the MetaApp iframe. The two are
+// mutually exclusive by source, so we route by envelope first, then fall
+// through to the existing bridge handler. Registering one listener also keeps
+// host/test harnesses that capture only the last listener per event working.
+function handleBrowserMessage(event) {
+  var data = event && event.data && typeof event.data === 'object' ? event.data : null;
+  // Host -> Browser theme messages are accepted only from window.parent.
+  if (data && isBrowserThemeMessage(data)) {
+    if (window && window.parent && event.source === window.parent) {
+      applyBrowserTheme(data.theme);
+    }
+    return;
+  }
+  handleBrowserBridgeMessage(event);
+}
+
 function handleBrowserBridgeMessage(event) {
   var data = event && event.data && typeof event.data === 'object' ? event.data : null;
   if (!data || data.version !== 1) return;
@@ -635,6 +654,71 @@ function handleBrowserBridgeMessage(event) {
     message: 'Unsupported AgentBrowser bridge method.'
   }));
 }
+
+// --- Browser theme runtime -------------------------------------------------
+//
+// Mirrors the stable host -> Browser theme contract defined in
+// packages/ui/src/browser/theme.ts. The Browser owns its theme rendering; a
+// host only selects a theme and synchronizes it via
+// postMessage. The Browser iframe accepts theme messages only from
+// window.parent and only when the envelope matches the contract exactly.
+var BROWSER_THEME_MESSAGE_TYPE = 'agent-browser:set-theme';
+var BROWSER_THEME_MESSAGE_VERSION = 1;
+var BROWSER_VALID_THEMES = { light: true, dark: true, system: true };
+
+function isBrowserThemeMessage(data) {
+  if (!data || typeof data !== 'object') return false;
+  if (data.type !== BROWSER_THEME_MESSAGE_TYPE) return false;
+  if (data.version !== BROWSER_THEME_MESSAGE_VERSION) return false;
+  return typeof data.theme === 'string' && BROWSER_VALID_THEMES[data.theme] === true;
+}
+
+function prefersColorSchemeDark() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+}
+
+// Apply a concrete (resolved) theme to <html>. Setting data-browser-theme
+// flips the CSS variable overrides + color-scheme; no iframe rebuild or page
+// reload occurs, so the current URI/page state is preserved.
+function applyResolvedTheme(resolved) {
+  var root = document.documentElement;
+  if (!root || typeof root.setAttribute !== 'function') return;
+  root.setAttribute('data-browser-resolved-theme', resolved);
+  root.style.colorScheme = resolved;
+}
+
+function unbindThemeMedia() {
+  if (state.themeMediaUnbind) {
+    state.themeMediaUnbind();
+    state.themeMediaUnbind = null;
+  }
+}
+
+// Set the requested theme. When the theme is "system", register a media
+// listener so the Browser follows OS theme changes at runtime; otherwise tear
+// the listener down and pin the concrete theme.
+function applyBrowserTheme(theme) {
+  state.currentTheme = theme;
+  if (theme === 'system') {
+    applyResolvedTheme(prefersColorSchemeDark() ? 'dark' : 'light');
+    if (window.matchMedia && typeof window.matchMedia('(prefers-color-scheme: dark)').addEventListener === 'function') {
+      var mql = window.matchMedia('(prefers-color-scheme: dark)');
+      var onChange = function () { applyResolvedTheme(prefersColorSchemeDark() ? 'dark' : 'light'); };
+      mql.addEventListener('change', onChange);
+      unbindThemeMedia();
+      state.themeMediaUnbind = function () {
+        try { mql.removeEventListener('change', onChange); } catch (_) { /* noop */ }
+      };
+    }
+  } else {
+    unbindThemeMedia();
+    applyResolvedTheme(theme);
+  }
+}
+
+// Host -> Browser theme messages are dispatched by handleBrowserMessage above
+// (kept inline so a single window message listener covers both themes and the
+// MetaApp bridge).
 
 function resolveDownloadHref(reference) {
   var value = textValue(reference);
@@ -2807,13 +2891,13 @@ function renderMetaAppRows(items, emptyText) {
     : '<p class="browser-muted-row">' + escapeHtml(emptyText) + '</p>';
 }
 
-var CHAT_PERSON_AVATAR_STYLE = 'width:18px;height:18px;border-radius:999px;overflow:hidden;background:#e9eef6;display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;color:#344054;font-size:10px;font-weight:700;';
+var CHAT_PERSON_AVATAR_STYLE = 'width:18px;height:18px;border-radius:999px;overflow:hidden;background:var(--browser-surface2);display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;color:var(--browser-text);font-size:10px;font-weight:700;';
 var CHAT_PERSON_NAME_STYLE = 'max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:650;';
 
 function renderActivityPerson(label, avatarUrl, href, dataAttr) {
   var name = textValue(label) || 'Bot';
   var wrapperStyle = 'display:inline-flex;align-items:center;gap:6px;min-width:0;max-width:100%;white-space:nowrap;vertical-align:middle;' +
-    (href ? 'text-decoration:none;color:#3558c8;' : 'color:inherit;');
+    (href ? 'text-decoration:none;color:var(--browser-accent);' : 'color:inherit;');
   var marker = dataAttr ? ' ' + dataAttr : '';
   var avatar = safeUrl(avatarUrl)
     ? '<span style="' + CHAT_PERSON_AVATAR_STYLE + '" aria-hidden="true"><img class="browser-avatar-image" src="' + escapeHtml(avatarUrl) + '" alt="" /></span>'
@@ -2827,11 +2911,11 @@ function renderActivityPerson(label, avatarUrl, href, dataAttr) {
 function renderChatActivityRow(item) {
   var dateText = formatActivityDate(item.timestamp) || '-';
   var pinBadge = pinBadgeHtml(item.pinId);
-  var contentHtml = '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-width:0;line-height:1.5;color:#344054;">' +
+  var contentHtml = '<div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;min-width:0;line-height:1.5;color:var(--browser-text);">' +
     renderActivityPerson(item.actorName, item.actorAvatar, '') +
-    '<span style="color:#667085;"> interacted with </span>' +
+    '<span style="color:var(--browser-muted);"> interacted with </span>' +
     renderActivityPerson(item.partnerName, item.partnerAvatar, item.partnerHref, 'data-chat-partner') +
-    '<span style="color:#667085;">' + escapeHtml(' on ' + dateText) + '</span>' +
+    '<span style="color:var(--browser-muted);">' + escapeHtml(' on ' + dateText) + '</span>' +
     pinBadge +
     '</div>';
   var peerAttr = item.partnerGlobalMetaId ? ' data-chat-peer="' + escapeHtml(item.partnerGlobalMetaId) + '"' : '';
@@ -3967,6 +4051,46 @@ var PIN_INSPECTOR_PAGE_STYLE = '<style>' +
   '.browser-pin-raw-record summary { cursor: pointer; color: #334155; font-size: 13px; font-weight: 700; }' +
   '@media (max-width: 1100px) { .browser-pin-page-grid { grid-template-columns: minmax(0, 1fr); } }' +
   '@media (max-width: 720px) { .browser-pin-page { width: 100%; margin: 12px auto 24px; gap: 14px; } .browser-pin-page-head { flex-direction: column; } .browser-pin-page-actions { width: 100%; } .browser-pin-page-actions button { width: 100%; } .browser-pin-entity-row { grid-template-columns: 1fr; gap: 6px; } .browser-pin-entity-role { line-height: 1.2; } .browser-pin-json-row, .browser-pin-json-subblock .browser-pin-json-row { grid-template-columns: 1fr; gap: 5px; } .browser-protocol-proof { grid-template-columns: 1fr; } .browser-pin-file-row { grid-template-columns: 1fr; align-items: stretch; } }' +
+  'html[data-browser-resolved-theme="dark"] body:has(.browser-pin-page) { background: #0b1220; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-page-eyebrow { color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-page-head h2 { color: #f0f5fb; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-meta-pill { border-color: #2b3850; background: #1b2638; color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-page-actions button { border-color: #3a4a66; background: #16202f; color: #e6edf6; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-page-actions button:first-child { background: #1f3052; border-color: #2f4a7a; color: #8db4ff; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-section { border-color: #2b3850; background: #16202f; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-section h3 { color: #f0f5fb; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-intro { color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-protocol-json, html[data-browser-resolved-theme="dark"] .browser-protocol-raw, html[data-browser-resolved-theme="dark"] .browser-pin-text { background: #0f1828; color: #c8d6ea; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-copy-btn { border-color: #2b3850; background: #1b2638; color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-copy-btn:hover, html[data-browser-resolved-theme="dark"] .browser-pin-copy-btn:focus { border-color: #2f4a7a; background: #1f3052; color: #8db4ff; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-json-key { color: #74859f; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-json-value { color: #e6edf6; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-json-token { border-color: #2b3850; background: #1b2638; color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-json-token-link { color: #8db4ff; background: #1f3052; border-color: #2f4a7a; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-json-token-boolean, html[data-browser-resolved-theme="dark"] .browser-pin-json-token-number, html[data-browser-resolved-theme="dark"] .browser-pin-json-token-null { color: #c2d0e6; background: #1b2638; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-json-list-item, html[data-browser-resolved-theme="dark"] .browser-pin-json-subblock { border-color: #2b3850; background: #1b2638; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-markdown { color: #e6edf6; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-markdown a { color: #8db4ff; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-binary-card { border-color: #2b3850; background: #1b2638; color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-binary-badge { border-color: #2b3850; background: #16202f; color: #e6edf6; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-protocol-proof dt { color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-protocol-proof dd button { border-color: #2b3850; background: #16202f; color: #c2d0e6; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-media-card { border-color: #2b3850; background: #1b2638; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-media-preview { background: #0f1828; color: #74859f; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-media-preview-audio { background: #1b2638; color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-media-preview.is-error { background: #3a2022; color: #f0a0a0; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-file-row { border-color: #2b3850; background: #1b2638; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-file-name { color: #e6edf6; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-file-desc { color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-download { border-color: #2f4a7a; background: #1f3052; color: #8db4ff; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-entity-role { color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-entity-card { border-color: #2b3850; background: #1b2638; color: #e6edf6; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-entity-card:hover { border-color: #2f4a7a; background: #1f3052; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-entity-avatar { background: #1f3052; color: #c2d0e6; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-entity-name { color: #e6edf6; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-entity-meta { color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-link-pill { border-color: #2b3850; background: #1b2638; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-pin-raw-record summary { color: #c2d0e6; }' +
   '</style>';
 
 function pinInspectorParseJsonPayload(payload, rawPayload) {
@@ -4661,6 +4785,9 @@ var MEDIA_STAGE_STYLE = '<style>' +
   '.browser-media-stage .browser-pin-media-preview.is-loading .browser-pin-media-pending { display: inline-flex; align-items: center; gap: 6px; }' +
   '.browser-media-stage .browser-pin-media-preview.is-error { background: #fdecec; color: #b3261e; }' +
   '.browser-pin-media-pending { padding: 6px 10px; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-media-stage .browser-pin-media-preview-video { background: #0f1828; color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-media-stage .browser-pin-media-preview-audio { background: #1b2638; color: #9fb0c8; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-media-stage .browser-pin-media-preview.is-error { background: #3a2022; color: #f0a0a0; }' +
   '</style>';
 
 function renderMediaStage(renderer, kind) {
@@ -4807,9 +4934,19 @@ function handleCopyValue(event) {
 async function initialize() {
   bindElements();
   if (!state.bridgeMessageListenerBound && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-    window.addEventListener('message', handleBrowserBridgeMessage);
+    // One listener dispatches both host theme messages and MetaApp bridge
+    // messages (see handleBrowserMessage).
+    window.addEventListener('message', handleBrowserMessage);
     state.bridgeMessageListenerBound = true;
   }
+  // Seed the runtime theme from the value baked into <html> at render time so
+  // system-mode media tracking is active even before the host sends a message.
+  var root = document.documentElement;
+  var initialTheme = root && typeof root.getAttribute === 'function'
+    ? root.getAttribute('data-browser-theme')
+    : 'light';
+  if (!initialTheme || !BROWSER_VALID_THEMES[initialTheme]) initialTheme = 'light';
+  applyBrowserTheme(initialTheme);
   if (elements.drawer) elements.drawer.hidden = true;
   if (elements.inspector) elements.inspector.hidden = true;
   if (elements.modalRoot) elements.modalRoot.hidden = true;

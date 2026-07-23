@@ -1,5 +1,20 @@
 import { buildBrowserPageDefinition, type BrowserPageDefinition } from './app.js';
+import { BROWSER_DARK_THEME_CSS } from './darkThemeCss.js';
 import { BROWSER_INDEX_HTML } from './indexHtml.js';
+import {
+  buildBrowserThemeHeadScript,
+  normalizeBrowserTheme,
+  type BrowserTheme,
+} from './theme.js';
+
+export interface RenderBrowserPageHtmlOptions {
+  /**
+   * Initial Browser theme. Defaults to `light` to preserve the legacy
+   * behavior when no theme is supplied. The resolved theme is baked into the
+   * HTML so the first paint is already correct (no white flash).
+   */
+  theme?: BrowserTheme;
+}
 
 function escapeHtml(value: string): string {
   return value
@@ -22,9 +37,28 @@ function replaceTemplateValue(template: string, placeholder: string, replacement
 export async function renderBrowserPageHtml(
   definition: BrowserPageDefinition = buildBrowserPageDefinition(),
   languagePreference?: string | null,
+  options?: RenderBrowserPageHtmlOptions,
 ): Promise<string> {
+  const theme = normalizeBrowserTheme(options?.theme);
   const content = definition.contentHtml ?? '';
-  let html = BROWSER_INDEX_HTML.replace(/<html lang="en">/g, `<html lang="${escapeHtml(normalizedLanguage(languagePreference))}">`);
+
+  // Bake the theme onto <html>:
+  // - data-browser-theme = requested theme (light/dark/system), the runtime
+  //   source of truth, never mutated by the head script.
+  // - data-browser-resolved-theme = concrete light/dark that the CSS keys off.
+  //   For explicit themes this is known at render time (no flash). For system
+  //   it defaults to light (avoids a dark flash on light systems) and the
+  //   blocking head script corrects it before first paint if the OS is dark.
+  const initialResolved = theme === 'dark' ? 'dark' : 'light';
+  const htmlAttributes = `<html lang="${escapeHtml(normalizedLanguage(languagePreference))}" data-browser-theme="${escapeHtml(theme)}" data-browser-resolved-theme="${initialResolved}" style="color-scheme: ${initialResolved}">`;
+  let html = BROWSER_INDEX_HTML.replace(/<html lang="en">/g, htmlAttributes);
+
+  // Blocking, no-flash theme init at the very top of <head> (before CSS).
+  html = replaceTemplateValue(html, '__PAGE_THEME_INIT__', buildBrowserThemeHeadScript());
+
+  // Inject the dark-theme CSS overrides (keyed off the resolved-theme attribute).
+  html = replaceTemplateValue(html, '__PAGE_THEME_CSS__', BROWSER_DARK_THEME_CSS);
+
   html = replaceTemplateValue(html, '__PAGE_TITLE__', escapeHtml(definition.title));
   html = replaceTemplateValue(html, '__PAGE_EYEBROW__', escapeHtml(definition.eyebrow));
   html = replaceTemplateValue(html, '__PAGE_HEADING__', escapeHtml(definition.heading));
