@@ -169,3 +169,17 @@ test('parseMapUri rejects unsafe authorities and unsupported components', () => 
   assert.throws(() => core.parseMapUri('map://simplemsg/conversation?peer=idq1peer&extra=1'), /query|unsupported/i);
   assert.throws(() => core.parseMapUri('map://simplemsg/conversation?peer=idq1peer#fragment'), /fragment|unsupported/i);
 });
+
+test('parseBrowserUri accepts the preview-metaapp scheme', () => {
+  const parsed = core.parseBrowserUri('preview-metaapp://localhost/Users/tusm/app/index.html');
+  assert.equal(parsed.scheme, 'preview-metaapp');
+  assert.equal(parsed.normalizedUri, 'preview-metaapp://localhost/Users/tusm/app/index.html');
+  // The dedicated preview-metaapp parser (Task 2) splits host + path and
+  // uses the path as the resource id.
+  assert.equal(parsed.id, '/Users/tusm/app/index.html');
+});
+
+test('parseBrowserUri lowercases the preview-metaapp scheme', () => {
+  const parsed = core.parseBrowserUri('PREVIEW-METAAPP://localhost/x');
+  assert.equal(parsed.scheme, 'preview-metaapp');
+});

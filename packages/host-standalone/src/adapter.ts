@@ -12,6 +12,7 @@ import {
   type BrowserConfigContainer,
   type BrowserNameAliasProvider,
   type BrowserResolveResult,
+  type PreviewMetaAppLocalResolveResult,
   type BrowserSettingsSnapshot as CoreBrowserSettingsSnapshot,
   resolveMetaAppPinToRecord,
 } from '@openagentinternet/agent-browser-core';
@@ -89,7 +90,7 @@ interface PreviewSession {
   artifactDir: string;
   indexFile: string;
   createdAt: number;
-  source: 'cache';
+  source: 'cache' | 'local';
   cacheKey?: string;
 }
 
@@ -383,7 +384,7 @@ export function createStandaloneBrowserHostAdapter(
   function createPreviewSessionForArtifact(input: {
     artifactDir: string;
     indexFile: string;
-    source: 'cache';
+    source: 'cache' | 'local';
     cacheKey?: string;
   }): { previewId: string; localPreviewUrl: string } {
     previewCounter += 1;
@@ -399,6 +400,48 @@ export function createStandaloneBrowserHostAdapter(
       previewId,
       localPreviewUrl: `/api/browser/preview-assets/${encodeURIComponent(previewId)}/${encodeAssetPath(input.indexFile)}`,
     };
+  }
+
+  // preview-metaapp://localhost: read a live local file or directory. Unrestricted absolute path
+  // by explicit design (local-dev only; must not be exposed to the public internet). See the
+  // design spec §9 Security.
+  async function resolveLocalPreviewPath(input: { path: string }): Promise<PreviewMetaAppLocalResolveResult> {
+    let stats;
+    try {
+      stats = await fs.stat(input.path);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === 'ENOENT') {
+        throw new Error(`Local path not found: ${input.path}`);
+      }
+      if (code === 'EACCES') {
+        throw new Error(`Permission denied: ${input.path}`);
+      }
+      throw error;
+    }
+
+    let artifactDir: string;
+    let indexFile: string;
+    if (stats.isDirectory()) {
+      const candidates = ['index.html', 'index.htm'];
+      const found = await Promise.all(
+        candidates.map(async (name) => {
+          try { await fs.access(path.join(input.path, name)); return name; } catch { return null; }
+        }),
+      );
+      indexFile = found.find((name): name is string => name !== null) ?? '';
+      if (!indexFile) {
+        throw new Error(`No index.html found in directory: ${input.path}`);
+      }
+      artifactDir = input.path;
+    } else {
+      artifactDir = path.dirname(input.path);
+      indexFile = path.basename(input.path);
+    }
+
+    const session = createPreviewSessionForArtifact({ artifactDir, indexFile, source: 'local' });
+    const contentType = contentTypeForPath(indexFile) || 'text/html';
+    return { localPreviewUrl: session.localPreviewUrl, previewId: session.previewId, contentType };
   }
 
   async function resolveZipPreviewArtifact(input: {
@@ -446,6 +489,7 @@ export function createStandaloneBrowserHostAdapter(
       config: browserConfig,
       fetch: resolveFetch,
       nameAliasProviders,
+      previewMetaAppLocalResolve: resolveLocalPreviewPath,
       metaAppResolve: (pinId) => resolveMetaAppPinToRecord({
         pinId,
         fetch: resolveFetch,

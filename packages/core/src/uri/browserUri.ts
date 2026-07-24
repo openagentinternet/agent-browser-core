@@ -1,7 +1,8 @@
 import { parseMapUri } from '../browser/mapUri.js';
 import { parsePinUri } from '../browser/pinUri.js';
+import { parsePreviewMetaAppUri } from '../browser/previewMetaAppUri.js';
 
-export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile' | 'map' | 'pin';
+export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile' | 'map' | 'pin' | 'preview-metaapp';
 
 export interface ParsedBrowserUri {
   originalUri: string;
@@ -10,7 +11,7 @@ export interface ParsedBrowserUri {
   id: string;
 }
 
-const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'metafile', 'map', 'pin']);
+const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'metafile', 'map', 'pin', 'preview-metaapp']);
 const BARE_PIN_ID_PATTERN = /^[0-9a-f]{64}i[0-9]+$/iu;
 const BARE_DOMAIN_ALIAS_PATTERN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/iu;
 const GLOBAL_META_ID_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
@@ -203,6 +204,16 @@ export function parseBrowserUri(input: string): ParsedBrowserUri {
       normalizedUri: parsed.normalizedUri,
       scheme,
       id: parsed.normalizedUri.slice('pin://'.length),
+    };
+  }
+
+  if (scheme === 'preview-metaapp') {
+    const parsed = parsePreviewMetaAppUri(originalUri);
+    return {
+      originalUri,
+      normalizedUri: parsed.normalizedUri,
+      scheme,
+      id: parsed.path,
     };
   }
 

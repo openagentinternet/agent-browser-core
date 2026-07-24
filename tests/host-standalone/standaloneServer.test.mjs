@@ -304,6 +304,38 @@ test('memory standalone Browser host accepts connected wallet actor aliases', as
   assert.equal(resolved.data.normalizedUri, `metaapp://${pinId}`);
 });
 
+test('standalone Browser serves a preview-metaapp localhost directory over HTTP end-to-end', async (t) => {
+  const { mkdtemp: mkdtempAsync, writeFile } = await import('node:fs/promises');
+  const { tmpdir: tmpdirAsync } = await import('node:os');
+  const nodePath = await import('node:path');
+  const dir = await mkdtempAsync(nodePath.join(tmpdirAsync(), 'preview-e2e-'));
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(dir, { recursive: true, force: true })));
+  const marker = 'preview-e2e-marker-9f3c2a';
+  await writeFile(nodePath.join(dir, 'index.html'), `<h1>${marker}</h1>`);
+
+  const server = standalone.createStandaloneBrowserServer();
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  // Resolve via the standalone HTTP resolve route: the real /api/browser/resolve?uri=... GET.
+  const uri = `preview-metaapp://localhost${dir}`;
+  const resolveResponse = await fetch(`${baseUrl}/api/browser/resolve?uri=${encodeURIComponent(uri)}`);
+  const resolved = await resolveResponse.json();
+  assert.equal(resolveResponse.status, 200, `resolve status for ${uri}`);
+  assert.equal(resolved.ok, true, `resolve ok for ${uri}`);
+
+  const previewUrl = resolved.data?.renderer?.url;
+  assert.ok(previewUrl, 'expected a renderer url');
+  assert.match(previewUrl, /^\/api\/browser\/preview-assets\//, 'renderer url should target the preview-assets route');
+
+  // End-to-end: HTTP-GET the served preview asset through the same standalone server.
+  const asset = await fetch(`${baseUrl}${previewUrl}`);
+  assert.equal(asset.status, 200, `asset status for ${previewUrl}`);
+  assert.match(asset.headers.get('content-type'), /text\/html/);
+  const body = await asset.text();
+  assert.match(body, new RegExp(marker));
+});
+
 test('standalone CLI rejects listen errors', async (t) => {
   const server = standalone.createStandaloneBrowserServer();
   t.after(() => new Promise((resolve) => server.close(resolve)));

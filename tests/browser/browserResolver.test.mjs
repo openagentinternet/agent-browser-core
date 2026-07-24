@@ -1045,3 +1045,26 @@ test('resolveBrowserResource fails closed for ENS alias errors', async () => {
   assert.equal(providerFailure.data.provider, 'ens');
   assert.equal(providerFailure.data.aliasName, 'sunny.eth');
 });
+
+test('resolveBrowserResource routes preview-metaapp localhost through the injected factory', async () => {
+  const result = await resolveBrowserResource({
+    uri: 'preview-metaapp://localhost/Users/tusm/app/index.html',
+    config: browserConfig({ enablePreviewMetaApp: true }),
+    previewMetaAppLocalResolve: async () => ({
+      localPreviewUrl: '/api/browser/preview-assets/p1/index.html',
+      contentType: 'text/html',
+    }),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.data.renderer.type, 'html-iframe');
+  assert.equal(result.data.renderer.url, '/api/browser/preview-assets/p1/index.html');
+});
+
+test('resolveBrowserResource routes preview-metaapp remote as direct https', async () => {
+  const result = await resolveBrowserResource({
+    uri: 'preview-metaapp://example.com/x.html',
+    config: browserConfig({ enablePreviewMetaApp: true }),
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.data.renderer.url, 'https://example.com/x.html');
+});
