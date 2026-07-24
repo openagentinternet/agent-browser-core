@@ -53,6 +53,7 @@ export function createDefaultBrowserConfig(): BrowserBaseConfig {
       },
     },
     localMode: false,
+    enablePreviewMetaApp: true,
   };
 }
 
@@ -102,5 +103,8 @@ export function resolveBrowserConfig(
       },
     },
     localMode: typeof browser.localMode === 'boolean' ? browser.localMode : defaults.localMode,
+    enablePreviewMetaApp: normalizeBoolean(env.METABOT_BROWSER_DISABLE_PREVIEW_METAAPP) === true
+      ? false
+      : (typeof browser.enablePreviewMetaApp === 'boolean' ? browser.enablePreviewMetaApp : defaults.enablePreviewMetaApp),
   };
 }
