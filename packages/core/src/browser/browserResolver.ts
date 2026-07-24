@@ -5,6 +5,8 @@ import { resolveMapUriToResource } from './mapProtocolResolver.js';
 import { resolvePinUriToResource } from './pinResolver.js';
 import { resolveMetafilePinToResource } from './metafileResolver.js';
 import { buildMetaAppResolveResult } from './metaAppResolver.js';
+import { resolvePreviewMetaAppResource } from './previewMetaAppResolver.js';
+import { parsePreviewMetaAppUri } from './previewMetaAppUri.js';
 import {
   aliasBrowserResolveResult,
   isSupportedNameAliasId,
@@ -20,6 +22,7 @@ import {
   type BrowserNameAliasProvider,
   type BrowserResolveResult,
   type MetaAppGalleryRecord,
+  type PreviewMetaAppLocalResolve,
 } from './types.js';
 
 export interface ResolveBrowserResourceInput {
@@ -29,6 +32,7 @@ export interface ResolveBrowserResourceInput {
   metaAppLookup?: (pinId: string) => Promise<MetaAppGalleryRecord | null>;
   metaAppResolve?: (pinId: string) => Promise<BrowserCommandResult<MetaAppGalleryRecord>>;
   mapResolve?: (uri: string, parsed: ParsedBrowserUri) => Promise<BrowserCommandResult<BrowserResolveResult>>;
+  previewMetaAppLocalResolve?: PreviewMetaAppLocalResolve;
   nameAliasProviders?: BrowserNameAliasProvider[];
   skipNameAliasResolution?: boolean;
 }
@@ -447,6 +451,17 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
       uri: parsed.normalizedUri,
       fetch: input.fetch,
       manApiBaseUrl: input.config.manApiBaseUrl,
+    });
+  }
+
+  if (parsed.scheme === 'preview-metaapp') {
+    // parseBrowserUri already produced a ParsedPreviewMetaAppUri-shaped result; re-parse via the
+    // dedicated parser to obtain the structured host/path fields the resolver needs.
+    const previewParsed = parsePreviewMetaAppUri(parsed.normalizedUri);
+    return resolvePreviewMetaAppResource({
+      parsed: previewParsed,
+      config: input.config,
+      previewMetaAppLocalResolve: input.previewMetaAppLocalResolve,
     });
   }
 
