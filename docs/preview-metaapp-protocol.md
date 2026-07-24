@@ -41,8 +41,13 @@ sessionStorage shim. Reload the page to pick up the latest file contents on disk
 ## Security — local dev only
 
 When `host` is `localhost`, the browser reads **any absolute path** the host process can read.
-Do **not** expose a `preview-metaapp://localhost` endpoint to the public internet. To disable the
-feature entirely on a host, set `METABOT_BROWSER_DISABLE_PREVIEW_METAAPP=1`.
+Do **not** expose a `preview-metaapp://localhost` endpoint to the public internet.
+
+The **only** control that disables this feature is the environment variable
+`METABOT_BROWSER_DISABLE_PREVIEW_METAAPP=1` (which sets `enablePreviewMetaApp = false`). There is
+no other gate: the standalone host's `localMode` flag is a behavioral setting, not a deployment
+scope, and does NOT restrict local-FS preview. If you deploy the standalone host to anything other
+than your own machine, set `METABOT_BROWSER_DISABLE_PREVIEW_METAAPP=1` to turn this off.
 
 Note: only the literal host `localhost` reads the local filesystem. `localhost:3000` (with a port)
 and `127.0.0.1` are treated as remote HTTPS origins.

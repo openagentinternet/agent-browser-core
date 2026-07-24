@@ -278,8 +278,10 @@ standalone Browser can read any file the host process can read (e.g. `~/.ssh/id_
 
 Mitigations in scope:
 - The feature is documented as **local-dev-only** and **must not be exposed to the public
-  internet**. The standalone host's `localMode` already scopes it to local use.
-- The `METABOT_BROWSER_DISABLE_PREVIEW_METAAPP` kill-switch lets a deployment turn it off entirely.
+  internet**. The standalone host's `localMode` flag is a behavioral setting, **not** a deployment
+  scope — it does NOT restrict local-FS preview, so it must not be relied on as a gate.
+- The `METABOT_BROWSER_DISABLE_PREVIEW_METAAPP` kill-switch is the **only** runtime control that
+  disables the feature; a deployment exposed beyond the local machine must set it.
 - `resolvePreviewAsset()`'s per-session path-traversal containment remains in force: it prevents a
   single session from escaping its declared `artifactDir`, even though the declared root itself is
   unrestricted.
