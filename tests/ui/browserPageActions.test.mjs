@@ -10,16 +10,42 @@ class FakeElement {
   constructor() {
     this.value = '';
     this.textContent = '';
-    this.innerHTML = '';
+    this._innerHTML = '';
     this.hidden = false;
     this.attrs = {};
     this.listeners = new Map();
+    this.children = [];
+    this._parent = null;
     this.classList = { add() {}, remove() {}, toggle() {} };
+  }
+  get innerHTML() {
+    if (this.children && this.children.length) {
+      return this.children
+        .filter((c) => !(typeof c.hasAttribute === 'function' && c.hasAttribute('hidden')))
+        .map((c) => c.innerHTML)
+        .join('');
+    }
+    return this._innerHTML;
+  }
+  set innerHTML(value) { this._innerHTML = String(value); this.textContent = this._innerHTML.replace(/<[^>]*>/g, ''); }
+  appendChild(child) { child._parent = this; this.children.push(child); return child; }
+  removeChild(child) {
+    const idx = this.children.indexOf(child);
+    if (idx !== -1) { this.children.splice(idx, 1); child._parent = null; }
+    return child;
+  }
+  get firstElementChild() { return (this.children && this.children.length) ? this.children[0] : null; }
+  get nextElementSibling() {
+    if (!this._parent) return null;
+    const idx = this._parent.children.indexOf(this);
+    if (idx === -1) return null;
+    return idx + 1 < this._parent.children.length ? this._parent.children[idx + 1] : null;
   }
   addEventListener(eventName, handler) { this.listeners.set(eventName, handler); }
   setAttribute(name, value) { this.attrs[name] = String(value); }
   getAttribute(name) { return this.attrs[name] || ''; }
   hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attrs, name); }
+  removeAttribute(name) { delete this.attrs[name]; }
 }
 
 function elements() {
@@ -91,6 +117,7 @@ function createContext(options = {}) {
       querySelector: (selector) => nodes[selector] ?? null,
       querySelectorAll: () => [],
       addEventListener: () => {},
+      createElement: () => new FakeElement(),
     },
     fetch: async (url, fetchOptions = {}) => {
       if (String(url).startsWith('/api/browser/actions')) {
@@ -520,6 +547,11 @@ test('browser keeps the no-Bot launch chrome in English when the page language i
     },
   };
 
+  // The pane model writes the no-actor empty state into the ACTIVE tab's content
+  // pane, so an active tab must exist (initialize() never ran: readyState is
+  // 'loading' and DOMContentLoaded is a no-op in this mock). openTab() creates
+  // and activates a tab synchronously; its welcome render is overwritten below.
+  empty.context.AgentBrowserTabs.openTab();
   empty.context.renderNoLocalBot();
 
   assert.match(empty.nodes['[data-browser-viewport]'].innerHTML, /Create your first Bot/);

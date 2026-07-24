@@ -90,7 +90,10 @@ test('mature Browser shell resolves resources client-side from an empty viewport
   assert.match(definition.contentHtml, /<main class="browser-viewport" data-browser-viewport><\/main>/);
   assert.match(definition.script, /function renderRenderer\(current\)/);
   assert.match(definition.script, /function openPrivateChatModal\(/);
-  assert.match(definition.script, /state\.current = result;/);
+  // Navigation now writes the resolved resource onto the active tab, then mirrors
+  // it onto state.current via applyActiveTabState() (per-tab source of truth).
+  assert.match(definition.script, /resolvedTab\.current = result;/);
+  assert.match(definition.script, /state\.current = tab\.current;/);
 });
 
 test('browser chrome navigation and status buttons are wired or disabled', () => {

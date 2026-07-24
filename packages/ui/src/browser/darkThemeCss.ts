@@ -37,7 +37,7 @@ export const BROWSER_DARK_THEME_CSS = `
         --browser-shadow: 0 18px 44px rgba(0, 0, 0, .5), 0 2px 10px rgba(0, 0, 0, .35);
       }
       html[data-browser-resolved-theme="dark"] .browser-shell,
-      html[data-browser-resolved-theme="dark"] .browser-titlebar,
+      html[data-browser-resolved-theme="dark"] .browser-tabstrip,
       html[data-browser-resolved-theme="dark"] .browser-topbar,
       html[data-browser-resolved-theme="dark"] .browser-viewport,
       html[data-browser-resolved-theme="dark"] .browser-drawer,
@@ -50,8 +50,15 @@ export const BROWSER_DARK_THEME_CSS = `
       html[data-browser-resolved-theme="dark"] .browser-metaapp-card {
         transition: background-color .18s ease, border-color .18s ease, color .18s ease, box-shadow .18s ease;
       }
-      html[data-browser-resolved-theme="dark"] .browser-titlebar { background: linear-gradient(#131d2e, #0f1828); }
-      html[data-browser-resolved-theme="dark"] .browser-window-brand { color: #c8d6ea; }
+      html[data-browser-resolved-theme="dark"] .browser-tabstrip { background: linear-gradient(#131d2e, #0f1828); }
+      html[data-browser-resolved-theme="dark"] .browser-tabstrip-brand { color: #c8d6ea; }
+      html[data-browser-resolved-theme="dark"] .browser-tab { color: #8a9ab8; }
+      html[data-browser-resolved-theme="dark"] .browser-tab:hover { background: rgba(120, 150, 200, .12); }
+      html[data-browser-resolved-theme="dark"] .browser-tab.is-active { background: var(--browser-window); color: var(--browser-text); }
+      html[data-browser-resolved-theme="dark"] .browser-tab-close { color: #6b7a94; }
+      html[data-browser-resolved-theme="dark"] .browser-tab-close:hover { background: rgba(31, 41, 55, .4); color: #e6edf7; }
+      html[data-browser-resolved-theme="dark"] .browser-tab-new { color: #8a9ab8; }
+      html[data-browser-resolved-theme="dark"] .browser-tab-new:hover { background: rgba(47, 111, 237, .2); color: var(--browser-accent); }
       html[data-browser-resolved-theme="dark"] .browser-window-actions span { border-color: #3a4a66; background: #1b2638; }
       html[data-browser-resolved-theme="dark"] .browser-icon-button { color: #c2d0e6; }
       html[data-browser-resolved-theme="dark"] .browser-icon-button:hover,
