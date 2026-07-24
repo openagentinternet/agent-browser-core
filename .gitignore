@@ -14,3 +14,6 @@ coverage/
 # Playwright tooling cache
 .playwright-cli/
 .playwright-mcp/
+
+# Agent tooling session state
+.zcode/
