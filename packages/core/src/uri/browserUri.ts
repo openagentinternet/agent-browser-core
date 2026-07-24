@@ -1,5 +1,6 @@
 import { parseMapUri } from '../browser/mapUri.js';
 import { parsePinUri } from '../browser/pinUri.js';
+import { parsePreviewMetaAppUri } from '../browser/previewMetaAppUri.js';
 
 export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile' | 'map' | 'pin' | 'preview-metaapp';
 
@@ -203,6 +204,16 @@ export function parseBrowserUri(input: string): ParsedBrowserUri {
       normalizedUri: parsed.normalizedUri,
       scheme,
       id: parsed.normalizedUri.slice('pin://'.length),
+    };
+  }
+
+  if (scheme === 'preview-metaapp') {
+    const parsed = parsePreviewMetaAppUri(originalUri);
+    return {
+      originalUri,
+      normalizedUri: parsed.normalizedUri,
+      scheme,
+      id: parsed.path,
     };
   }
 
