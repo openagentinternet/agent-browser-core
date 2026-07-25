@@ -258,6 +258,7 @@ Hosts should preserve stable bridge-level error codes whenever possible:
 - `actor_required`
 - `manual_action_required`
 - `user_cancelled`
+- `consent_denied`
 - `upload_failed`
 - `pin_write_failed`
 
