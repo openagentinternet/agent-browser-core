@@ -22,4 +22,4 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run verify
       - run: npm run verify:packages
-      - run: node scripts/verify-release-version.mjs v0.4.0
+      - run: node scripts/verify-release-version.mjs v0.4.1
