@@ -76,6 +76,14 @@ class FakeElement {
   setChild(selector, value) { this.childrenBySelector.set(selector, value); }
 }
 
+function browserActionTarget(attrs) {
+  return {
+    parentElement: null,
+    getAttribute: (name) => attrs[name] || '',
+    hasAttribute: (name) => Object.prototype.hasOwnProperty.call(attrs, name),
+  };
+}
+
 function waitFor(condition, label) {
   return new Promise((resolve, reject) => {
     const startedAt = Date.now();
@@ -1198,6 +1206,17 @@ test('html-iframe bridge responds with sanitized current actor', async () => {
     },
   });
 
+  // No response until the user allows identity access in the consent modal.
+  assert.deepEqual(activeFrameWindow.postMessageCalls, []);
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Identity request/);
+
+  nodes['[data-browser-modal-root]'].listeners.get('click')({
+    preventDefault() {},
+    target: browserActionTarget({ 'data-browser-modal-action': 'actor-consent-allow' }),
+  });
+
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, true);
   assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
     type: 'agent-browser:response',
     version: 1,
@@ -1211,7 +1230,101 @@ test('html-iframe bridge responds with sanitized current actor', async () => {
       },
     },
   });
+
+  // Consent is remembered for the resource: a second call answers immediately.
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'actor-2',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[1])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'actor-2',
+    ok: true,
+    result: {
+      actor: {
+        uri: 'metaid://idq1actor',
+        globalMetaId: 'idq1actor',
+        name: 'Bob',
+      },
+    },
+  });
   assert.equal(fetchCalls.some((url) => String(url).includes('/api/browser/actions')), false);
+});
+
+test('html-iframe bridge denies the actor snapshot when the user dismisses the consent modal', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const { nodes, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'actor-deny-1',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+
+  // Dismiss via the modal close (X) button — same path as Cancel/Deny.
+  nodes['[data-browser-modal-root]'].listeners.get('click')({
+    preventDefault() {},
+    target: browserActionTarget({ 'data-browser-modal-close': '' }),
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'actor-deny-1',
+    ok: false,
+    error: {
+      code: 'consent_denied',
+      message: 'The user denied identity access for this MetaApp.',
+    },
+  });
+
+  // Denial is not persisted: asking again re-opens the consent modal.
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'actor-deny-2',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+  assert.equal(activeFrameWindow.postMessageCalls.length, 1);
 });
 
 test('html-iframe bridge opens the Browser private-chat composer for the current Bot owner', async () => {
@@ -1452,6 +1565,65 @@ test('html-iframe bridge emits actor changed events after actor selection', asyn
     postMessageCalls: [],
     postMessage(message) { this.postMessageCalls.push(message); },
   };
+  const { context, nodes, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [
+        { id: 'first-actor', label: 'First', kind: 'wallet', globalMetaId: 'idq1first', isDefault: true, capabilities: [] },
+        { id: 'second-actor', label: 'Second', kind: 'wallet', globalMetaId: 'idq1second', isDefault: false, capabilities: [] },
+      ],
+      defaultActor: { id: 'first-actor', label: 'First', kind: 'wallet', globalMetaId: 'idq1first', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'actor-consent',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  nodes['[data-browser-modal-root]'].listeners.get('click')({
+    preventDefault() {},
+    target: browserActionTarget({ 'data-browser-modal-action': 'actor-consent-allow' }),
+  });
+  activeFrameWindow.postMessageCalls.length = 0;
+
+  await context.selectUsingIdentity('second-actor');
+
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:event',
+    version: 1,
+    event: 'browser.actor.changed',
+    payload: {
+      actor: {
+        uri: 'metaid://idq1second',
+        globalMetaId: 'idq1second',
+        name: 'Second',
+      },
+    },
+  });
+});
+
+test('html-iframe bridge does not emit actor changed events without identity consent', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
   const { context, nodes } = runWithResolve(result({
     type: 'html-iframe',
     contentType: 'text/html',
@@ -1475,18 +1647,7 @@ test('html-iframe bridge emits actor changed events after actor selection', asyn
 
   await context.selectUsingIdentity('second-actor');
 
-  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
-    type: 'agent-browser:event',
-    version: 1,
-    event: 'browser.actor.changed',
-    payload: {
-      actor: {
-        uri: 'metaid://idq1second',
-        globalMetaId: 'idq1second',
-        name: 'Second',
-      },
-    },
-  });
+  assert.deepEqual(activeFrameWindow.postMessageCalls, []);
 });
 
 test('html-iframe bridge forwards MetaID PIN write requests to host actions', async () => {

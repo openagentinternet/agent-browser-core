@@ -174,6 +174,8 @@ var state = {
   pendingPrivateChat: null,
   pendingConversationHref: '',
   pendingServiceCall: null,
+  actorConsent: {},
+  pendingActorConsent: null,
   pendingBookmarkRemoval: '',
   bookmarks: [],
   visits: [],
@@ -676,6 +678,49 @@ function sanitizedActorSnapshot(actor) {
   return snapshot;
 }
 
+// Identity consent: browser.actor.current and browser.actor.changed disclose
+// the connected identity (MetaID + display name) to the rendered MetaApp.
+// MetaApps are untrusted content, so disclosure requires an explicit
+// per-resource user approval. Decisions are kept in memory only and reset on
+// page reload; only 'allow' is remembered, dismissal is a one-off denial.
+function actorConsentKey() {
+  return currentResourceUri();
+}
+
+function respondActorCurrent(sourceWindow, id) {
+  bridgePostMessage(sourceWindow, bridgeResponse(id, true, { actor: sanitizedActorSnapshot(selectedActor()) }));
+}
+
+function denyActorConsent(pendingConsent) {
+  bridgePostMessage(pendingConsent.sourceWindow, bridgeResponse(pendingConsent.id, false, {
+    code: 'consent_denied',
+    message: 'The user denied identity access for this MetaApp.'
+  }));
+}
+
+function handleBridgeActorCurrent(sourceWindow, id) {
+  var snapshot = sanitizedActorSnapshot(selectedActor());
+  if (!snapshot) {
+    // No connected identity: nothing sensitive to disclose.
+    bridgePostMessage(sourceWindow, bridgeResponse(id, true, { actor: null }));
+    return;
+  }
+  var key = actorConsentKey();
+  if (state.actorConsent[key] === 'allow') {
+    respondActorCurrent(sourceWindow, id);
+    return;
+  }
+  if (state.pendingActorConsent) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: 'consent_pending',
+      message: 'An identity consent prompt is already open.'
+    }));
+    return;
+  }
+  state.pendingActorConsent = { sourceWindow: sourceWindow, id: id, key: key };
+  openActorConsentModal(key);
+}
+
 function isPlainObject(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -937,7 +982,7 @@ function handleBrowserBridgeMessage(event) {
   var id = textValue(data.id);
   if (!id) return;
   if (textValue(data.method) === 'browser.actor.current') {
-    bridgePostMessage(sourceWindow, bridgeResponse(id, true, { actor: sanitizedActorSnapshot(selectedActor()) }));
+    handleBridgeActorCurrent(sourceWindow, id);
     return;
   }
   if (textValue(data.method) === 'browser.privateChat.compose') {
@@ -3383,6 +3428,11 @@ function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
 }
 
 function closeModal() {
+  if (state.pendingActorConsent) {
+    var pendingConsent = state.pendingActorConsent;
+    state.pendingActorConsent = null;
+    denyActorConsent(pendingConsent);
+  }
   state.pendingPrivateChat = null;
   state.pendingConversationHref = '';
   state.pendingServiceCall = null;
@@ -3628,7 +3678,9 @@ async function selectUsingIdentity(slug) {
   state.runtime.defaultActor = selected;
   state.runtime.defaultUri = actorDefaultUri(selected) || null;
   renderUsingIdentity();
-  emitBridgeEvent('browser.actor.changed', { actor: sanitizedActorSnapshot(selectedActor()) });
+  if (state.actorConsent[actorConsentKey()] === 'allow') {
+    emitBridgeEvent('browser.actor.changed', { actor: sanitizedActorSnapshot(selectedActor()) });
+  }
   closeModal();
   // Switching the active actor only updates the Using chip and the recorded
   // selection. It must NOT navigate or touch the address bar — the selected
@@ -3734,6 +3786,22 @@ function openStandaloneUnsupportedModal() {
       '<a class="browser-modal-link" href="' + escapeHtml(installGuideHref) + '" target="_blank" rel="noopener">' + escapeHtml(browserText('standaloneUnsupported.installGuideLink', 'Go to openagentinternet.org')) + '</a>.</p>',
     browserText('modal.ok', 'OK'),
     'standalone-unsupported'
+  );
+}
+
+function openActorConsentModal(resourceUri) {
+  renderModal(
+    browserText('actorConsent.title', 'Identity request'),
+    '<p>' + escapeHtml(browserText('actorConsent.body', 'This MetaApp requests access to your connected identity.')) + '</p>' +
+      '<dl>' +
+      '<dt>' + escapeHtml(browserText('actorConsent.app', 'MetaApp')) + '</dt><dd>' + escapeHtml(resourceUri || '') + '</dd>' +
+      '<dt>' + escapeHtml(browserText('actorConsent.shared', 'Shared')) + '</dt><dd>' + escapeHtml(browserText('actorConsent.sharedDetail', 'MetaID and display name')) + '</dd>' +
+      '</dl>',
+    browserText('actorConsent.allow', 'Allow'),
+    'actor-consent-allow',
+    {
+      cancelLabel: browserText('actorConsent.deny', 'Deny')
+    }
   );
 }
 
@@ -5477,6 +5545,16 @@ async function initialize() {
         if (removalUri) {
           removeBookmark(removalUri);
           showToast(browserText('bookmark.removed', 'Bookmark removed'));
+        }
+        closeModal();
+        return;
+      }
+      if (action === 'actor-consent-allow') {
+        var grantedConsent = state.pendingActorConsent;
+        state.pendingActorConsent = null;
+        if (grantedConsent) {
+          state.actorConsent[grantedConsent.key] = 'allow';
+          respondActorCurrent(grantedConsent.sourceWindow, grantedConsent.id);
         }
         closeModal();
         return;
