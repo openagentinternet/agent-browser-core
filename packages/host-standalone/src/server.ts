@@ -58,7 +58,7 @@ function isBrowserPage(pathname: string): boolean {
 }
 
 const PREVIEW_ASSET_PREFIX = '/api/browser/preview-assets/';
-const LOOPBACK_HOST_PATTERN = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/iu;
+const LOOPBACK_HOST_PATTERN = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i;
 
 function firstHeaderValue(value: string | string[] | undefined): string {
   return (Array.isArray(value) ? value[0] : value ?? '').trim();
@@ -70,7 +70,9 @@ function firstHeaderValue(value: string | string[] | undefined): string {
 // Sec-Fetch-Site, when present, must be same-origin or none. Non-browser
 // clients (curl, node fetch, MetaBot skills) send no fetch metadata and stay
 // allowed. Preview assets are exempt: the opaque-origin MetaApp iframe loads
-// its own assets with Sec-Fetch-Site: cross-site.
+// its own assets with Sec-Fetch-Site: cross-site. Binding the server to a
+// non-loopback host (e.g. --host 0.0.0.0) makes the API unreachable by
+// design, since only loopback Host literals are trusted.
 function isTrustedLoopbackRequest(req: http.IncomingMessage): boolean {
   if (!LOOPBACK_HOST_PATTERN.test(firstHeaderValue(req.headers.host))) {
     return false;

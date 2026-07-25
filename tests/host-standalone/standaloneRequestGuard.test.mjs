@@ -56,6 +56,13 @@ test('request guard rejects cross-site and same-site API requests', async (t) =>
     const body = await response.json();
     assert.equal(body.ok, false);
   }
+
+  const mutation = await fetch(`${baseUrl}/api/browser/settings`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json', 'sec-fetch-site': 'cross-site' },
+    body: JSON.stringify({ browser: {} }),
+  });
+  assert.equal(mutation.status, 403);
 });
 
 test('request guard rejects non-loopback Host headers (DNS rebinding)', async (t) => {
@@ -65,6 +72,9 @@ test('request guard rejects non-loopback Host headers (DNS rebinding)', async (t
 
   const response = await rawGet(port, '/api/browser/runtime', { host: 'evil.example.com' });
   assert.equal(response.statusCode, 403);
+
+  const suffix = await rawGet(port, '/api/browser/runtime', { host: '127.0.0.1.evil.com' });
+  assert.equal(suffix.statusCode, 403);
 
   const loopback = await rawGet(port, '/api/browser/runtime', { host: `127.0.0.1:${port}` });
   assert.equal(loopback.statusCode, 200);
@@ -78,6 +88,6 @@ test('request guard exempts preview-assets (opaque-origin MetaApp asset loads)',
   const response = await fetch(`${baseUrl}/api/browser/preview-assets/unknown-preview/index.html`, {
     headers: { 'sec-fetch-site': 'cross-site' },
   });
-  // Must not be blocked by the guard; a missing preview session yields 404, not 403.
-  assert.notEqual(response.status, 403);
+  // Must not be blocked by the guard; a missing preview session yields 404.
+  assert.equal(response.status, 404);
 });
