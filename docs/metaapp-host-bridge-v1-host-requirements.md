@@ -114,9 +114,8 @@ Host requirements:
 
 ### Identity Disclosure Consent
 
-Because MetaApps are untrusted content, a
-Browser host MUST NOT disclose the connected identity (MetaID, display name,
-avatar) to a MetaApp without an explicit, per-resource user approval. This
+Because MetaApps are untrusted content, a Browser host MUST NOT disclose the connected identity
+(MetaID, display name, avatar) to a MetaApp without an explicit, per-resource user approval. This
 applies to both the `browser.actor.current` response and `browser.actor.changed`
 events. When the user has not approved, the host answers `browser.actor.current`
 with a `{ code: 'consent_denied' }` bridge error and suppresses
@@ -259,6 +258,7 @@ Hosts should preserve stable bridge-level error codes whenever possible:
 - `manual_action_required`
 - `user_cancelled`
 - `consent_denied`
+- `consent_pending`
 - `upload_failed`
 - `pin_write_failed`
 
