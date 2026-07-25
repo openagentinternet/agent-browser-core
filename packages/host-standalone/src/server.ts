@@ -58,6 +58,32 @@ function isBrowserPage(pathname: string): boolean {
 }
 
 const PREVIEW_ASSET_PREFIX = '/api/browser/preview-assets/';
+const LOOPBACK_HOST_PATTERN = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::\d+)?$/i;
+
+function firstHeaderValue(value: string | string[] | undefined): string {
+  return (Array.isArray(value) ? value[0] : value ?? '').trim();
+}
+
+// The standalone API is unauthenticated by design (loopback dev server). Block
+// blind cross-site triggers from sandboxed MetaApps and arbitrary websites:
+// the Host header must be a loopback literal (anti DNS-rebinding) and
+// Sec-Fetch-Site, when present, must be same-origin or none. Non-browser
+// clients (curl, node fetch, MetaBot skills) send no fetch metadata and stay
+// allowed. Preview assets are exempt: the opaque-origin MetaApp iframe loads
+// its own assets with Sec-Fetch-Site: cross-site. Binding the server to a
+// non-loopback host (e.g. --host 0.0.0.0) makes the API unreachable by
+// design, since only loopback Host literals are trusted.
+function isTrustedLoopbackRequest(req: http.IncomingMessage): boolean {
+  if (!LOOPBACK_HOST_PATTERN.test(firstHeaderValue(req.headers.host))) {
+    return false;
+  }
+  const secFetchSite = firstHeaderValue(req.headers['sec-fetch-site']).toLowerCase();
+  if (secFetchSite && secFetchSite !== 'same-origin' && secFetchSite !== 'none') {
+    return false;
+  }
+  return true;
+}
+
 const STATIC_ASSET_PREFIX = '/assets/';
 const FALLBACK_SHARED_CSS = '/* MetaBot UI shared development styles */\n';
 
@@ -118,6 +144,12 @@ export function createStandaloneBrowserServer(input: CreateStandaloneBrowserServ
       if (url.pathname === '/healthz') {
         sendJson(res, 200, { ok: true });
         return;
+      }
+      if (url.pathname.startsWith('/api/') && !url.pathname.startsWith(PREVIEW_ASSET_PREFIX)) {
+        if (!isTrustedLoopbackRequest(req)) {
+          sendJson(res, 403, browserFailure('forbidden', 'Request rejected by the standalone loopback request guard.'));
+          return;
+        }
       }
       if (isBrowserPage(url.pathname)) {
         if ((req.method ?? 'GET') !== 'GET') {

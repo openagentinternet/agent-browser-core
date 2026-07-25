@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import {
   applyBrowserSettingsUpdate,
   createBrowserSettingsSnapshot,
@@ -373,7 +374,6 @@ export function createStandaloneBrowserHostAdapter(
   const now = input.now ?? Date.now;
   let config = createStandaloneConfig();
   let cacheClearedAt: number | null = null;
-  let previewCounter = 0;
   const previewSessions = new Map<string, PreviewSession>();
   const artifactCache = createStandaloneMetaAppArtifactCacheStore({
     cacheRoot: input.cacheRoot ?? resolveStandaloneMetaAppCacheRoot({ env }),
@@ -387,8 +387,7 @@ export function createStandaloneBrowserHostAdapter(
     source: 'cache' | 'local';
     cacheKey?: string;
   }): { previewId: string; localPreviewUrl: string } {
-    previewCounter += 1;
-    const previewId = `standalone-${now().toString(36)}-${previewCounter.toString(36)}`;
+    const previewId = `standalone-${randomUUID()}`;
     previewSessions.set(previewId, {
       artifactDir: input.artifactDir,
       indexFile: input.indexFile,

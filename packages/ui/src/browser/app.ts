@@ -174,6 +174,8 @@ var state = {
   pendingPrivateChat: null,
   pendingConversationHref: '',
   pendingServiceCall: null,
+  actorConsent: {},
+  pendingActorConsent: null,
   pendingBookmarkRemoval: '',
   bookmarks: [],
   visits: [],
@@ -324,7 +326,13 @@ function getActiveTab() {
 // Create + activate a new tab. If uri is provided, navigate the new tab to it;
 // otherwise show the welcome page. Returns the new tab id.
 function openTab(uri) {
+  var previousTabId = state.activeTabId;
   var tab = createTab();
+  if (tab.id !== previousTabId) {
+    // Opening a tab moves the active resource context away from the tab whose
+    // resource a pending identity consent prompt names.
+    flushPendingActorConsent('invalidate');
+  }
   state.activeTabId = tab.id;
   applyActiveTabState();
   renderTabs();
@@ -348,6 +356,11 @@ function closeTab(id) {
   }
   if (idx === -1) return;
   var wasActive = state.tabs[idx].id === state.activeTabId;
+  if (wasActive) {
+    // Closing the active tab changes the active resource context: deny a
+    // pending identity consent prompt (it names the closing tab's resource).
+    flushPendingActorConsent('invalidate');
+  }
   state.tabs.splice(idx, 1);
   removeTabPane(id);
   if (!state.tabs.length) {
@@ -393,6 +406,11 @@ function switchTab(id) {
     if (state.tabs[i].id === id) { tab = state.tabs[i]; break; }
   }
   if (!tab) return;
+  if (tab.id !== state.activeTabId) {
+    // The active resource context changes with the tab: a pending identity
+    // consent prompt (which names the previous tab's resource) is denied.
+    flushPendingActorConsent('invalidate');
+  }
   state.activeTabId = tab.id;
   applyActiveTabState();
   renderTabs();
@@ -615,8 +633,24 @@ function isBrowserInternalHref(value) {
 }
 
 function currentBrowserHtmlFrameWindow() {
-  var frame = elements.viewport && elements.viewport.querySelector
-    ? elements.viewport.querySelector('iframe.browser-html-frame')
+  // Resolve the frame inside the ACTIVE tab's pane only. Hidden tab panes keep
+  // running their (untrusted) apps, so a viewport-wide lookup could attribute a
+  // background tab's app to the active tab's resource — and to the active
+  // tab's identity consent.
+  var viewport = elements.viewport;
+  var tab = activeTab();
+  if (!viewport || !tab) return null;
+  var wanted = String(tab.id);
+  var pane = null;
+  var child = viewport.firstElementChild;
+  while (child) {
+    if (typeof child.getAttribute === 'function' && child.getAttribute('data-tab-pane') === wanted) {
+      pane = child;
+    }
+    child = child.nextElementSibling;
+  }
+  var frame = pane && typeof pane.querySelector === 'function'
+    ? pane.querySelector('iframe.browser-html-frame')
     : null;
   return frame && frame.contentWindow ? frame.contentWindow : null;
 }
@@ -674,6 +708,84 @@ function sanitizedActorSnapshot(actor) {
   var avatarPinId = extractPinId(textValue(data && data.avatarPinId));
   if (avatarPinId) snapshot.avatarPinId = avatarPinId;
   return snapshot;
+}
+
+// Identity consent: browser.actor.current and browser.actor.changed disclose
+// the connected identity (MetaID + display name) to the rendered MetaApp.
+// MetaApps are untrusted content, so disclosure requires an explicit
+// per-resource user approval. Decisions are kept in memory only and reset on
+// page reload; both 'allow' and 'deny' are remembered for the page session, so
+// a dismissed prompt is not re-shown for the same resource.
+function actorConsentKey() {
+  return currentResourceUri();
+}
+
+function respondActorCurrent(sourceWindow, id) {
+  bridgePostMessage(sourceWindow, bridgeResponse(id, true, { actor: sanitizedActorSnapshot(selectedActor()) }));
+}
+
+function denyActorConsent(pendingConsent) {
+  bridgePostMessage(pendingConsent.sourceWindow, bridgeResponse(pendingConsent.id, false, {
+    code: 'consent_denied',
+    message: 'The user denied identity access for this MetaApp.'
+  }));
+}
+
+// Flush (deny) a pending identity consent when it can no longer be answered.
+// The response is the same in both modes; they differ in whether the denial
+// is remembered for the resource:
+// - 'dismiss' (explicit user dismissal through the modal close path): the
+//   denial IS remembered, so the app cannot prompt-bomb by re-asking.
+// - 'invalidate' (navigation, tab switch/close, new tab, welcome page): the
+//   browsing context the prompt named went away without a user decision, so
+//   the pending request is denied but the denial is NOT remembered — the app
+//   may ask again when its tab is reactivated.
+function flushPendingActorConsent(mode) {
+  if (!state.pendingActorConsent) return;
+  var pendingConsent = state.pendingActorConsent;
+  state.pendingActorConsent = null;
+  if (mode === 'dismiss') {
+    state.actorConsent[pendingConsent.key] = 'deny';
+  }
+  denyActorConsent(pendingConsent);
+  if (elements.modalRoot) {
+    elements.modalRoot.hidden = true;
+    elements.modalRoot.innerHTML = '';
+  }
+}
+
+function handleBridgeActorCurrent(sourceWindow, id) {
+  var snapshot = sanitizedActorSnapshot(selectedActor());
+  if (!snapshot) {
+    // No connected identity: nothing sensitive to disclose.
+    bridgePostMessage(sourceWindow, bridgeResponse(id, true, { actor: null }));
+    return;
+  }
+  var key = actorConsentKey();
+  if (!key) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: 'invalid_request',
+      message: 'Identity consent requires an active Browser resource.'
+    }));
+    return;
+  }
+  if (state.actorConsent[key] === 'allow') {
+    respondActorCurrent(sourceWindow, id);
+    return;
+  }
+  if (state.actorConsent[key] === 'deny') {
+    denyActorConsent({ sourceWindow: sourceWindow, id: id });
+    return;
+  }
+  if (state.pendingActorConsent) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: 'consent_pending',
+      message: 'An identity consent prompt is already open.'
+    }));
+    return;
+  }
+  state.pendingActorConsent = { sourceWindow: sourceWindow, id: id, key: key };
+  openActorConsentModal(key, snapshot);
 }
 
 function isPlainObject(value) {
@@ -937,7 +1049,7 @@ function handleBrowserBridgeMessage(event) {
   var id = textValue(data.id);
   if (!id) return;
   if (textValue(data.method) === 'browser.actor.current') {
-    bridgePostMessage(sourceWindow, bridgeResponse(id, true, { actor: sanitizedActorSnapshot(selectedActor()) }));
+    handleBridgeActorCurrent(sourceWindow, id);
     return;
   }
   if (textValue(data.method) === 'browser.privateChat.compose') {
@@ -1264,6 +1376,9 @@ function setStatus(nextStatus, message) {
 }
 
 function showLoadingState() {
+  // Navigation replaces this tab's resource: a pending identity consent prompt
+  // (which names the old resource) must not survive it.
+  flushPendingActorConsent('invalidate');
   var tab = activeTab();
   if (tab) tab.loading = true;
   // Ensure the active pane exists and clear it (a new navigation replaces the
@@ -2244,6 +2359,9 @@ function buildWelcomeShortcutTiles() {
 }
 
 function renderWelcome() {
+  // The welcome page has no resource: a pending identity consent prompt (which
+  // names the previous resource) is invalidated — e.g. via resolveUri('').
+  flushPendingActorConsent('invalidate');
   setStatus('ready', '');
   var welcomeTab = activeTab();
   if (welcomeTab) { welcomeTab.current = null; welcomeTab.status = 'ready'; welcomeTab.error = null; applyActiveTabState(); }
@@ -3383,6 +3501,7 @@ function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
 }
 
 function closeModal() {
+  flushPendingActorConsent('dismiss');
   state.pendingPrivateChat = null;
   state.pendingConversationHref = '';
   state.pendingServiceCall = null;
@@ -3628,7 +3747,9 @@ async function selectUsingIdentity(slug) {
   state.runtime.defaultActor = selected;
   state.runtime.defaultUri = actorDefaultUri(selected) || null;
   renderUsingIdentity();
-  emitBridgeEvent('browser.actor.changed', { actor: sanitizedActorSnapshot(selectedActor()) });
+  if (state.actorConsent[actorConsentKey()] === 'allow') {
+    emitBridgeEvent('browser.actor.changed', { actor: sanitizedActorSnapshot(selectedActor()) });
+  }
   closeModal();
   // Switching the active actor only updates the Using chip and the recorded
   // selection. It must NOT navigate or touch the address bar — the selected
@@ -3734,6 +3855,26 @@ function openStandaloneUnsupportedModal() {
       '<a class="browser-modal-link" href="' + escapeHtml(installGuideHref) + '" target="_blank" rel="noopener">' + escapeHtml(browserText('standaloneUnsupported.installGuideLink', 'Go to openagentinternet.org')) + '</a>.</p>',
     browserText('modal.ok', 'OK'),
     'standalone-unsupported'
+  );
+}
+
+function openActorConsentModal(resourceUri, snapshot) {
+  var identityId = textValue(snapshot && snapshot.globalMetaId);
+  var identityLabel = textValue(snapshot && snapshot.name) || identityId;
+  if (identityId && identityLabel !== identityId) identityLabel += ' (' + identityId + ')';
+  renderModal(
+    browserText('actorConsent.title', 'Identity request'),
+    '<p>' + escapeHtml(browserText('actorConsent.body', 'This MetaApp requests access to your connected identity.')) + '</p>' +
+      '<dl>' +
+      '<dt>' + escapeHtml(browserText('actorConsent.app', 'MetaApp')) + '</dt><dd>' + escapeHtml(resourceUri || '') + '</dd>' +
+      '<dt>' + escapeHtml(browserText('actorConsent.identity', 'Identity')) + '</dt><dd>' + escapeHtml(identityLabel) + '</dd>' +
+      '<dt>' + escapeHtml(browserText('actorConsent.shared', 'Shared')) + '</dt><dd>' + escapeHtml(browserText('actorConsent.sharedDetail', 'MetaID and display name')) + '</dd>' +
+      '</dl>',
+    browserText('actorConsent.allow', 'Allow'),
+    'actor-consent-allow',
+    {
+      cancelLabel: browserText('actorConsent.deny', 'Deny')
+    }
   );
 }
 
@@ -5141,7 +5282,7 @@ function renderRenderer(current) {
     return '<iframe class="browser-html-frame" sandbox="allow-scripts" src="' + escapeHtml(url) + '"></iframe>';
   }
   if (type === 'pdf') {
-    return '<section class="browser-pdf-wrap"><iframe class="browser-pdf" src="' + escapeHtml(url) + '"></iframe><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Open PDF</a></section>';
+    return '<section class="browser-pdf-wrap"><iframe class="browser-pdf" sandbox="" src="' + escapeHtml(url) + '"></iframe><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Open PDF</a></section>';
   }
   if (type === 'image') {
     return '<img class="browser-image" src="' + escapeHtml(url) + '" alt="" />';
@@ -5477,6 +5618,16 @@ async function initialize() {
         if (removalUri) {
           removeBookmark(removalUri);
           showToast(browserText('bookmark.removed', 'Bookmark removed'));
+        }
+        closeModal();
+        return;
+      }
+      if (action === 'actor-consent-allow') {
+        var grantedConsent = state.pendingActorConsent;
+        state.pendingActorConsent = null;
+        if (grantedConsent) {
+          state.actorConsent[grantedConsent.key] = 'allow';
+          respondActorCurrent(grantedConsent.sourceWindow, grantedConsent.id);
         }
         closeModal();
         return;
