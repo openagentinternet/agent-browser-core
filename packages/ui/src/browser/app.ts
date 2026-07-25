@@ -179,6 +179,7 @@ var state = {
   settingsData: null,
   cacheData: null,
   pendingPrivateChat: null,
+  privateChatSending: false,
   pendingConversationHref: '',
   pendingServiceCall: null,
   actorConsent: {},
@@ -3677,6 +3678,7 @@ function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
 function closeModal() {
   flushPendingActorConsent('dismiss');
   state.pendingPrivateChat = null;
+  state.privateChatSending = false;
   state.pendingConversationHref = '';
   state.pendingServiceCall = null;
   if (elements.usingChip && typeof elements.usingChip.setAttribute === 'function') {
@@ -4150,21 +4152,82 @@ async function confirmPrivateChat(messageText) {
     setStatus('error', 'The Using Bot and the Target Bot cannot be the same Bot.');
     return null;
   }
-  var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      resourceUri: currentResourceUri(),
-      kind: 'private-chat',
-      payload: {
-        to: pending.to,
-        content: content
-      }
-    })
-  });
-  setStatus('sent', '');
-  showPrivateChatSentModal(result);
-  return result;
+  // Debounce: the on-chain send can be slow, so ignore repeat clicks while a
+  // send is already in flight. The Send button is also disabled (see
+  // setPrivateChatSending) and a "sending..." hint is shown at the bottom.
+  if (state.privateChatSending) {
+    return null;
+  }
+  setPrivateChatSending(true);
+  try {
+    var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        resourceUri: currentResourceUri(),
+        kind: 'private-chat',
+        payload: {
+          to: pending.to,
+          content: content
+        }
+      })
+    });
+    setStatus('sent', '');
+    showPrivateChatSentModal(result);
+    return result;
+  } catch (err) {
+    setPrivateChatSending(false);
+    var failMessage = textValue(err && err.message) ||
+      browserText('privateChat.sendFailed', 'Failed to send the message. Please try again.');
+    setPrivateChatStatus('error', failMessage);
+    setStatus('error', failMessage);
+    return null;
+  }
+}
+
+// Toggles the private-chat Send button's busy state. While sending, the button
+// is disabled and relabeled, and an in-flight hint is shown at the bottom of
+// the modal so the user knows the on-chain transaction is still pending.
+function setPrivateChatSending(sending) {
+  state.privateChatSending = sending;
+  var root = elements.modalRoot;
+  var canQuery = root && typeof root.querySelector === 'function';
+  var confirmBtn = canQuery ? root.querySelector('[data-browser-modal-confirm]') : null;
+  if (sending) {
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.classList.add('is-busy');
+      confirmBtn.textContent = browserText('privateChat.sending', 'Sending...');
+    }
+    setPrivateChatStatus('sending',
+      browserText('privateChat.sendingHint', 'Sending message... please wait.'));
+  } else if (confirmBtn) {
+    confirmBtn.disabled = false;
+    confirmBtn.classList.remove('is-busy');
+    confirmBtn.textContent = 'Send';
+  }
+}
+
+// Renders (or updates) the status note at the bottom of the private-chat modal
+// body. The tone argument is 'sending' (muted, in-flight) or 'error' (danger, failure).
+function setPrivateChatStatus(tone, message) {
+  var root = elements.modalRoot;
+  if (!root || typeof root.querySelector !== 'function') return;
+  var body = root.querySelector('.browser-modal-body');
+  if (!body) return;
+  var note = body.querySelector('[data-browser-private-chat-status]');
+  if (!note && typeof document !== 'undefined' && document.createElement) {
+    note = document.createElement('p');
+    note.className = 'browser-private-chat-status';
+    note.setAttribute('data-browser-private-chat-status', '');
+    note.setAttribute('role', 'status');
+    note.setAttribute('aria-live', 'polite');
+    body.appendChild(note);
+  }
+  if (note) {
+    note.className = 'browser-private-chat-status is-' + tone;
+    note.textContent = message;
+  }
 }
 
 async function openPendingConversation() {
