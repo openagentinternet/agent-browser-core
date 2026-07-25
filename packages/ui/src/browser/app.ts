@@ -5141,7 +5141,7 @@ function renderRenderer(current) {
     return '<iframe class="browser-html-frame" sandbox="allow-scripts" src="' + escapeHtml(url) + '"></iframe>';
   }
   if (type === 'pdf') {
-    return '<section class="browser-pdf-wrap"><iframe class="browser-pdf" src="' + escapeHtml(url) + '"></iframe><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Open PDF</a></section>';
+    return '<section class="browser-pdf-wrap"><iframe class="browser-pdf" sandbox="" src="' + escapeHtml(url) + '"></iframe><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Open PDF</a></section>';
   }
   if (type === 'image') {
     return '<img class="browser-image" src="' + escapeHtml(url) + '" alt="" />';

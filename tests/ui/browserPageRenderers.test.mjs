@@ -2373,7 +2373,7 @@ test('pin-inspector markdown payload renders structured lists in the mature shel
 test('pdf, image, and video render with content-specific elements', async () => {
   const pdf = runWithResolve(result({ type: 'pdf', contentType: 'application/pdf', url: 'https://files.example/a.pdf' }));
   await waitFor(() => pdf.nodes['[data-browser-viewport]'].innerHTML.includes('browser-pdf'), 'pdf render');
-  assert.match(pdf.nodes['[data-browser-viewport]'].innerHTML, /<iframe class="browser-pdf" src="https:\/\/files\.example\/a\.pdf"/);
+  assert.match(pdf.nodes['[data-browser-viewport]'].innerHTML, /<iframe class="browser-pdf" sandbox="" src="https:\/\/files\.example\/a\.pdf"/);
 
   const image = runWithResolve(result({ type: 'image', contentType: 'image/png', url: 'https://files.example/a.png' }));
   await waitFor(() => image.nodes['[data-browser-viewport]'].innerHTML.includes('browser-image'), 'image render');
