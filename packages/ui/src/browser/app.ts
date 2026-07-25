@@ -350,6 +350,11 @@ function closeTab(id) {
   }
   if (idx === -1) return;
   var wasActive = state.tabs[idx].id === state.activeTabId;
+  if (wasActive) {
+    // Closing the active tab changes the active resource context: deny a
+    // pending identity consent prompt (it names the closing tab's resource).
+    flushPendingActorConsent();
+  }
   state.tabs.splice(idx, 1);
   removeTabPane(id);
   if (!state.tabs.length) {
@@ -395,6 +400,11 @@ function switchTab(id) {
     if (state.tabs[i].id === id) { tab = state.tabs[i]; break; }
   }
   if (!tab) return;
+  if (tab.id !== state.activeTabId) {
+    // The active resource context changes with the tab: a pending identity
+    // consent prompt (which names the previous tab's resource) is denied.
+    flushPendingActorConsent();
+  }
   state.activeTabId = tab.id;
   applyActiveTabState();
   renderTabs();
@@ -617,8 +627,24 @@ function isBrowserInternalHref(value) {
 }
 
 function currentBrowserHtmlFrameWindow() {
-  var frame = elements.viewport && elements.viewport.querySelector
-    ? elements.viewport.querySelector('iframe.browser-html-frame')
+  // Resolve the frame inside the ACTIVE tab's pane only. Hidden tab panes keep
+  // running their (untrusted) apps, so a viewport-wide lookup could attribute a
+  // background tab's app to the active tab's resource — and to the active
+  // tab's identity consent.
+  var viewport = elements.viewport;
+  var tab = activeTab();
+  if (!viewport || !tab) return null;
+  var wanted = String(tab.id);
+  var pane = null;
+  var child = viewport.firstElementChild;
+  while (child) {
+    if (typeof child.getAttribute === 'function' && child.getAttribute('data-tab-pane') === wanted) {
+      pane = child;
+    }
+    child = child.nextElementSibling;
+  }
+  var frame = pane && typeof pane.querySelector === 'function'
+    ? pane.querySelector('iframe.browser-html-frame')
     : null;
   return frame && frame.contentWindow ? frame.contentWindow : null;
 }
@@ -682,7 +708,8 @@ function sanitizedActorSnapshot(actor) {
 // the connected identity (MetaID + display name) to the rendered MetaApp.
 // MetaApps are untrusted content, so disclosure requires an explicit
 // per-resource user approval. Decisions are kept in memory only and reset on
-// page reload; only 'allow' is remembered, dismissal is a one-off denial.
+// page reload; both 'allow' and 'deny' are remembered for the page session, so
+// a dismissed prompt is not re-shown for the same resource.
 function actorConsentKey() {
   return currentResourceUri();
 }
@@ -698,6 +725,22 @@ function denyActorConsent(pendingConsent) {
   }));
 }
 
+// Flush (deny) a pending identity consent when the browsing context changes —
+// navigation, tab switch, or any modal dismissal. The prompt names a specific
+// resource, so it must not outlive it. The denial is remembered for the
+// resource, so the app cannot prompt-bomb by re-asking.
+function flushPendingActorConsent() {
+  if (!state.pendingActorConsent) return;
+  var pendingConsent = state.pendingActorConsent;
+  state.pendingActorConsent = null;
+  state.actorConsent[pendingConsent.key] = 'deny';
+  denyActorConsent(pendingConsent);
+  if (elements.modalRoot) {
+    elements.modalRoot.hidden = true;
+    elements.modalRoot.innerHTML = '';
+  }
+}
+
 function handleBridgeActorCurrent(sourceWindow, id) {
   var snapshot = sanitizedActorSnapshot(selectedActor());
   if (!snapshot) {
@@ -706,8 +749,19 @@ function handleBridgeActorCurrent(sourceWindow, id) {
     return;
   }
   var key = actorConsentKey();
+  if (!key) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: 'invalid_request',
+      message: 'Identity consent requires an active Browser resource.'
+    }));
+    return;
+  }
   if (state.actorConsent[key] === 'allow') {
     respondActorCurrent(sourceWindow, id);
+    return;
+  }
+  if (state.actorConsent[key] === 'deny') {
+    denyActorConsent({ sourceWindow: sourceWindow, id: id });
     return;
   }
   if (state.pendingActorConsent) {
@@ -718,7 +772,7 @@ function handleBridgeActorCurrent(sourceWindow, id) {
     return;
   }
   state.pendingActorConsent = { sourceWindow: sourceWindow, id: id, key: key };
-  openActorConsentModal(key);
+  openActorConsentModal(key, snapshot);
 }
 
 function isPlainObject(value) {
@@ -1309,6 +1363,9 @@ function setStatus(nextStatus, message) {
 }
 
 function showLoadingState() {
+  // Navigation replaces this tab's resource: a pending identity consent prompt
+  // (which names the old resource) must not survive it.
+  flushPendingActorConsent();
   var tab = activeTab();
   if (tab) tab.loading = true;
   // Ensure the active pane exists and clear it (a new navigation replaces the
@@ -3428,11 +3485,7 @@ function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
 }
 
 function closeModal() {
-  if (state.pendingActorConsent) {
-    var pendingConsent = state.pendingActorConsent;
-    state.pendingActorConsent = null;
-    denyActorConsent(pendingConsent);
-  }
+  flushPendingActorConsent();
   state.pendingPrivateChat = null;
   state.pendingConversationHref = '';
   state.pendingServiceCall = null;
@@ -3789,12 +3842,16 @@ function openStandaloneUnsupportedModal() {
   );
 }
 
-function openActorConsentModal(resourceUri) {
+function openActorConsentModal(resourceUri, snapshot) {
+  var identityId = textValue(snapshot && snapshot.globalMetaId);
+  var identityLabel = textValue(snapshot && snapshot.name) || identityId;
+  if (identityId && identityLabel !== identityId) identityLabel += ' (' + identityId + ')';
   renderModal(
     browserText('actorConsent.title', 'Identity request'),
     '<p>' + escapeHtml(browserText('actorConsent.body', 'This MetaApp requests access to your connected identity.')) + '</p>' +
       '<dl>' +
       '<dt>' + escapeHtml(browserText('actorConsent.app', 'MetaApp')) + '</dt><dd>' + escapeHtml(resourceUri || '') + '</dd>' +
+      '<dt>' + escapeHtml(browserText('actorConsent.identity', 'Identity')) + '</dt><dd>' + escapeHtml(identityLabel) + '</dd>' +
       '<dt>' + escapeHtml(browserText('actorConsent.shared', 'Shared')) + '</dt><dd>' + escapeHtml(browserText('actorConsent.sharedDetail', 'MetaID and display name')) + '</dd>' +
       '</dl>',
     browserText('actorConsent.allow', 'Allow'),

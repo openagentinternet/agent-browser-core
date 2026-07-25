@@ -84,6 +84,19 @@ function browserActionTarget(attrs) {
   };
 }
 
+function tabPane(nodes, tabId = 1) {
+  const viewport = nodes['[data-browser-viewport]'];
+  return viewport.children.find(
+    (child) => typeof child.getAttribute === 'function' && child.getAttribute('data-tab-pane') === String(tabId),
+  ) || null;
+}
+
+function setTabFrameWindow(nodes, frameWindow, tabId = 1) {
+  const pane = tabPane(nodes, tabId);
+  assert.ok(pane, `expected tab pane ${tabId} to exist`);
+  pane.setChild('iframe.browser-html-frame', { contentWindow: frameWindow });
+}
+
 function waitFor(condition, label) {
   return new Promise((resolve, reject) => {
     const startedAt = Date.now();
@@ -1119,7 +1132,7 @@ test('html-iframe navigation bridge accepts only active iframe internal URI mess
   }));
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   const listener = windowListeners.get('message');
   assert.equal(typeof listener, 'function');
@@ -1192,7 +1205,7 @@ test('html-iframe bridge responds with sanitized current actor', async () => {
   });
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   const listener = windowListeners.get('message');
   listener({
@@ -1280,7 +1293,7 @@ test('html-iframe bridge denies the actor snapshot when the user dismisses the c
   });
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   const listener = windowListeners.get('message');
   listener({
@@ -1312,7 +1325,8 @@ test('html-iframe bridge denies the actor snapshot when the user dismisses the c
     },
   });
 
-  // Denial is not persisted: asking again re-opens the consent modal.
+  // Denial is remembered for the page session: asking again is denied
+  // immediately without re-opening the consent modal.
   listener({
     source: activeFrameWindow,
     data: {
@@ -1323,8 +1337,18 @@ test('html-iframe bridge denies the actor snapshot when the user dismisses the c
       params: {},
     },
   });
-  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
-  assert.equal(activeFrameWindow.postMessageCalls.length, 1);
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[1])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'actor-deny-2',
+    ok: false,
+    error: {
+      code: 'consent_denied',
+      message: 'The user denied identity access for this MetaApp.',
+    },
+  });
+  assert.equal(activeFrameWindow.postMessageCalls.length, 2);
 });
 
 test('html-iframe bridge opens the Browser private-chat composer for the current Bot owner', async () => {
@@ -1372,7 +1396,7 @@ test('html-iframe bridge opens the Browser private-chat composer for the current
   });
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   const listener = windowListeners.get('message');
   listener({
@@ -1441,7 +1465,7 @@ test('html-iframe bridge validates and opens a Browser-confirmed simplemsg compo
   });
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   const listener = windowListeners.get('message');
   listener({
@@ -1543,7 +1567,7 @@ test('html-iframe bridge ignores actor requests from inactive frames', async () 
   });
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   const listener = windowListeners.get('message');
   listener({
@@ -1584,7 +1608,7 @@ test('html-iframe bridge emits actor changed events after actor selection', asyn
   });
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   const listener = windowListeners.get('message');
   listener({
@@ -1643,11 +1667,272 @@ test('html-iframe bridge does not emit actor changed events without identity con
   });
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   await context.selectUsingIdentity('second-actor');
 
   assert.deepEqual(activeFrameWindow.postMessageCalls, []);
+});
+
+test('html-iframe bridge attributes identity requests to the active tab only', async () => {
+  const firstFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const secondFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const payload = result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  });
+  const { context, nodes, windowListeners } = runWithResolve(payload, {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  setTabFrameWindow(nodes, firstFrameWindow, 1);
+
+  // Open a second tab rendering another MetaApp; tab 2 becomes the active tab
+  // while tab 1's pane (and its running app) stays in the DOM, hidden.
+  payload.uri = 'metaapp://second';
+  payload.normalizedUri = 'metaapp://second';
+  context.AgentBrowserTabs.openTab();
+  await context.navigateTo('metaapp://second');
+  assert.ok(tabPane(nodes, 2).innerHTML.includes('browser-html-frame'), 'tab 2 iframe render');
+  setTabFrameWindow(nodes, secondFrameWindow, 2);
+
+  const listener = windowListeners.get('message');
+  // The hidden tab's app asks: it must be ignored (no response, no modal).
+  listener({
+    source: firstFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'hidden-tab-1',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  assert.deepEqual(firstFrameWindow.postMessageCalls, []);
+  assert.doesNotMatch(nodes['[data-browser-modal-root]'].innerHTML, /Identity request/);
+
+  // The active tab's app asks: the consent modal opens, naming tab 2's resource.
+  listener({
+    source: secondFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'active-tab-1',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Identity request/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /metaapp:\/\/second/);
+});
+
+test('html-iframe bridge rejects concurrent actor requests while a consent prompt is open', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const { nodes, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  setTabFrameWindow(nodes, activeFrameWindow);
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'pending-1',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+
+  // A second request while the prompt is open fails fast with consent_pending.
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'pending-2',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'pending-2',
+    ok: false,
+    error: {
+      code: 'consent_pending',
+      message: 'An identity consent prompt is already open.',
+    },
+  });
+  assert.equal(activeFrameWindow.postMessageCalls.length, 1);
+
+  // Allowing the prompt answers only the first request.
+  nodes['[data-browser-modal-root]'].listeners.get('click')({
+    preventDefault() {},
+    target: browserActionTarget({ 'data-browser-modal-action': 'actor-consent-allow' }),
+  });
+  assert.equal(activeFrameWindow.postMessageCalls.length, 2);
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[1])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'pending-1',
+    ok: true,
+    result: {
+      actor: {
+        uri: 'metaid://idq1actor',
+        globalMetaId: 'idq1actor',
+        name: 'Bob',
+      },
+    },
+  });
+});
+
+test('html-iframe bridge requires identity consent per resource', async () => {
+  const firstFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const secondFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const payload = result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  });
+  const { context, nodes, windowListeners } = runWithResolve(payload, {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  setTabFrameWindow(nodes, firstFrameWindow);
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: firstFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'resource-a',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  nodes['[data-browser-modal-root]'].listeners.get('click')({
+    preventDefault() {},
+    target: browserActionTarget({ 'data-browser-modal-action': 'actor-consent-allow' }),
+  });
+  assert.equal(firstFrameWindow.postMessageCalls.length, 1);
+
+  // Navigate the same tab to a second MetaApp: consent granted for resource A
+  // must not cover resource B — the modal opens again for the new resource.
+  payload.uri = 'metaapp://second-resource';
+  payload.normalizedUri = 'metaapp://second-resource';
+  await context.navigateTo('metaapp://second-resource');
+  assert.ok(tabPane(nodes, 1).innerHTML.includes('browser-html-frame'), 'second resource iframe render');
+  setTabFrameWindow(nodes, secondFrameWindow);
+
+  listener({
+    source: secondFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'resource-b',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  assert.deepEqual(secondFrameWindow.postMessageCalls, []);
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /metaapp:\/\/second-resource/);
+});
+
+test('html-iframe bridge answers null actor without consent when no identity is connected', async () => {
+  const activeFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const { nodes, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Bob', kind: 'wallet', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Bob', kind: 'wallet', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  setTabFrameWindow(nodes, activeFrameWindow);
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: activeFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'no-identity-1',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+
+  assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'no-identity-1',
+    ok: true,
+    result: { actor: null },
+  });
+  assert.doesNotMatch(nodes['[data-browser-modal-root]'].innerHTML, /Identity request/);
 });
 
 test('html-iframe bridge forwards MetaID PIN write requests to host actions', async () => {
@@ -1686,7 +1971,7 @@ test('html-iframe bridge forwards MetaID PIN write requests to host actions', as
   });
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   const listener = windowListeners.get('message');
   listener({
@@ -1777,7 +2062,7 @@ test('html-iframe bridge forwards modify and revoke PIN writes with @pinId targe
     });
 
     await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), `${operation} iframe render`);
-    nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+    setTabFrameWindow(nodes, activeFrameWindow);
 
     const listener = windowListeners.get('message');
     listener({
@@ -1857,7 +2142,7 @@ test('html-iframe bridge rejects slash paths for modify and revoke PIN writes', 
   });
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   const listener = windowListeners.get('message');
   listener({
@@ -1914,7 +2199,7 @@ test('html-iframe bridge rejects mismatched originalId for targeted PIN writes',
   });
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   const listener = windowListeners.get('message');
   listener({
@@ -1971,7 +2256,7 @@ test('html-iframe bridge rejects invalid MetaID PIN write operations', async () 
   });
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   const listener = windowListeners.get('message');
   listener({
@@ -2026,7 +2311,7 @@ test('html-iframe bridge forwards MetaFile upload requests to the host endpoint'
   });
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
-  nodes['[data-browser-viewport]'].setChild('iframe.browser-html-frame', { contentWindow: activeFrameWindow });
+  setTabFrameWindow(nodes, activeFrameWindow);
 
   const listener = windowListeners.get('message');
   listener({
