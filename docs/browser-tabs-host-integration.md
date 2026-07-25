@@ -36,6 +36,22 @@ memory. The host does not need to (and cannot) manage tab state server-side.
 
 ---
 
+## Contract history
+
+Which package version of `@openagentinternet/agent-browser-ui` a host needs for
+each part of this contract:
+
+| Version    | Added                                                                                                          |
+| ---------- | -------------------------------------------------------------------------------------------------------------- |
+| `0.4.0`    | Multi-tab runtime: `AgentBrowserTabs.openTab/closeTab/switchTab/getTabs/getActiveTab`, and the fire-and-forget bridge messages `agent-browser:open-tab` / `close-tab` / `switch-tab`. |
+| `> 0.4.0` (unreleased; on branch `feat/tab-content-events`) | Read APIs `getTabContent` / `getTabInfo` (plus the correlated bridge pairs `agent-browser:get-content` / `get-tab-info`), and the `agent-browser:event` host event channel (`tab-opened`, `tab-closed`, `tab-activated`, `navigation-committed`, `title-updated`). |
+
+Sections below are annotated with the version that introduced them. Hosts
+pinned to `0.4.0` (e.g. the current IDBots embed) can use everything marked
+`0.4.0`; anything marked `> 0.4.0` requires the next package bump.
+
+---
+
 ## Mental model
 
 - The Browser is a single page that owns its own tab strip, address bar, and
@@ -53,6 +69,8 @@ memory. The host does not need to (and cannot) manage tab state server-side.
 ---
 
 ## API reference
+
+The five tab operations in this section are available since `0.4.0`.
 
 All operations are available in two equivalent forms:
 
@@ -161,6 +179,8 @@ if (active) console.log(active.uri, active.title);
 
 ## Content extraction & resolve envelope
 
+> Added in `> 0.4.0` (unreleased; branch `feat/tab-content-events`).
+
 Two read APIs let a host (or a host-side agent) inspect what a tab is showing.
 Both accept an optional `tabId` (numeric; omitted/`null` means the active tab)
 and return `null` when no tab matches.
@@ -242,7 +262,8 @@ fire-and-forget (no response is sent back):
 | `agent-browser:close-tab`    | `{ id }`       | `closeTab(Number(id))`                  |
 | `agent-browser:switch-tab`   | `{ id }`       | `switchTab(Number(id))`                 |
 
-The two read APIs use correlated request/response pairs. The Browser echoes the
+The two read APIs use correlated request/response pairs (added in `> 0.4.0`,
+unreleased; branch `feat/tab-content-events`). The Browser echoes the
 host-provided `requestId` and answers with `result` on success or `error` on
 failure (posted to `window.parent`):
 
@@ -282,6 +303,8 @@ a non-numeric `id` is a silent no-op; an unknown `tabId` answers with a
 `tab_not_found` error.
 
 ### Browser events pushed to the host
+
+> Added in `> 0.4.0` (unreleased; branch `feat/tab-content-events`).
 
 The Browser proactively posts lifecycle events to `window.parent` so the host
 can keep its own view fresh without polling. Delivery is fire-and-forget and
