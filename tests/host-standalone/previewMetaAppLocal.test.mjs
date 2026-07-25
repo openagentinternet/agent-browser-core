@@ -56,3 +56,20 @@ test('localhost preview of a non-existent path fails', async () => {
   assert.equal(result.ok, false);
   assert.match(result.message, /not found/i);
 });
+
+test('preview session ids are unique and unguessable', async () => {
+  await withTempDir(async (dir) => {
+    await writeFile(path.join(dir, 'index.html'), '<h1>hi</h1>');
+    const host = createStandaloneBrowserHostAdapter();
+    const first = await host.resolveResource({ uri: `preview-metaapp://localhost${dir}` });
+    const second = await host.resolveResource({ uri: `preview-metaapp://localhost${dir}` });
+    assert.equal(first.ok, true);
+    assert.equal(second.ok, true);
+    const extractId = (url) => url.match(/\/api\/browser\/preview-assets\/([^/]+)\//)[1];
+    const firstId = extractId(first.data.renderer.url);
+    const secondId = extractId(second.data.renderer.url);
+    assert.notEqual(firstId, secondId);
+    assert.match(firstId, /^standalone-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+    assert.match(secondId, /^standalone-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+});
