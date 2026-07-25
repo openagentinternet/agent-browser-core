@@ -1890,6 +1890,154 @@ test('html-iframe bridge requires identity consent per resource', async () => {
   assert.match(nodes['[data-browser-modal-root]'].innerHTML, /metaapp:\/\/second-resource/);
 });
 
+test('html-iframe bridge does not persist identity denial when navigation invalidates the prompt', async () => {
+  const firstFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const secondFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const payload = result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  });
+  const { context, nodes, windowListeners } = runWithResolve(payload, {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  setTabFrameWindow(nodes, firstFrameWindow);
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: firstFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'nav-prompt-1',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+
+  // Navigating away invalidates the prompt: the pending request is denied and
+  // the modal closed.
+  payload.uri = 'metaapp://elsewhere';
+  payload.normalizedUri = 'metaapp://elsewhere';
+  await context.navigateTo('metaapp://elsewhere');
+  assert.deepEqual(JSON.parse(JSON.stringify(firstFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'nav-prompt-1',
+    ok: false,
+    error: {
+      code: 'consent_denied',
+      message: 'The user denied identity access for this MetaApp.',
+    },
+  });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, true);
+
+  // The denial is NOT remembered: back on the original resource, a fresh
+  // request opens the consent modal again instead of being denied outright.
+  payload.uri = 'metaapp://pin';
+  payload.normalizedUri = 'metaapp://pin';
+  await context.navigateTo('metaapp://pin');
+  setTabFrameWindow(nodes, secondFrameWindow);
+  listener({
+    source: secondFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'nav-prompt-2',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  assert.deepEqual(secondFrameWindow.postMessageCalls, []);
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Identity request/);
+});
+
+test('html-iframe bridge does not persist identity denial when the tab context changes', async () => {
+  const appFrameWindow = {
+    postMessageCalls: [],
+    postMessage(message) { this.postMessageCalls.push(message); },
+  };
+  const { context, nodes, windowListeners } = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), {
+    runtime: {
+      host: { kind: 'standalone', name: 'Standalone', localMode: true },
+      actors: [{ id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] }],
+      defaultActor: { id: 'standalone:actor', label: 'Bob', kind: 'wallet', globalMetaId: 'idq1actor', isDefault: true, capabilities: [] },
+      defaultUri: null,
+      features: { privateChat: false, serviceCall: false, cacheManagement: true, templateSettings: true, walletLogin: false },
+      labels: { actorChip: 'Using', noActorTitle: 'No actor', noActorBody: 'No actor' },
+    },
+  });
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
+  setTabFrameWindow(nodes, appFrameWindow, 1);
+
+  const listener = windowListeners.get('message');
+  listener({
+    source: appFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'tab-prompt-1',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+
+  // Opening another tab invalidates the prompt: the pending request is denied
+  // and the modal closed.
+  context.AgentBrowserTabs.openTab();
+  assert.deepEqual(JSON.parse(JSON.stringify(appFrameWindow.postMessageCalls[0])), {
+    type: 'agent-browser:response',
+    version: 1,
+    id: 'tab-prompt-1',
+    ok: false,
+    error: {
+      code: 'consent_denied',
+      message: 'The user denied identity access for this MetaApp.',
+    },
+  });
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, true);
+
+  // Switching back to the app's tab and re-asking opens the modal again — the
+  // invalidation did not record a lasting denial.
+  context.AgentBrowserTabs.switchTab(1);
+  listener({
+    source: appFrameWindow,
+    data: {
+      type: 'agent-browser:request',
+      version: 1,
+      id: 'tab-prompt-2',
+      method: 'browser.actor.current',
+      params: {},
+    },
+  });
+  assert.equal(appFrameWindow.postMessageCalls.length, 1);
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Identity request/);
+});
+
 test('html-iframe bridge answers null actor without consent when no identity is connected', async () => {
   const activeFrameWindow = {
     postMessageCalls: [],

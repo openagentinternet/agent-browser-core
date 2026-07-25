@@ -326,7 +326,13 @@ function getActiveTab() {
 // Create + activate a new tab. If uri is provided, navigate the new tab to it;
 // otherwise show the welcome page. Returns the new tab id.
 function openTab(uri) {
+  var previousTabId = state.activeTabId;
   var tab = createTab();
+  if (tab.id !== previousTabId) {
+    // Opening a tab moves the active resource context away from the tab whose
+    // resource a pending identity consent prompt names.
+    flushPendingActorConsent('invalidate');
+  }
   state.activeTabId = tab.id;
   applyActiveTabState();
   renderTabs();
@@ -353,7 +359,7 @@ function closeTab(id) {
   if (wasActive) {
     // Closing the active tab changes the active resource context: deny a
     // pending identity consent prompt (it names the closing tab's resource).
-    flushPendingActorConsent();
+    flushPendingActorConsent('invalidate');
   }
   state.tabs.splice(idx, 1);
   removeTabPane(id);
@@ -403,7 +409,7 @@ function switchTab(id) {
   if (tab.id !== state.activeTabId) {
     // The active resource context changes with the tab: a pending identity
     // consent prompt (which names the previous tab's resource) is denied.
-    flushPendingActorConsent();
+    flushPendingActorConsent('invalidate');
   }
   state.activeTabId = tab.id;
   applyActiveTabState();
@@ -725,15 +731,22 @@ function denyActorConsent(pendingConsent) {
   }));
 }
 
-// Flush (deny) a pending identity consent when the browsing context changes —
-// navigation, tab switch, or any modal dismissal. The prompt names a specific
-// resource, so it must not outlive it. The denial is remembered for the
-// resource, so the app cannot prompt-bomb by re-asking.
-function flushPendingActorConsent() {
+// Flush (deny) a pending identity consent when it can no longer be answered.
+// The response is the same in both modes; they differ in whether the denial
+// is remembered for the resource:
+// - 'dismiss' (explicit user dismissal through the modal close path): the
+//   denial IS remembered, so the app cannot prompt-bomb by re-asking.
+// - 'invalidate' (navigation, tab switch/close, new tab, welcome page): the
+//   browsing context the prompt named went away without a user decision, so
+//   the pending request is denied but the denial is NOT remembered — the app
+//   may ask again when its tab is reactivated.
+function flushPendingActorConsent(mode) {
   if (!state.pendingActorConsent) return;
   var pendingConsent = state.pendingActorConsent;
   state.pendingActorConsent = null;
-  state.actorConsent[pendingConsent.key] = 'deny';
+  if (mode === 'dismiss') {
+    state.actorConsent[pendingConsent.key] = 'deny';
+  }
   denyActorConsent(pendingConsent);
   if (elements.modalRoot) {
     elements.modalRoot.hidden = true;
@@ -1365,7 +1378,7 @@ function setStatus(nextStatus, message) {
 function showLoadingState() {
   // Navigation replaces this tab's resource: a pending identity consent prompt
   // (which names the old resource) must not survive it.
-  flushPendingActorConsent();
+  flushPendingActorConsent('invalidate');
   var tab = activeTab();
   if (tab) tab.loading = true;
   // Ensure the active pane exists and clear it (a new navigation replaces the
@@ -2346,6 +2359,9 @@ function buildWelcomeShortcutTiles() {
 }
 
 function renderWelcome() {
+  // The welcome page has no resource: a pending identity consent prompt (which
+  // names the previous resource) is invalidated — e.g. via resolveUri('').
+  flushPendingActorConsent('invalidate');
   setStatus('ready', '');
   var welcomeTab = activeTab();
   if (welcomeTab) { welcomeTab.current = null; welcomeTab.status = 'ready'; welcomeTab.error = null; applyActiveTabState(); }
@@ -3485,7 +3501,7 @@ function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
 }
 
 function closeModal() {
-  flushPendingActorConsent();
+  flushPendingActorConsent('dismiss');
   state.pendingPrivateChat = null;
   state.pendingConversationHref = '';
   state.pendingServiceCall = null;
