@@ -112,6 +112,18 @@ Host requirements:
 - Treat the actor snapshot as display context only. The host must re-read the current actor at write
   or upload execution time.
 
+### Identity Disclosure Consent
+
+Because MetaApps are untrusted content, a
+Browser host MUST NOT disclose the connected identity (MetaID, display name,
+avatar) to a MetaApp without an explicit, per-resource user approval. This
+applies to both the `browser.actor.current` response and `browser.actor.changed`
+events. When the user has not approved, the host answers `browser.actor.current`
+with a `{ code: 'consent_denied' }` bridge error and suppresses
+`browser.actor.changed` events for that resource. Approvals may be held in
+memory only (reset on page reload); hosts MUST NOT persist a blanket
+"always allow for all MetaApps" grant.
+
 ## MetaID PIN Write Requirements
 
 MetaApps request a write with:
