@@ -138,6 +138,8 @@ function createBrowserContext(options) {
   options = options || {};
   const elements = createElements();
   const fetchCalls = [];
+  const hostMessages = [];
+  const parentWindow = { postMessage: (message) => { hostMessages.push(message); } };
   const runtimeResponse = options.runtimeResponse || runtimePayload();
   const resolveResponse = options.resolveResponse || ((uri) => resolvedBot(uri));
   const documentListeners = new Map();
@@ -147,6 +149,7 @@ function createBrowserContext(options) {
     window: {
       location: { pathname: options.pathname || '/ui/browser', search: options.search || '' },
       history: { replaceState() {} },
+      parent: parentWindow,
     },
     document: {
       readyState: 'complete', title: 'Agent Internet Browser',
@@ -177,7 +180,18 @@ function createBrowserContext(options) {
   };
   context.globalThis = context;
   vm.runInNewContext(buildBrowserPageDefinition().script, context);
-  return { context, elements, fetchCalls, documentListeners };
+  return { context, elements, fetchCalls, documentListeners, hostMessages, parentWindow };
+}
+
+// Find a tab's persistent content pane inside the fake viewport.
+function findTabPaneElement(elements, tabId) {
+  const viewport = elements['[data-browser-viewport]'];
+  return viewport.children.find((child) => child.getAttribute('data-tab-pane') === String(tabId)) || null;
+}
+
+// Extract the host-bound events (agent-browser:event) captured by the parent stub.
+function hostEvents(hostMessages) {
+  return hostMessages.filter((message) => message && message.type === 'agent-browser:event');
 }
 
 test('single tab navigation resolves and sets state.current on the active tab', async () => {
@@ -326,4 +340,190 @@ test('switching to an error-state tab restores its error view instead of Welcome
     'error tab should keep showing its error view after switching back');
   assert.equal(elements['[data-browser-viewport]'].innerHTML.includes('data-browser-welcome'), false,
     'error tab must not fall through to Welcome');
+});
+
+// --- R1: tab content extraction --------------------------------------------
+
+test('getTabContent extracts text and metadata from the active tab pane', async () => {
+  const { context, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1alice', 'tab current set');
+  const content = context.AgentBrowserTabs.getTabContent();
+  assert.equal(content.tabId, context.AgentBrowserTabs.getActiveTab().id);
+  assert.equal(content.uri, 'metaid://idq1alice');
+  assert.equal(content.title, 'Alice Bot');
+  assert.equal(content.contentType, 'application/vnd.oac.bot-homepage+json');
+  assert.match(content.text, /Alice Bot/);
+  assert.match(content.html, /Alice Bot/);
+  assert.equal(content.truncated, false);
+  assert.equal(typeof content.extractedAt, 'number');
+  // Same result when addressed by explicit id; null for an unknown id.
+  assert.equal(context.AgentBrowserTabs.getTabContent(content.tabId).uri, 'metaid://idq1alice');
+  assert.equal(context.AgentBrowserTabs.getTabContent(9999), null);
+});
+
+test('getTabContent reads a background (hidden) tab pane without switching', async () => {
+  const { context, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+    resolveResponse: (uri) => resolvedBot(uri, uri.includes('bob') ? 'Bob Bot' : 'Alice Bot'),
+  });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const aliceTabId = context.AgentBrowserTabs.getActiveTab().id;
+  context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'bob resolve');
+  await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1bob', 'bob current set');
+  // Alice's tab is now hidden in the background; its pane content must still read.
+  const content = context.AgentBrowserTabs.getTabContent(aliceTabId);
+  assert.equal(content.tabId, aliceTabId);
+  assert.equal(content.uri, 'metaid://idq1alice');
+  assert.match(content.text, /Alice Bot/);
+  assert.equal(context.AgentBrowserTabs.getActiveTab().uri, 'metaid://idq1bob', 'active tab untouched');
+});
+
+test('getTabContent truncates oversized pane text and flags it', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const tabId = context.AgentBrowserTabs.getActiveTab().id;
+  const pane = findTabPaneElement(elements, tabId);
+  assert.ok(pane, 'pane exists for the active tab');
+  pane.innerHTML = `start ${'x'.repeat(60000)} end`;
+  const content = context.AgentBrowserTabs.getTabContent(tabId);
+  assert.equal(content.truncated, true);
+  assert.equal(content.text.length, 50000);
+  assert.match(content.text, /^start x+/);
+});
+
+test('getTabInfo returns a cloned resolve envelope that cannot mutate state', async () => {
+  const { context, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1alice', 'tab current set');
+  const info = context.AgentBrowserTabs.getTabInfo();
+  assert.equal(info.id, context.AgentBrowserTabs.getActiveTab().id);
+  assert.equal(info.isActive, true);
+  assert.equal(info.uri, 'metaid://idq1alice');
+  assert.equal(info.current.uri, 'metaid://idq1alice');
+  assert.equal(info.current.renderer.type, 'bot-page');
+  assert.equal(info.current.owner.globalMetaId, 'idq1alice');
+  // Mutating the returned envelope must not affect browser state.
+  info.current.title = 'HACKED';
+  assert.equal(context.AgentBrowserTabs.getTabInfo().current.title, 'Alice Bot');
+  assert.equal(context.AgentBrowserTabs.getTabInfo(9999), null);
+});
+
+// --- R2: browser events pushed to the host ---------------------------------
+
+test('host events fire for navigation, tab open/switch/close, and title updates', async () => {
+  const { context, fetchCalls, hostMessages } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+    resolveResponse: (uri) => resolvedBot(uri, uri.includes('bob') ? 'Bob Bot' : 'Alice Bot'),
+  });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1alice', 'tab current set');
+  const aliceTabId = context.AgentBrowserTabs.getActiveTab().id;
+
+  // Initial navigation committed on the seed tab, with a title update.
+  const initialEvents = hostEvents(hostMessages);
+  const navAlice = initialEvents.find((message) => message.event === 'navigation-committed');
+  // Payloads are created inside the vm realm, so compare fields, not identity.
+  assert.equal(navAlice.payload.tabId, aliceTabId);
+  assert.equal(navAlice.payload.uri, 'metaid://idq1alice');
+  assert.equal(navAlice.payload.title, 'Alice Bot');
+  assert.ok(initialEvents.some((message) => message.event === 'title-updated'
+    && message.payload.tabId === aliceTabId && message.payload.title === 'Alice Bot'));
+
+  // openTab emits tab-opened + tab-activated, then navigation-committed on resolve.
+  const bobTabId = context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'bob resolve');
+  await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1bob', 'bob current set');
+  const afterOpen = hostEvents(hostMessages);
+  assert.ok(afterOpen.some((message) => message.event === 'tab-opened'
+    && message.payload.tabId === bobTabId && message.payload.uri === 'metaid://idq1bob'));
+  assert.ok(afterOpen.some((message) => message.event === 'tab-activated' && message.payload.tabId === bobTabId));
+  assert.ok(afterOpen.some((message) => message.event === 'navigation-committed'
+    && message.payload.tabId === bobTabId && message.payload.title === 'Bob Bot'));
+
+  // switchTab emits tab-activated with uri/title context.
+  context.AgentBrowserTabs.switchTab(aliceTabId);
+  const activated = hostEvents(hostMessages).filter((message) => message.event === 'tab-activated');
+  const lastActivated = activated[activated.length - 1];
+  assert.equal(lastActivated.payload.tabId, aliceTabId);
+  assert.equal(lastActivated.payload.uri, 'metaid://idq1alice');
+  assert.equal(lastActivated.payload.title, 'Alice Bot');
+
+  // title-updated is value-guarded: re-applying the same title emits nothing.
+  const titleEventsBefore = hostEvents(hostMessages).filter((message) => message.event === 'title-updated').length;
+  context.AgentBrowserTabs.switchTab(aliceTabId);
+  const titleEventsAfter = hostEvents(hostMessages).filter((message) => message.event === 'title-updated').length;
+  assert.equal(titleEventsAfter, titleEventsBefore, 'no duplicate title-updated for an unchanged title');
+
+  // closeTab emits tab-closed, then tab-activated for the neighbor that takes over.
+  context.AgentBrowserTabs.closeTab(aliceTabId);
+  const afterClose = hostEvents(hostMessages);
+  assert.ok(afterClose.some((message) => message.event === 'tab-closed' && message.payload.tabId === aliceTabId));
+  const activations = afterClose.filter((message) => message.event === 'tab-activated');
+  assert.equal(activations[activations.length - 1].payload.tabId, bobTabId);
+});
+
+test('closing the last tab emits tab-closed then tab-opened/tab-activated for the fresh tab', async () => {
+  const { context, fetchCalls, hostMessages } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const onlyTabId = context.AgentBrowserTabs.getActiveTab().id;
+  context.AgentBrowserTabs.closeTab(onlyTabId);
+  const events = hostEvents(hostMessages);
+  const closedIndex = events.findIndex((message) => message.event === 'tab-closed' && message.payload.tabId === onlyTabId);
+  assert.ok(closedIndex !== -1, 'tab-closed emitted');
+  const freshTabId = context.AgentBrowserTabs.getActiveTab().id;
+  const openedIndex = events.findIndex((message) => message.event === 'tab-opened' && message.payload.tabId === freshTabId);
+  assert.ok(openedIndex > closedIndex, 'fresh tab-opened follows tab-closed');
+  assert.ok(events.some((message, index) => index > closedIndex && message.event === 'tab-activated'
+    && message.payload.tabId === freshTabId), 'fresh tab-activated follows tab-closed');
+});
+
+// --- R1/R3: host postMessage request/response ------------------------------
+
+test('agent-browser:get-content message round-trips a correlated response to the host', async () => {
+  const { context, fetchCalls, hostMessages, parentWindow } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+  });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1alice', 'tab current set');
+
+  context.handleBrowserMessage({ source: parentWindow, data: { type: 'agent-browser:get-content', requestId: 'r1' } });
+  const response = hostMessages.find((message) => message.type === 'agent-browser:get-content:response');
+  assert.equal(response.requestId, 'r1');
+  assert.equal(response.ok, true);
+  assert.equal(response.result.uri, 'metaid://idq1alice');
+  assert.match(response.result.text, /Alice Bot/);
+
+  context.handleBrowserMessage({ source: parentWindow, data: { type: 'agent-browser:get-content', requestId: 'r2', tabId: 9999 } });
+  const errorResponse = hostMessages.filter((message) => message.type === 'agent-browser:get-content:response')[1];
+  assert.equal(errorResponse.requestId, 'r2');
+  assert.equal(errorResponse.ok, false);
+  assert.equal(errorResponse.error.code, 'tab_not_found');
+});
+
+test('agent-browser:get-tab-info message returns the resolve envelope', async () => {
+  const { context, fetchCalls, hostMessages, parentWindow } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+  });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1alice', 'tab current set');
+
+  context.handleBrowserMessage({ source: parentWindow, data: { type: 'agent-browser:get-tab-info', requestId: 'r3' } });
+  const response = hostMessages.find((message) => message.type === 'agent-browser:get-tab-info:response');
+  assert.equal(response.requestId, 'r3');
+  assert.equal(response.ok, true);
+  assert.equal(response.result.current.uri, 'metaid://idq1alice');
+  assert.equal(response.result.current.owner.globalMetaId, 'idq1alice');
+});
+
+test('host request messages from a non-parent source are ignored', async () => {
+  const { context, fetchCalls, hostMessages } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+  });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const notParent = { postMessage() {} };
+  context.handleBrowserMessage({ source: notParent, data: { type: 'agent-browser:get-content', requestId: 'rx' } });
+  assert.equal(hostMessages.some((message) => message.type === 'agent-browser:get-content:response'), false,
+    'no response is posted for a non-parent source');
 });

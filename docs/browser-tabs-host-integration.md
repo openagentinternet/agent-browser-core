@@ -11,7 +11,7 @@ recommended integration steps.
 The Browser exposes a stable, host-neutral tab API on the client runtime under
 `globalThis.AgentBrowserTabs`, plus `postMessage` bridge messages for hosts
 that run the Browser inside an `<iframe>` / WebView and cannot call globals
-directly. Both surfaces expose the same five operations:
+directly. Both surfaces expose the same five tab operations:
 
 | Operation    | Purpose                                           |
 | ------------ | ------------------------------------------------- |
@@ -21,8 +21,34 @@ directly. Both surfaces expose the same five operations:
 | `getTabs`    | Read-only list of all open tabs.                  |
 | `getActiveTab` | Read-only snapshot of the currently active tab. |
 
+Two host-facing **read APIs** and a **host event channel** are also available
+(see [Content extraction & resolve envelope](#content-extraction--resolve-envelope)
+and [Browser events pushed to the host](#browser-events-pushed-to-the-host)):
+
+| API / channel        | Purpose                                                   |
+| -------------------- | --------------------------------------------------------- |
+| `getTabContent`      | Extract a tab's visible text / rendered HTML (truncated). |
+| `getTabInfo`         | Read a tab's full resolve envelope (`BrowserResolveResult`). |
+| `agent-browser:event` | Proactive tab/navigation/title events posted to the host. |
+
 Tab state is **client-only and session-level**: tabs live in the Browser page's
 memory. The host does not need to (and cannot) manage tab state server-side.
+
+---
+
+## Contract history
+
+Which package version of `@openagentinternet/agent-browser-ui` a host needs for
+each part of this contract:
+
+| Version    | Added                                                                                                          |
+| ---------- | -------------------------------------------------------------------------------------------------------------- |
+| `0.4.0`    | Multi-tab runtime: `AgentBrowserTabs.openTab/closeTab/switchTab/getTabs/getActiveTab`, and the fire-and-forget bridge messages `agent-browser:open-tab` / `close-tab` / `switch-tab`. |
+| `> 0.4.0` (unreleased; on branch `feat/tab-content-events`) | Read APIs `getTabContent` / `getTabInfo` (plus the correlated bridge pairs `agent-browser:get-content` / `get-tab-info`), and the `agent-browser:event` host event channel (`tab-opened`, `tab-closed`, `tab-activated`, `navigation-committed`, `title-updated`). |
+
+Sections below are annotated with the version that introduced them. Hosts
+pinned to `0.4.0` (e.g. the current IDBots embed) can use everything marked
+`0.4.0`; anything marked `> 0.4.0` requires the next package bump.
 
 ---
 
@@ -43,6 +69,8 @@ memory. The host does not need to (and cannot) manage tab state server-side.
 ---
 
 ## API reference
+
+The five tab operations in this section are available since `0.4.0`.
 
 All operations are available in two equivalent forms:
 
@@ -132,9 +160,11 @@ const openCount = tabs.length;
 ```
 
 > Note: `getTabs` / `getActiveTab` are **not** exposed over the message bridge
-> (the bridge is request-less/fire-and-forget for tab actions). If a host needs
-> tab listings from a sandboxed iframe, poll `getTabs` via a host-injected
-> same-realm script, or track tab ids locally from the `openTab` return values.
+> (tab actions on the bridge are fire-and-forget). For a sandboxed embed,
+> prefer tracking state via the `agent-browser:event` events (tab-opened /
+> tab-closed / tab-activated / navigation-committed / title-updated), and use
+> the `agent-browser:get-content` / `agent-browser:get-tab-info`
+> request/response messages for on-demand reads.
 
 ### `getActiveTab() -> TabInfo | null`
 
@@ -144,6 +174,68 @@ Returns a read-only snapshot of the currently active tab, or `null` if none.
 const active = window.AgentBrowserTabs.getActiveTab();
 if (active) console.log(active.uri, active.title);
 ```
+
+---
+
+## Content extraction & resolve envelope
+
+> Added in `> 0.4.0` (unreleased; branch `feat/tab-content-events`).
+
+Two read APIs let a host (or a host-side agent) inspect what a tab is showing.
+Both accept an optional `tabId` (numeric; omitted/`null` means the active tab)
+and return `null` when no tab matches.
+
+### `getTabContent(tabId?) -> TabContent | null`
+
+Extracts the visible text and rendered HTML of a tab's content pane. Panes
+persist in the DOM even while their tab is in the background, so this works for
+any open tab without switching to it.
+
+```ts
+interface TabContent {
+  tabId: number;
+  uri: string | null;
+  title: string | null;
+  /** From the resolve envelope's renderer; falls back to 'text/html'. */
+  contentType: string;
+  /** Visible text, whitespace-normalized, capped at 50_000 chars. */
+  text: string;
+  /** Rendered pane HTML, capped at 100_000 chars. */
+  html: string;
+  /** True when either cap was hit. */
+  truncated: boolean;
+  /** Extraction timestamp (ms since epoch). */
+  extractedAt: number;
+}
+```
+
+> Limitation: tabs rendered through a sandboxed `html-iframe` renderer (e.g.
+> published MetaApps) are an opaque origin by design — the Browser cannot read
+> inside that frame either, so `text`/`html` only cover the pane level
+> (effectively empty for those tabs). Bot homepages, pin inspectors, and other
+> first-party renderers are Browser-rendered DOM and extract fully.
+
+### `getTabInfo(tabId?) -> TabEnvelope | null`
+
+Returns the tab's resolve envelope so a host can show provenance (owner, proof,
+renderer, source, actions) without re-resolving the URI host-side.
+
+```ts
+interface TabEnvelope extends TabInfo {
+  /** Deep clone of the tab's BrowserResolveResult, or null when unresolved. */
+  current: BrowserResolveResult | null;
+}
+```
+
+The envelope is a JSON deep clone — mutating it does not affect Browser state.
+
+```js
+const content = window.AgentBrowserTabs.getTabContent();      // active tab
+const envelope = window.AgentBrowserTabs.getTabInfo(tabId);   // specific tab
+```
+
+Both APIs are also available over the message bridge as correlated
+request/response pairs (see the next section).
 
 ---
 
@@ -161,14 +253,24 @@ loaded in a tab from opening/closing the host's other tabs.
 
 ### Message envelope
 
-All tab bridge messages are plain objects with a `type` string. They are
-fire-and-forget (no response is sent back).
+Tab action messages are plain objects with a `type` string and are
+fire-and-forget (no response is sent back):
 
 | `type`                       | Payload        | Effect                                  |
 | ---------------------------- | -------------- | --------------------------------------- |
 | `agent-browser:open-tab`     | `{ uri? }`     | `openTab(uri)` (uri optional)           |
 | `agent-browser:close-tab`    | `{ id }`       | `closeTab(Number(id))`                  |
 | `agent-browser:switch-tab`   | `{ id }`       | `switchTab(Number(id))`                 |
+
+The two read APIs use correlated request/response pairs (added in `> 0.4.0`,
+unreleased; branch `feat/tab-content-events`). The Browser echoes the
+host-provided `requestId` and answers with `result` on success or `error` on
+failure (posted to `window.parent`):
+
+| Request `type`                | Payload                | Response `type`                       |
+| ----------------------------- | ---------------------- | ------------------------------------- |
+| `agent-browser:get-content`   | `{ requestId, tabId? }` | `agent-browser:get-content:response`  |
+| `agent-browser:get-tab-info`  | `{ requestId, tabId? }` | `agent-browser:get-tab-info:response` |
 
 ```js
 // From the host (the Browser's parent frame):
@@ -177,10 +279,52 @@ iframe.contentWindow.postMessage(
   { type: 'agent-browser:open-tab', uri: 'metaapp://<pinId>' },
   '*' // or the Browser's origin for tighter security
 );
+
+// Correlated read:
+const requestId = String(++hostRequestCounter);
+window.addEventListener('message', (event) => {
+  const data = event.data;
+  if (data?.type === 'agent-browser:get-content:response' && data.requestId === requestId) {
+    if (data.ok) console.log(data.result.text);
+    else console.warn(data.error.code); // e.g. 'tab_not_found'
+  }
+});
+iframe.contentWindow.postMessage(
+  { type: 'agent-browser:get-content', requestId, tabId: 3 },
+  '*'
+);
 ```
 
+Response envelope: `{ type, version: 1, requestId, ok: true, result }` or
+`{ type, version: 1, requestId, ok: false, error: { code, message } }`.
+
 Malformed payloads degrade safely: a missing/empty `uri` opens an empty tab;
-a non-numeric `id` is a silent no-op.
+a non-numeric `id` is a silent no-op; an unknown `tabId` answers with a
+`tab_not_found` error.
+
+### Browser events pushed to the host
+
+> Added in `> 0.4.0` (unreleased; branch `feat/tab-content-events`).
+
+The Browser proactively posts lifecycle events to `window.parent` so the host
+can keep its own view fresh without polling. Delivery is fire-and-forget and
+best-effort (no ack). Envelope:
+
+```ts
+{ type: 'agent-browser:event', version: 1, event: '<name>', payload: {...} }
+```
+
+| `event`                | `payload`                        | When                                   |
+| ---------------------- | -------------------------------- | -------------------------------------- |
+| `tab-opened`           | `{ tabId, uri? }`                | New tab created.                       |
+| `tab-closed`           | `{ tabId }`                      | Tab closed.                            |
+| `tab-activated`        | `{ tabId, uri?, title? }`        | Active tab changed (incl. `openTab`).  |
+| `navigation-committed` | `{ tabId, uri, title? }`         | A tab finished resolving/loading a URI (background tabs included). |
+| `title-updated`        | `{ tabId, title }`               | The applied page title changed (value-guarded; no repeats). |
+
+Note: `tabId` is the Browser's **numeric** tab id (the same token accepted by
+`closeTab`/`switchTab`/`getTabContent`). Events with an empty parent context
+(standalone top-window usage) are simply not delivered.
 
 ### Relationship to the existing MetaApp bridge
 
@@ -236,9 +380,10 @@ by tabs. Tab bridge messages are a distinct, host-facing channel gated on
 
 - [ ] Post `agent-browser:open-tab` / `close-tab` / `switch-tab` messages to the
       iframe's `contentWindow` (the Browser accepts them from its `parent`).
-- [ ] If you need tab listings (`getTabs`/`getActiveTab`), inject a tiny
-      same-origin helper script that polls `window.AgentBrowserTabs` and relays
-      the snapshots to the host — the bridge itself does not return tab lists.
+- [ ] Listen for `agent-browser:event` messages from the iframe to keep a local
+      mirror of tabs/titles fresh without polling, and use the
+      `agent-browser:get-content` / `agent-browser:get-tab-info` request pairs
+      when the host (or a host-side agent) needs page content or provenance.
 - [ ] When passing a target origin to `postMessage`, prefer the Browser's real
       origin over `'*'` once you know it.
 

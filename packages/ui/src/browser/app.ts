@@ -150,6 +150,13 @@ var browserEndpoints = {
 };
 var BROWSER_PAGE_DEFAULT_TITLE = 'Agent Internet Browser';
 var BROWSER_WINDOW_TITLE_SUFFIX = 'Bot Browser';
+// Caps for AgentBrowserTabs.getTabContent extraction; agent context windows are
+// bounded, so oversized pane content is truncated and flagged.
+var MAX_TAB_CONTENT_TEXT_LENGTH = 50000;
+var MAX_TAB_CONTENT_HTML_LENGTH = 100000;
+// Last page title value pushed to the host via the title-updated event; used to
+// suppress duplicate events when the same title is re-applied.
+var lastEmittedPageTitle = null;
 
 var state = {
   tabs: [],
@@ -323,6 +330,96 @@ function getActiveTab() {
   return tab ? tabToInfo(tab) : null;
 }
 
+function findTabById(id) {
+  for (var i = 0; i < state.tabs.length; i += 1) {
+    if (state.tabs[i].id === id) return state.tabs[i];
+  }
+  return null;
+}
+
+// Resolve the optional tabId argument shared by getTabContent/getTabInfo:
+// undefined/null/'' means the active tab, anything else is coerced to a number.
+function resolveTabForRead(tabId) {
+  if (tabId === undefined || tabId === null || tabId === '') return activeTab();
+  return findTabById(Number(tabId));
+}
+
+// Read-only lookup of a tab's persistent content pane (no creation, no
+// visibility change). Panes persist in the DOM even while hidden, so
+// extraction works for background tabs too.
+function findTabPane(id) {
+  if (!elements.viewport) return null;
+  var wanted = String(id);
+  var child = elements.viewport.firstElementChild;
+  while (child) {
+    if (typeof child.getAttribute === 'function' && child.getAttribute('data-tab-pane') === wanted) {
+      return child;
+    }
+    child = child.nextElementSibling;
+  }
+  return null;
+}
+
+// Host-facing read API: extract the visible text (and rendered HTML) of a
+// tab's content pane. Text is whitespace-normalized and both fields are capped
+// (see MAX_TAB_CONTENT_*), with the truncated flag marking any cap hit. Note: tabs
+// rendered through a sandboxed iframe (renderer type html-iframe) are an
+// opaque origin, so only pane-level content is available for them.
+function getTabContent(tabId) {
+  var tab = resolveTabForRead(tabId);
+  if (!tab) return null;
+  var info = tabToInfo(tab);
+  var pane = findTabPane(tab.id);
+  var rawText = pane && typeof pane.textContent === 'string' ? pane.textContent : '';
+  var rawHtml = pane && typeof pane.innerHTML === 'string' ? pane.innerHTML : '';
+  var text = rawText.replace(/\\s+/g, ' ').trim();
+  var html = rawHtml;
+  var truncated = false;
+  if (text.length > MAX_TAB_CONTENT_TEXT_LENGTH) {
+    text = text.slice(0, MAX_TAB_CONTENT_TEXT_LENGTH);
+    truncated = true;
+  }
+  if (html.length > MAX_TAB_CONTENT_HTML_LENGTH) {
+    html = html.slice(0, MAX_TAB_CONTENT_HTML_LENGTH);
+    truncated = true;
+  }
+  var contentType = textValue(tab.current && tab.current.renderer && tab.current.renderer.contentType) || 'text/html';
+  return {
+    tabId: tab.id,
+    uri: info.uri,
+    title: info.title,
+    contentType: contentType,
+    text: text,
+    html: html,
+    truncated: truncated,
+    extractedAt: Date.now()
+  };
+}
+
+// Host-facing read API: the tab's resolve envelope (BrowserResolveResult),
+// cloned so callers cannot mutate browser state. The current field is null
+// when the tab has not resolved anything yet.
+function getTabInfo(tabId) {
+  var tab = resolveTabForRead(tabId);
+  if (!tab) return null;
+  var info = tabToInfo(tab);
+  var current = null;
+  if (tab.current) {
+    try {
+      current = JSON.parse(JSON.stringify(tab.current));
+    } catch (error) {
+      current = null;
+    }
+  }
+  return {
+    id: info.id,
+    uri: info.uri,
+    title: info.title,
+    isActive: info.isActive,
+    current: current
+  };
+}
+
 // Create + activate a new tab. If uri is provided, navigate the new tab to it;
 // otherwise show the welcome page. Returns the new tab id.
 function openTab(uri) {
@@ -336,6 +433,9 @@ function openTab(uri) {
   state.activeTabId = tab.id;
   applyActiveTabState();
   renderTabs();
+  var openedUri = textValue(uri) || null;
+  emitHostEvent('tab-opened', openedUri ? { tabId: tab.id, uri: openedUri } : { tabId: tab.id });
+  emitHostEvent('tab-activated', { tabId: tab.id, uri: openedUri, title: null });
   if (uri) {
     navigateTo(uri);
   } else {
@@ -363,6 +463,7 @@ function closeTab(id) {
   }
   state.tabs.splice(idx, 1);
   removeTabPane(id);
+  emitHostEvent('tab-closed', { tabId: id });
   if (!state.tabs.length) {
     var fresh = createTab();
     state.activeTabId = fresh.id;
@@ -370,6 +471,8 @@ function closeTab(id) {
     renderWelcome();
     syncToolbarForActiveTab();
     renderTabs();
+    emitHostEvent('tab-opened', { tabId: fresh.id });
+    emitHostEvent('tab-activated', { tabId: fresh.id, uri: null, title: null });
     return;
   }
   if (wasActive) {
@@ -380,6 +483,8 @@ function closeTab(id) {
     // has no pane yet (e.g. brand-new), paint it appropriately.
     activeViewportPane();
     var neighborTab = activeTab();
+    var neighborInfo = tabToInfo(neighborTab);
+    emitHostEvent('tab-activated', { tabId: neighborInfo.id, uri: neighborInfo.uri, title: neighborInfo.title });
     if (!neighborTab.painted) {
       if (state.current) renderCurrent();
       else renderWelcome();
@@ -414,6 +519,8 @@ function switchTab(id) {
   state.activeTabId = tab.id;
   applyActiveTabState();
   renderTabs();
+  var switchInfo = tabToInfo(tab);
+  emitHostEvent('tab-activated', { tabId: switchInfo.id, uri: switchInfo.uri, title: switchInfo.title });
   // Reveal the active pane (creates it lazily if missing). If the pane has
   // already been painted, reveal it WITHOUT rebuilding DOM, so iframe/game/
   // video/scroll state survives. If it was never painted — e.g. a background
@@ -496,6 +603,10 @@ function applyBrowserPageTitle(title) {
   }
   if (typeof document === 'object' && document) {
     document.title = resolved ? (resolved + ' - ' + BROWSER_WINDOW_TITLE_SUFFIX) : BROWSER_PAGE_DEFAULT_TITLE;
+  }
+  if (displayTitle !== lastEmittedPageTitle) {
+    lastEmittedPageTitle = displayTitle;
+    emitHostEvent('title-updated', { tabId: state.activeTabId, title: displayTitle });
   }
   renderTabs();
 }
@@ -685,6 +796,43 @@ function emitBridgeEvent(eventName, payload) {
   var sourceWindow = currentBrowserHtmlFrameWindow();
   if (!sourceWindow) return;
   bridgePostMessage(sourceWindow, bridgeEvent(eventName, payload));
+}
+
+// --- Host notifications -----------------------------------------------------
+// Outbound messages to the host window (window.parent), used when the Browser
+// UI is embedded as an iframe. Fire-and-forget, best-effort; no-ops when the
+// Browser runs as a top-level window (standalone usage stays unchanged).
+function postToHost(message) {
+  if (typeof window === 'undefined' || !window || !window.parent || window.parent === window) return;
+  if (typeof window.parent.postMessage !== 'function') return;
+  window.parent.postMessage(message, '*');
+}
+
+function hostEvent(eventName, payload) {
+  return {
+    type: 'agent-browser:event',
+    version: 1,
+    event: eventName,
+    payload: payload || {}
+  };
+}
+
+function emitHostEvent(eventName, payload) {
+  postToHost(hostEvent(eventName, payload));
+}
+
+// Correlated response for host -> Browser request messages (e.g.
+// agent-browser:get-content). requestId echoes the host-provided id.
+function hostResponse(type, requestId, ok, payload) {
+  var response = {
+    type: type,
+    version: 1,
+    requestId: textValue(requestId),
+    ok: !!ok
+  };
+  if (ok) response.result = payload || {};
+  else response.error = payload || { code: 'invalid_request', message: 'Invalid host request.' };
+  return response;
 }
 
 function extractPinId(value) {
@@ -1028,6 +1176,32 @@ function handleBrowserMessage(event) {
     }
     if (data.type === 'agent-browser:switch-tab') {
       switchTab(Number(data.id));
+      return;
+    }
+    if (data.type === 'agent-browser:get-content') {
+      var contentRequestId = data.requestId !== undefined && data.requestId !== null ? data.requestId : data.id;
+      var content = getTabContent(data.tabId);
+      if (content) {
+        postToHost(hostResponse('agent-browser:get-content:response', contentRequestId, true, content));
+      } else {
+        postToHost(hostResponse('agent-browser:get-content:response', contentRequestId, false, {
+          code: 'tab_not_found',
+          message: 'No browser tab matches the requested tabId.'
+        }));
+      }
+      return;
+    }
+    if (data.type === 'agent-browser:get-tab-info') {
+      var infoRequestId = data.requestId !== undefined && data.requestId !== null ? data.requestId : data.id;
+      var tabInfo = getTabInfo(data.tabId);
+      if (tabInfo) {
+        postToHost(hostResponse('agent-browser:get-tab-info:response', infoRequestId, true, tabInfo));
+      } else {
+        postToHost(hostResponse('agent-browser:get-tab-info:response', infoRequestId, false, {
+          code: 'tab_not_found',
+          message: 'No browser tab matches the requested tabId.'
+        }));
+      }
       return;
     }
   }
@@ -5337,6 +5511,11 @@ async function resolveUri(uri, options) {
     resolvedTab.error = null;
     state.lastResolveError = null;
     recordVisit(result);
+    emitHostEvent('navigation-committed', {
+      tabId: resolvedTab.id,
+      uri: resolvedUri,
+      title: currentDisplayTitle(result, '') || null
+    });
     // Only sync the read-only mirrors + render the viewport if the originating
     // tab is still the one the user is looking at. Otherwise, leave the active
     // tab's mirrors and viewport untouched (switchTab re-renders from cache).
@@ -5863,6 +6042,7 @@ globalThis.resolveUri = resolveUri;
 globalThis.navigateTo = navigateTo;
 globalThis.currentBrowserHtmlFrameWindow = currentBrowserHtmlFrameWindow;
 globalThis.handleBrowserBridgeMessage = handleBrowserBridgeMessage;
+globalThis.handleBrowserMessage = handleBrowserMessage;
 globalThis.reloadCurrent = reloadCurrent;
 globalThis.goBack = goBack;
 globalThis.goForward = goForward;
@@ -5872,7 +6052,9 @@ globalThis.AgentBrowserTabs = {
   closeTab: closeTab,
   switchTab: switchTab,
   getTabs: getTabs,
-  getActiveTab: getActiveTab
+  getActiveTab: getActiveTab,
+  getTabContent: getTabContent,
+  getTabInfo: getTabInfo
 };
 
 if (document.readyState === 'loading') {
