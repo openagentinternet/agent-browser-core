@@ -68,6 +68,9 @@ function elements() {
     '[data-browser-inspector]': new FakeElement(),
     '[data-browser-owner-panel]': new FakeElement(),
     '[data-browser-modal-root]': new FakeElement(),
+    '[data-browser-address-icon]': new FakeElement(),
+    '[data-browser-app-panel]': new FakeElement(),
+    '[data-browser-toast]': new FakeElement(),
   };
 }
 
@@ -750,4 +753,74 @@ test('owner panel Send Message opens the unsupported modal in standalone', async
   assert.equal(requests.length, 0);
   assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
   assert.match(nodes['[data-browser-modal-root]'].innerHTML, /standalone-unsupported/);
+});
+
+const METAAPP_PIN_ID = `${'a'.repeat(64)}i0`;
+const METAAPP_ICON_PIN_ID = `${'b'.repeat(64)}i0`;
+
+function metaAppCurrent({ withProof = true } = {}) {
+  const record = {
+    pinId: METAAPP_PIN_ID,
+    firstPinId: METAAPP_PIN_ID,
+    operation: 'create',
+    title: 'Fun App',
+    appName: 'Fun App',
+    icon: `metafile://${METAAPP_ICON_PIN_ID}`,
+    version: '1.2.0',
+    runtime: 'html',
+    indexFile: 'index.html',
+    code: '',
+    content: '',
+    contentType: 'application/zip',
+    codeType: 'zip',
+    tags: [],
+    ownerGlobalMetaId: 'idq1owner',
+    network: 'mvc',
+    updatedAt: 1750000000000,
+    source: 'test',
+  };
+  return {
+    uri: `metaapp://${METAAPP_PIN_ID}`,
+    normalizedUri: `metaapp://${METAAPP_PIN_ID}`,
+    resourceType: 'metaapp',
+    title: 'Fun App',
+    owner: { kind: 'metaapp-publisher', globalMetaId: 'idq1owner', name: 'Owner Bot', verificationState: 'partial' },
+    renderer: { type: 'html-iframe', contentType: 'text/html', data: { record } },
+    proof: withProof ? { pinId: METAAPP_PIN_ID, protocolPath: '/protocols/metaapp', verificationState: 'partial' } : undefined,
+    status: { state: 'resolved', verificationState: 'partial', message: '' },
+    source: { resolver: 'test' },
+    actions: [],
+  };
+}
+
+test('metaAppIconUrl resolves http, metafile, bare pinId, and rejects junk', () => {
+  const { context } = createContext();
+  assert.equal(context.metaAppIconUrl('https://cdn.example/icon.png'), 'https://cdn.example/icon.png');
+  const fromMetafile = context.metaAppIconUrl(`metafile://${METAAPP_ICON_PIN_ID}`);
+  assert.ok(fromMetafile.includes(`/api/v1/files/accelerate/content/${METAAPP_ICON_PIN_ID}`), fromMetafile);
+  const fromBarePin = context.metaAppIconUrl(METAAPP_ICON_PIN_ID);
+  assert.ok(fromBarePin.endsWith(`/content/${METAAPP_ICON_PIN_ID}`), fromBarePin);
+  assert.equal(context.metaAppIconUrl('javascript:alert(1)'), '');
+  assert.equal(context.metaAppIconUrl(''), '');
+});
+
+test('address icon stays the default link glyph for non-MetaApp resources', () => {
+  const { context, nodes } = createContext();
+  context.renderAddressIcon();
+  const slot = nodes['[data-browser-address-icon]'];
+  assert.equal(slot.disabled, true);
+  assert.doesNotMatch(slot.innerHTML, /browser-app-icon-image/);
+  assert.equal(slot.getAttribute('title'), '');
+});
+
+test('address icon shows the MetaApp icon for MetaApp resources', () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent();
+  context.renderAddressIcon();
+  const slot = nodes['[data-browser-address-icon]'];
+  assert.equal(slot.disabled, false);
+  assert.match(slot.innerHTML, /browser-app-icon-image/);
+  assert.match(slot.innerHTML, new RegExp(METAAPP_ICON_PIN_ID));
+  assert.equal(slot.getAttribute('title'), 'Fun App');
+  assert.equal(slot.getAttribute('aria-haspopup'), 'dialog');
 });

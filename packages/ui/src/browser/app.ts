@@ -67,9 +67,12 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
             </button>
           </nav>
           <form class="browser-address-form" data-browser-address-form>
-            <span class="browser-address-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false"><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"></path></svg>
-            </span>
+            <div class="browser-address-icon-wrap">
+              <button type="button" class="browser-address-icon" data-browser-address-icon disabled tabindex="-1" title="">
+                <svg viewBox="0 0 24 24" focusable="false"><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"></path></svg>
+              </button>
+              <div class="browser-app-panel" data-browser-app-panel role="dialog" hidden></div>
+            </div>
             <input data-browser-uri-input aria-label="Agent Internet URI" title="Search or enter address" placeholder="metaid://idq1example" />
             <button type="submit" class="browser-address-submit" aria-label="Visit URI" title="Go">
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
@@ -175,6 +178,7 @@ var state = {
   menuOpen: false,
   ownerPanelOpen: false,
   actorPanelOpen: false,
+  appPanelOpen: false,
   settingsTab: 'baseUrls',
   settingsData: null,
   cacheData: null,
@@ -562,6 +566,7 @@ function syncToolbarForActiveTab() {
   renderBookmarkStar();
   // The reload button's spinning state belongs to the active tab.
   syncLoadingButton();
+  renderAddressIcon();
 }
 
 function textValue(value) {
@@ -1428,6 +1433,9 @@ function iconHtml(name) {
     layout: '<rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="M4 10h16M9 10v9"></path>',
     info: '<circle cx="12" cy="12" r="9"></circle><path d="M12 11v6"></path><circle class="browser-info-dot" cx="12" cy="7.5" r="1.1"></circle>',
     link: '<path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"></path>',
+    share: '<circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="M8.59 13.51L15.42 17.49M15.41 6.51L8.59 10.49"></path>',
+    remix: '<circle cx="12" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9v2c0 .6-.5 1-1 1H7c-.6 0-1-.4-1-1V9"></path><path d="M12 12v3"></path>',
+    scroll: '<path d="M19 17V5a2 2 0 0 0-2-2H4"></path><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"></path>',
     message: '<path d="M5 6h14v9H8l-3 3V6z"></path>',
     database: '<ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>',
     download: '<path d="M12 3v12"></path><path d="M8 11l4 4 4-4"></path><path d="M2 17v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2"></path>',
@@ -1496,6 +1504,8 @@ function bindElements() {
     drawerToggle: document.querySelector('[data-browser-drawer-toggle]'),
     resourceChip: document.querySelector('[data-browser-resource-chip]'),
     ownerPanel: document.querySelector('[data-browser-owner-panel]'),
+    addressIcon: document.querySelector('[data-browser-address-icon]'),
+    appPanel: document.querySelector('[data-browser-app-panel]'),
     usingChip: document.querySelector('[data-browser-using-selector]'),
     actorPanel: document.querySelector('[data-browser-actor-panel]'),
     menuTrigger: document.querySelector('[data-browser-menu-trigger]'),
@@ -1798,6 +1808,101 @@ function formatBytes(value) {
 function currentMetaAppPinId() {
   if (!state.current || state.current.resourceType !== 'metaapp') return '';
   return textValue(state.current.proof && state.current.proof.pinId);
+}
+
+// Returns the embedded MetaApp gallery record for the current resource, or null
+// when the current resource is not a MetaApp. Preview resources (preview-metaapp://)
+// also carry a record but no chain proof; callers gate pin actions separately.
+function currentMetaAppRecord() {
+  if (!state.current || state.current.resourceType !== 'metaapp') return null;
+  var data = objectValue(state.current.renderer && state.current.renderer.data);
+  var record = objectValue(data.record);
+  return Object.keys(record).length ? record : null;
+}
+
+function metaAppRecordTitle(record) {
+  return textValue(record && record.title) ||
+    textValue(record && record.appName) ||
+    textValue(state.current && state.current.title) ||
+    'MetaApp';
+}
+
+// The chain icon field is free-form: http(s)/data/blob URL, metafile:// URI, or a
+// bare metafile pinId. Normalize to a fetchable URL; empty when unusable.
+function metaAppIconUrl(icon) {
+  var raw = textValue(icon);
+  if (!raw) return '';
+  if (raw.toLowerCase().indexOf('metafile://') === 0) return buildMetafileDownloadHref(raw);
+  if (isBrowserPinId(raw)) return buildMetafileContentHref(raw);
+  return safeUrl(raw);
+}
+
+function appIconHtml(record, className) {
+  var url = metaAppIconUrl(record && record.icon);
+  var classValue = className || 'browser-app-icon-image';
+  if (url) {
+    return '<img class="' + classValue + '" src="' + escapeHtml(url) + '" alt="" />';
+  }
+  return '<span class="browser-app-icon-fallback" aria-hidden="true">' + iconHtml('bot') + '</span>';
+}
+
+function formatAppUpdatedAt(value) {
+  var timestamp = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  if (!timestamp) return '';
+  var date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+var ADDRESS_ICON_DEFAULT_HTML = iconHtml('link');
+
+// Keeps the address-bar leading icon in sync with the active tab: the default
+// link glyph for ordinary resources, the MetaApp's own icon (favicon-style,
+// clickable) for MetaApp resources.
+function renderAddressIcon() {
+  if (!elements.addressIcon) return;
+  var record = currentMetaAppRecord();
+  if (!record) {
+    closeAppPanel();
+    elements.addressIcon.innerHTML = ADDRESS_ICON_DEFAULT_HTML;
+    elements.addressIcon.disabled = true;
+    elements.addressIcon.classList.remove('has-app-icon');
+    elements.addressIcon.removeAttribute('aria-haspopup');
+    elements.addressIcon.setAttribute('title', '');
+    return;
+  }
+  elements.addressIcon.innerHTML = appIconHtml(record, 'browser-app-icon-image');
+  elements.addressIcon.disabled = false;
+  elements.addressIcon.classList.add('has-app-icon');
+  elements.addressIcon.setAttribute('aria-haspopup', 'dialog');
+  elements.addressIcon.setAttribute('aria-expanded', state.appPanelOpen ? 'true' : 'false');
+  elements.addressIcon.setAttribute('title', metaAppRecordTitle(record));
+}
+
+function closeAppPanel() {
+  state.appPanelOpen = false;
+  if (elements.appPanel) elements.appPanel.hidden = true;
+  if (elements.addressIcon && typeof elements.addressIcon.setAttribute === 'function') {
+    elements.addressIcon.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function openAppPanel() {
+  if (!elements.appPanel || !currentMetaAppRecord()) return;
+  state.appPanelOpen = true;
+  renderAppPanel();
+  elements.appPanel.hidden = false;
+  if (elements.addressIcon && typeof elements.addressIcon.setAttribute === 'function') {
+    elements.addressIcon.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function toggleAppPanel() {
+  if (state.appPanelOpen) {
+    closeAppPanel();
+  } else {
+    openAppPanel();
+  }
 }
 
 function renderSettingsTabs() {
@@ -2639,6 +2744,7 @@ function renderCurrent() {
   var paintedTab = activeTab();
   if (paintedTab) paintedTab.painted = true;
   renderBookmarkStar();
+  renderAddressIcon();
   syncPanelState();
 }
 
@@ -6053,6 +6159,11 @@ globalThis.closeDrawer = closeDrawer;
 globalThis.openCreatorFromChip = openCreatorFromChip;
 globalThis.toggleOwnerPanel = toggleOwnerPanel;
 globalThis.handleOwnerPanelAction = handleOwnerPanelAction;
+globalThis.metaAppIconUrl = metaAppIconUrl;
+globalThis.renderAddressIcon = renderAddressIcon;
+globalThis.openAppPanel = openAppPanel;
+globalThis.closeAppPanel = closeAppPanel;
+globalThis.toggleAppPanel = toggleAppPanel;
 globalThis.openInspector = openInspector;
 globalThis.closeInspector = closeInspector;
 globalThis.renderInspector = renderInspector;
