@@ -44,6 +44,7 @@ test('standalone Browser server serves Browser shell and health route', async (t
   assert.equal(runtime.ok, true);
   assert.equal(runtime.data.host.kind, 'standalone');
   assert.equal(runtime.data.features.walletLogin, true);
+  assert.equal(runtime.data.features.remix, false);
   assert.deepEqual(runtime.data.defaultActor, {
     id: 'standalone-wallet',
     label: 'Standalone Wallet',
@@ -161,7 +162,7 @@ test('standalone Browser server exposes runtime resolve settings cache and actio
   assert.equal(login.action.label, 'Connect wallet');
   assert.equal(login.action.route, '/browser/login');
 
-  for (const kind of ['service-call', 'private-chat']) {
+  for (const kind of ['service-call', 'private-chat', 'metaapp-remix']) {
     const unsupportedResponse = await fetch(`${baseUrl}/api/browser/actions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
