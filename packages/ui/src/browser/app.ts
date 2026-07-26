@@ -2047,7 +2047,16 @@ async function confirmAppShareBuzz(messageText) {
     });
     state.appShareSending = false;
     setStatus('sent', '');
-    showAppShareBuzzSentModal(result);
+    if (textValue(result && result.pinId)) {
+      showAppShareBuzzSentModal(result);
+    } else {
+      // waiting/manual_action_required envelopes carry no pinId: the host owns
+      // the follow-up (e.g. wallet confirmation), so surface its message
+      // instead of declaring the buzz published.
+      showToast(textValue(result && result.message) ||
+        browserText('appShare.submitted', 'Buzz submitted. The host may require further action.'));
+      closeModal();
+    }
     return result;
   } catch (err) {
     setAppShareSending(false);

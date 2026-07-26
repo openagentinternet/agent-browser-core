@@ -894,7 +894,12 @@ test('share modal shows web URL, metaapp URI, and editable default buzz text', (
 });
 
 test('Buzz it posts a simplebuzz pin write through the actions endpoint', async () => {
-  const { context, nodes, requests } = createContext();
+  const { context, nodes, requests } = createContext({
+    actionResponse: {
+      ok: true,
+      data: { pinId: `${'d'.repeat(64)}i0`, txid: 'tx-buzz', operation: 'create', path: '/protocols/simplebuzz' },
+    },
+  });
   context.state.current = metaAppCurrent();
   context.openMetaAppShareModal();
   await context.confirmAppShareBuzz('hello buzz');
@@ -944,4 +949,15 @@ test('Buzz it requires a message', async () => {
   const result = await context.confirmAppShareBuzz('   ');
   assert.equal(result, null);
   assert.equal(requests.length, 0);
+});
+
+test('Buzz it does not declare publication for waiting envelopes', async () => {
+  const { context, nodes } = createContext({
+    actionResponse: { ok: false, state: 'manual_action_required', code: 'wallet_confirm', message: 'Confirm in wallet' },
+  });
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+  await context.confirmAppShareBuzz('hello buzz');
+  assert.doesNotMatch(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
+  assert.match(nodes['[data-browser-toast]'].textContent, /Confirm in wallet/);
 });
