@@ -163,9 +163,10 @@ entry point. This design adds MetaApp-aware chrome to the served Browser UI:
     payload: { pinId: '<proof.pinId>' } }` — `resourceUri` is already part of
     `BrowserTrustedActionInput`, so hosts receive URI + pinId. `pinId` is the current version
     (what you see is what you remix); hosts can resolve `firstPinId` themselves if needed.
-  - Result handling: if `result.data.href`/`route` present, navigate; else
-    `showToast('Remix opened in host')`-style confirmation. Failure → toast with the error
-    message.
+  - Result handling: toast confirmation only — the host drives its own Remix UI, and the
+    browser-side safe-href allowlist (`safeTrustedActionHref`, app.ts:2440-2456) only covers
+    `/ui/bot` and `/ui/conversations`, so v1 deliberately never navigates on the result.
+    Failure → toast with the error message.
 - Standalone (`packages/host-standalone/src/adapter.ts`, `memoryHost.ts`):
   `features.remix: false`, and a `runTrustedAction` case returning
   `browserFailure('browser_action_not_supported', ...)` for `metaapp-remix` (defense in depth;
