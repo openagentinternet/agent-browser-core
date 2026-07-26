@@ -994,3 +994,16 @@ test('Remix surfaces host failures as a toast', async () => {
   assert.equal(requests.length, 1);
   assert.match(nodes['[data-browser-toast]'].textContent, /remix broke/);
 });
+
+test('renderAddressIcon re-renders an open app panel for the new MetaApp', () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent();
+  context.openAppPanel();
+  assert.match(nodes['[data-browser-app-panel]'].innerHTML, /Fun App/);
+  const other = metaAppCurrent();
+  other.title = 'Other App';
+  other.renderer.data.record.title = 'Other App';
+  context.state.current = other;
+  context.renderAddressIcon();
+  assert.match(nodes['[data-browser-app-panel]'].innerHTML, /Other App/);
+});

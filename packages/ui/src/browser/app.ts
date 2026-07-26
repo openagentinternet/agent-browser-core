@@ -1886,6 +1886,7 @@ function renderAddressIcon() {
   elements.addressIcon.setAttribute('aria-haspopup', 'dialog');
   elements.addressIcon.setAttribute('aria-expanded', state.appPanelOpen ? 'true' : 'false');
   elements.addressIcon.setAttribute('title', metaAppRecordTitle(record));
+  if (state.appPanelOpen) renderAppPanel();
 }
 
 function closeAppPanel() {
@@ -5990,6 +5991,7 @@ async function resolveUri(uri, options) {
     applyActiveTabState();
     setStatus('error', errorMessage);
     syncBrowserPageTitle('Resolve failed');
+    renderAddressIcon();
     var errorPane = activeViewportPane();
     if (errorPane) {
       errorPane.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(state.error) + '</p></section>';
