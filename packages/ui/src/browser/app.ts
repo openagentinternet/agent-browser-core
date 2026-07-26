@@ -142,6 +142,9 @@ var OFFICIAL_RECOMMENDATIONS = [
   { uri: 'metaapp://765570486edfc94bb0b393bfb8c48d100fb84be9fcf2b9b0b39df68e997135c1i0', title: 'A/I YellowPaper', kind: 'official' },
   { uri: 'metaid://idq1skptl242lfuuqq8f0z9mhu88tgj0e0kvlqd6vk', title: 'Agent_Internet', kind: 'official' }
 ];
+// Public web gateway used when sharing a MetaApp with web2 users. Matches the
+// standalone client router shape /browser/metaapp/<pinId> (app.ts browserUriFromPath).
+var METAAPP_SHARE_WEB_BASE_URL = 'https://openagentinternet.org/browser/metaapp/';
 var browserEndpoints = {
   runtime: '/api/browser/runtime',
   resolve: '/api/browser/resolve',
@@ -179,6 +182,9 @@ var state = {
   ownerPanelOpen: false,
   actorPanelOpen: false,
   appPanelOpen: false,
+  pendingAppShare: null,
+  appShareSending: false,
+  pendingAppShareBuzzPinId: '',
   settingsTab: 'baseUrls',
   settingsData: null,
   cacheData: null,
@@ -1966,6 +1972,153 @@ async function handleAppPanelAction(action) {
     var href = pinHref(currentMetaAppPinId());
     if (href) return navigateTo(href);
   }
+  return Promise.resolve();
+}
+
+function defaultAppShareText(title, uri) {
+  return "I found an interesting app '" + title + "' — worth sharing: " + uri;
+}
+
+function appShareRowHtml(value) {
+  var copyLabel = browserText('appShare.copy', 'Copy');
+  return '<div class="browser-app-share-row">' +
+    '<code class="browser-app-share-value">' + escapeHtml(value) + '</code>' +
+    '<button type="button" class="browser-app-share-copy" data-browser-copy-value="' + escapeHtml(value) + '" aria-label="' + escapeHtml(copyLabel) + '" title="' + escapeHtml(copyLabel) + '">' + iconHtml('copy') + '</button>' +
+  '</div>';
+}
+
+function openMetaAppShareModal() {
+  var record = currentMetaAppRecord();
+  var pinId = currentMetaAppPinId();
+  if (!record || !pinId) {
+    setStatus('error', 'MetaApp pin is missing.');
+    return;
+  }
+  var title = metaAppRecordTitle(record);
+  var appUri = metaAppHref(pinId);
+  var webUrl = METAAPP_SHARE_WEB_BASE_URL + encodeURIComponent(pinId);
+  state.pendingAppShare = { pinId: pinId, uri: appUri, title: title };
+  renderModal(
+    browserText('appShare.title', 'Share MetaApp'),
+    '<div class="browser-app-share-rows">' +
+      appShareRowHtml(webUrl) +
+      appShareRowHtml(appUri) +
+    '</div>' +
+    '<textarea data-browser-app-share-message rows="3" placeholder="' + escapeHtml(browserText('appShare.messagePlaceholder', 'Say something about this app...')) + '">' + escapeHtml(defaultAppShareText(title, appUri)) + '</textarea>',
+    browserText('appShare.buzzIt', 'Buzz it'),
+    'app-share-buzz'
+  );
+}
+
+async function confirmAppShareBuzz(messageText) {
+  var pending = state.pendingAppShare;
+  var content = textValue(messageText);
+  if (!pending || !content) {
+    setStatus('error', 'Message is required.');
+    return null;
+  }
+  if (isStandaloneHostRuntime()) {
+    openStandaloneUnsupportedModal();
+    return null;
+  }
+  // Debounce: the on-chain publish can be slow, so ignore repeat clicks while a
+  // publish is in flight (the Buzz it button is also disabled).
+  if (state.appShareSending) {
+    return null;
+  }
+  setAppShareSending(true);
+  try {
+    var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        resourceUri: pending.uri,
+        kind: 'metaid-pin-write',
+        payload: {
+          operation: 'create',
+          path: '/protocols/simplebuzz',
+          encryption: '0',
+          version: '1.0.0',
+          contentType: 'application/json;utf-8',
+          payload: { encoding: 'utf8', value: JSON.stringify({ content: content }) },
+          display: { title: 'Share MetaApp', summary: content.slice(0, 80) }
+        }
+      })
+    });
+    state.appShareSending = false;
+    setStatus('sent', '');
+    showAppShareBuzzSentModal(result);
+    return result;
+  } catch (err) {
+    setAppShareSending(false);
+    var failMessage = textValue(err && err.message) ||
+      browserText('appShare.sendFailed', 'Failed to publish the buzz. Please try again.');
+    setAppShareStatus('error', failMessage);
+    setStatus('error', failMessage);
+    return null;
+  }
+}
+
+// Busy-state toggle for the Buzz it button, mirroring setPrivateChatSending.
+function setAppShareSending(sending) {
+  state.appShareSending = sending;
+  var root = elements.modalRoot;
+  var canQuery = root && typeof root.querySelector === 'function';
+  var confirmBtn = canQuery ? root.querySelector('[data-browser-modal-confirm]') : null;
+  if (sending) {
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.classList.add('is-busy');
+      confirmBtn.textContent = browserText('appShare.sending', 'Publishing...');
+    }
+    setAppShareStatus('sending',
+      browserText('appShare.sendingHint', 'Publishing buzz... please wait.'));
+  } else if (confirmBtn) {
+    confirmBtn.disabled = false;
+    confirmBtn.classList.remove('is-busy');
+    confirmBtn.textContent = browserText('appShare.buzzIt', 'Buzz it');
+  }
+}
+
+// Status note at the bottom of the share modal, mirroring setPrivateChatStatus.
+function setAppShareStatus(tone, message) {
+  var root = elements.modalRoot;
+  if (!root || typeof root.querySelector !== 'function') return;
+  var body = root.querySelector('.browser-modal-body');
+  if (!body) return;
+  var note = body.querySelector('[data-browser-app-share-status]');
+  if (!note && typeof document !== 'undefined' && document.createElement) {
+    note = document.createElement('p');
+    note.className = 'browser-app-share-status';
+    note.setAttribute('data-browser-app-share-status', '');
+    note.setAttribute('role', 'status');
+    note.setAttribute('aria-live', 'polite');
+    body.appendChild(note);
+  }
+  if (note) {
+    note.className = 'browser-app-share-status is-' + tone;
+    note.textContent = message;
+  }
+}
+
+function showAppShareBuzzSentModal(result) {
+  state.pendingAppShareBuzzPinId = textValue(result && result.pinId);
+  renderModal(
+    browserText('appShare.sentTitle', 'Buzz published'),
+    '<p>' + escapeHtml(browserText('appShare.sentBody', 'Your buzz has been published.')) + '</p>',
+    browserText('appShare.viewPost', 'View post'),
+    'app-share-view-post',
+    {
+      cancelLabel: browserText('modal.close', 'Close')
+    }
+  );
+}
+
+function openAppShareBuzzPost() {
+  var buzzPinId = textValue(state.pendingAppShareBuzzPinId);
+  closeModal();
+  var href = pinHref(buzzPinId);
+  if (href) return navigateTo(href);
   return Promise.resolve();
 }
 
@@ -3851,6 +4004,9 @@ function closeModal() {
   state.privateChatSending = false;
   state.pendingConversationHref = '';
   state.pendingServiceCall = null;
+  state.pendingAppShare = null;
+  state.appShareSending = false;
+  state.pendingAppShareBuzzPinId = '';
   if (elements.usingChip && typeof elements.usingChip.setAttribute === 'function') {
     elements.usingChip.setAttribute('aria-expanded', 'false');
   }
@@ -6019,6 +6175,15 @@ async function initialize() {
         openPendingConversation();
         return;
       }
+      if (action === 'app-share-buzz') {
+        var shareInput = elements.modalRoot.querySelector('[data-browser-app-share-message]');
+        confirmAppShareBuzz(shareInput ? shareInput.value : '');
+        return;
+      }
+      if (action === 'app-share-view-post') {
+        openAppShareBuzzPost();
+        return;
+      }
       if (action === 'service-call') {
         var task = elements.modalRoot.querySelector('[data-browser-service-task]');
         confirmServiceCall(task ? task.value : '');
@@ -6249,6 +6414,9 @@ globalThis.closeAppPanel = closeAppPanel;
 globalThis.toggleAppPanel = toggleAppPanel;
 globalThis.renderAppPanel = renderAppPanel;
 globalThis.handleAppPanelAction = handleAppPanelAction;
+globalThis.openMetaAppShareModal = openMetaAppShareModal;
+globalThis.confirmAppShareBuzz = confirmAppShareBuzz;
+globalThis.openAppShareBuzzPost = openAppShareBuzzPost;
 globalThis.openInspector = openInspector;
 globalThis.closeInspector = closeInspector;
 globalThis.renderInspector = renderInspector;

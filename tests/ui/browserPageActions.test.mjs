@@ -878,3 +878,70 @@ test('app panel view-pin navigates to the pin URI', async () => {
   assert.equal(nodes['[data-browser-app-panel]'].hidden, true);
   assert.equal(nodes['[data-browser-uri-input]'].value, `pin://${METAAPP_PIN_ID}`);
 });
+
+test('share modal shows web URL, metaapp URI, and editable default buzz text', () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+  const html = nodes['[data-browser-modal-root]'].innerHTML;
+  assert.match(html, /Share MetaApp/);
+  assert.match(html, new RegExp(`https://openagentinternet\\.org/browser/metaapp/${METAAPP_PIN_ID}`));
+  assert.match(html, new RegExp(`metaapp://${METAAPP_PIN_ID}`));
+  assert.match(html, /I found an interesting app &#39;Fun App&#39;/);
+  assert.match(html, /data-browser-app-share-message/);
+  assert.match(html, /Buzz it/);
+  assert.match(html, /data-browser-modal-action="app-share-buzz"/);
+});
+
+test('Buzz it posts a simplebuzz pin write through the actions endpoint', async () => {
+  const { context, nodes, requests } = createContext();
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+  await context.confirmAppShareBuzz('hello buzz');
+  assert.equal(requests.length, 1);
+  const body = requests[0].body;
+  assert.equal(body.kind, 'metaid-pin-write');
+  assert.equal(body.resourceUri, `metaapp://${METAAPP_PIN_ID}`);
+  assert.equal(body.payload.operation, 'create');
+  assert.equal(body.payload.path, '/protocols/simplebuzz');
+  assert.equal(body.payload.encryption, '0');
+  assert.equal(body.payload.version, '1.0.0');
+  assert.equal(body.payload.contentType, 'application/json;utf-8');
+  assert.equal(body.payload.payload.encoding, 'utf8');
+  assert.equal(body.payload.payload.value, JSON.stringify({ content: 'hello buzz' }));
+  assert.equal(body.payload.display.title, 'Share MetaApp');
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
+});
+
+test('Buzz it keeps the new buzz pin id for view-post', async () => {
+  const buzzPinId = `${'c'.repeat(64)}i0`;
+  const { context } = createContext({
+    actionResponse: {
+      ok: true,
+      data: { pinId: buzzPinId, txid: 'tx-buzz', operation: 'create', path: '/protocols/simplebuzz' },
+    },
+  });
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+  await context.confirmAppShareBuzz('hello buzz');
+  assert.equal(context.state.pendingAppShareBuzzPinId, buzzPinId);
+});
+
+test('Buzz it is gated in standalone mode', async () => {
+  const { context, nodes, requests } = createContext();
+  context.state.current = metaAppCurrent();
+  context.state.runtime = standaloneRuntime();
+  context.openMetaAppShareModal();
+  await context.confirmAppShareBuzz('hello buzz');
+  assert.equal(requests.length, 0);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /standalone-unsupported/);
+});
+
+test('Buzz it requires a message', async () => {
+  const { context, requests } = createContext();
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+  const result = await context.confirmAppShareBuzz('   ');
+  assert.equal(result, null);
+  assert.equal(requests.length, 0);
+});
