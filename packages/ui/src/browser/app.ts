@@ -1924,7 +1924,10 @@ function renderAppPanel() {
   var version = textValue(record.version);
   var updated = formatAppUpdatedAt(record.updatedAt);
   var actionsDisabled = pinId ? '' : ' disabled';
-  var metaLine = version ? 'v' + escapeHtml(version) : '';
+  var metaLine = '';
+  if (version) {
+    metaLine = version.charAt(0).toLowerCase() === 'v' ? escapeHtml(version) : 'v' + escapeHtml(version);
+  }
   if (updated) {
     metaLine += (metaLine ? ' · ' : '') + escapeHtml(browserText('appPanel.updated', 'Updated')) + ' ' + escapeHtml(updated);
   }
@@ -1950,7 +1953,7 @@ function renderAppPanel() {
     (pinId ? '' : '<p class="browser-app-panel-note">' + escapeHtml(browserText('appPanel.pinRequired', 'Actions require an on-chain pin for this MetaApp.')) + '</p>');
 }
 
-function handleAppPanelAction(action) {
+async function handleAppPanelAction(action) {
   closeAppPanel();
   if (action === 'share') {
     openMetaAppShareModal();

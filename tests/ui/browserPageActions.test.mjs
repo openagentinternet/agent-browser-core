@@ -852,6 +852,7 @@ test('app panel renders MetaApp metadata and actions', () => {
   assert.match(panel.innerHTML, /data-browser-app-panel-action="share"/);
   assert.match(panel.innerHTML, /data-browser-app-panel-action="remix"/);
   assert.match(panel.innerHTML, /data-browser-app-panel-action="view-pin"/);
+  assert.doesNotMatch(panel.innerHTML, /disabled/);
   assert.equal(nodes['[data-browser-address-icon]'].getAttribute('aria-expanded'), 'true');
   context.closeAppPanel();
   assert.equal(panel.hidden, true);
