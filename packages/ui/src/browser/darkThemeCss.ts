@@ -166,4 +166,8 @@ export const BROWSER_DARK_THEME_CSS = `
       html[data-browser-resolved-theme="dark"] .browser-template-option { background: #131d2e; }
       html[data-browser-resolved-theme="dark"] .browser-template-preview { border-color: #2b3850; background: #0f1828; }
       html[data-browser-resolved-theme="dark"] .browser-welcome-tile:hover { border-color: #4f6188; background: #1f3052; }
+      html[data-browser-resolved-theme="dark"] .browser-app-panel-icon { background: #1f3052; }
+      html[data-browser-resolved-theme="dark"] .browser-app-share-copy:hover { background: #1f3052; color: #c2d0e6; }
+      html[data-browser-resolved-theme="dark"] .browser-app-share-status.is-sending { color: #8fa1bd; }
+      html[data-browser-resolved-theme="dark"] .browser-app-share-status.is-error { color: #ff9a9a; }
 `;

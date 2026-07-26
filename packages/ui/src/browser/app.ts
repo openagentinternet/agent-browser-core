@@ -1908,6 +1908,64 @@ function toggleAppPanel() {
   }
 }
 
+// Renders the MetaApp info panel: identity header (icon, title, version,
+// last-updated date) plus the Share / Remix / View-pin actions. All actions
+// require the on-chain pin; preview MetaApps (no chain proof) get them
+// disabled with an explanatory note.
+function renderAppPanel() {
+  if (!elements.appPanel) return;
+  var record = currentMetaAppRecord();
+  if (!record) {
+    elements.appPanel.innerHTML = '';
+    return;
+  }
+  var pinId = currentMetaAppPinId();
+  var title = metaAppRecordTitle(record);
+  var version = textValue(record.version);
+  var updated = formatAppUpdatedAt(record.updatedAt);
+  var actionsDisabled = pinId ? '' : ' disabled';
+  var metaLine = version ? 'v' + escapeHtml(version) : '';
+  if (updated) {
+    metaLine += (metaLine ? ' · ' : '') + escapeHtml(browserText('appPanel.updated', 'Updated')) + ' ' + escapeHtml(updated);
+  }
+  elements.appPanel.innerHTML =
+    '<div class="browser-app-panel-head">' +
+      '<span class="browser-app-panel-icon">' + appIconHtml(record, 'browser-app-icon-image') + '</span>' +
+      '<div class="browser-app-panel-id">' +
+        '<span class="browser-app-panel-name">' + escapeHtml(title) + '</span>' +
+        '<span class="browser-app-panel-meta">' + (metaLine || escapeHtml(shortId(pinId) || 'MetaApp')) + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="browser-app-panel-menu" role="none">' +
+      '<button type="button" class="browser-app-panel-item" data-browser-app-panel-action="share"' + actionsDisabled + '>' +
+        iconHtml('share') + '<span>' + escapeHtml(browserText('appPanel.share', 'Share')) + '</span>' +
+      '</button>' +
+      '<button type="button" class="browser-app-panel-item" data-browser-app-panel-action="remix"' + actionsDisabled + '>' +
+        iconHtml('remix') + '<span>' + escapeHtml(browserText('appPanel.remix', 'Remix')) + '</span>' +
+      '</button>' +
+      '<button type="button" class="browser-app-panel-item" data-browser-app-panel-action="view-pin"' + actionsDisabled + '>' +
+        iconHtml('scroll') + '<span>' + escapeHtml(browserText('appPanel.viewPin', 'View pin')) + '</span>' +
+      '</button>' +
+    '</div>' +
+    (pinId ? '' : '<p class="browser-app-panel-note">' + escapeHtml(browserText('appPanel.pinRequired', 'Actions require an on-chain pin for this MetaApp.')) + '</p>');
+}
+
+function handleAppPanelAction(action) {
+  closeAppPanel();
+  if (action === 'share') {
+    openMetaAppShareModal();
+    return Promise.resolve();
+  }
+  if (action === 'remix') {
+    return requestMetaAppRemix();
+  }
+  if (action === 'view-pin') {
+    var href = pinHref(currentMetaAppPinId());
+    if (href) return navigateTo(href);
+  }
+  return Promise.resolve();
+}
+
 function renderSettingsTabs() {
   return '<div class="browser-settings-tabs" role="tablist">' + browserSettingsTabs.map(function (tab) {
     var tabId = textValue(tab.id);
@@ -6079,6 +6137,24 @@ async function initialize() {
     if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
     toggleOwnerPanel();
   });
+  if (elements.addressIcon) {
+    elements.addressIcon.addEventListener('click', function (event) {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      if (elements.addressIcon.disabled) return;
+      toggleAppPanel();
+    });
+  }
+  if (elements.appPanel) {
+    elements.appPanel.addEventListener('click', function (event) {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      var target = closestWithAttribute(event && event.target, 'data-browser-app-panel-action');
+      if (!target) return;
+      if (target.disabled) return;
+      handleAppPanelAction(target.getAttribute('data-browser-app-panel-action')).catch(function (error) {
+        setStatus('error', error && error.message ? error.message : 'App action failed.');
+      });
+    });
+  }
   if (elements.ownerPanel) {
     elements.ownerPanel.addEventListener('click', function (event) {
       if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
@@ -6108,6 +6184,7 @@ async function initialize() {
     if (state.menuOpen) closeBrowserMenu();
     if (state.ownerPanelOpen) closeOwnerPanel();
     if (state.actorPanelOpen) closeStandaloneActorPanel();
+    if (state.appPanelOpen) closeAppPanel();
   });
   if (elements.statusTxid) elements.statusTxid.addEventListener('click', openInspector);
 
@@ -6167,6 +6244,8 @@ globalThis.renderAddressIcon = renderAddressIcon;
 globalThis.openAppPanel = openAppPanel;
 globalThis.closeAppPanel = closeAppPanel;
 globalThis.toggleAppPanel = toggleAppPanel;
+globalThis.renderAppPanel = renderAppPanel;
+globalThis.handleAppPanelAction = handleAppPanelAction;
 globalThis.openInspector = openInspector;
 globalThis.closeInspector = closeInspector;
 globalThis.renderInspector = renderInspector;

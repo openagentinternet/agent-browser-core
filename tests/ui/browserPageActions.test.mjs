@@ -839,3 +839,41 @@ test('address icon restores the default glyph when leaving a MetaApp', () => {
   assert.equal(slot.getAttribute('aria-expanded'), '');
   assert.equal(slot.getAttribute('tabindex'), '-1');
 });
+
+test('app panel renders MetaApp metadata and actions', () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent();
+  context.openAppPanel();
+  const panel = nodes['[data-browser-app-panel]'];
+  assert.equal(panel.hidden, false);
+  assert.match(panel.innerHTML, /Fun App/);
+  assert.match(panel.innerHTML, /v1\.2\.0/);
+  assert.match(panel.innerHTML, /Updated 2025-06-15/);
+  assert.match(panel.innerHTML, /data-browser-app-panel-action="share"/);
+  assert.match(panel.innerHTML, /data-browser-app-panel-action="remix"/);
+  assert.match(panel.innerHTML, /data-browser-app-panel-action="view-pin"/);
+  assert.equal(nodes['[data-browser-address-icon]'].getAttribute('aria-expanded'), 'true');
+  context.closeAppPanel();
+  assert.equal(panel.hidden, true);
+  assert.equal(nodes['[data-browser-address-icon]'].getAttribute('aria-expanded'), 'false');
+});
+
+test('app panel disables actions when the MetaApp has no on-chain pin', () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent({ withProof: false });
+  context.openAppPanel();
+  const html = nodes['[data-browser-app-panel]'].innerHTML;
+  assert.match(html, /data-browser-app-panel-action="share" disabled/);
+  assert.match(html, /data-browser-app-panel-action="remix" disabled/);
+  assert.match(html, /data-browser-app-panel-action="view-pin" disabled/);
+  assert.match(html, /Actions require an on-chain pin/);
+});
+
+test('app panel view-pin navigates to the pin URI', async () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent();
+  context.openAppPanel();
+  await context.handleAppPanelAction('view-pin');
+  assert.equal(nodes['[data-browser-app-panel]'].hidden, true);
+  assert.equal(nodes['[data-browser-uri-input]'].value, `pin://${METAAPP_PIN_ID}`);
+});
