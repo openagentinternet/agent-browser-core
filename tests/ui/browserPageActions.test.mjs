@@ -824,3 +824,18 @@ test('address icon shows the MetaApp icon for MetaApp resources', () => {
   assert.equal(slot.getAttribute('title'), 'Fun App');
   assert.equal(slot.getAttribute('aria-haspopup'), 'dialog');
 });
+
+test('address icon restores the default glyph when leaving a MetaApp', () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent();
+  context.renderAddressIcon();
+  const slot = nodes['[data-browser-address-icon]'];
+  assert.equal(slot.disabled, false);
+  context.state.current = null;
+  context.renderAddressIcon();
+  assert.equal(slot.disabled, true);
+  assert.doesNotMatch(slot.innerHTML, /browser-app-icon-image/);
+  assert.equal(slot.getAttribute('aria-haspopup'), '');
+  assert.equal(slot.getAttribute('aria-expanded'), '');
+  assert.equal(slot.getAttribute('tabindex'), '-1');
+});

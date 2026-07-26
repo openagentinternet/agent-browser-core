@@ -1867,13 +1867,16 @@ function renderAddressIcon() {
     elements.addressIcon.innerHTML = ADDRESS_ICON_DEFAULT_HTML;
     elements.addressIcon.disabled = true;
     elements.addressIcon.classList.remove('has-app-icon');
+    elements.addressIcon.setAttribute('tabindex', '-1');
     elements.addressIcon.removeAttribute('aria-haspopup');
+    elements.addressIcon.removeAttribute('aria-expanded');
     elements.addressIcon.setAttribute('title', '');
     return;
   }
   elements.addressIcon.innerHTML = appIconHtml(record, 'browser-app-icon-image');
   elements.addressIcon.disabled = false;
   elements.addressIcon.classList.add('has-app-icon');
+  elements.addressIcon.removeAttribute('tabindex');
   elements.addressIcon.setAttribute('aria-haspopup', 'dialog');
   elements.addressIcon.setAttribute('aria-expanded', state.appPanelOpen ? 'true' : 'false');
   elements.addressIcon.setAttribute('title', metaAppRecordTitle(record));
