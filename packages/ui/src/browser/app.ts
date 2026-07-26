@@ -2131,6 +2131,42 @@ function openAppShareBuzzPost() {
   return Promise.resolve();
 }
 
+// Remix = host-driven re-editing of the current MetaApp. The browser only
+// bridges the intent (kind + pinId); the host owns the whole remix UX, so a
+// success result never navigates browser-side (the safe-href allowlist in
+// safeTrustedActionHref only covers /ui/bot and /ui/conversations anyway).
+async function requestMetaAppRemix() {
+  var pinId = currentMetaAppPinId();
+  if (!pinId) {
+    setStatus('error', 'MetaApp pin is missing.');
+    return null;
+  }
+  if (runtimeFeatures().remix !== true) {
+    openStandaloneUnsupportedModal();
+    return null;
+  }
+  try {
+    var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        resourceUri: currentResourceUri(),
+        kind: 'metaapp-remix',
+        payload: { pinId: pinId }
+      })
+    });
+    setStatus('remix-requested', '');
+    showToast(browserText('remix.requestSent', 'Remix request sent to the host.'));
+    return result;
+  } catch (err) {
+    var failMessage = textValue(err && err.message) ||
+      browserText('remix.failed', 'Remix request failed.');
+    showToast(failMessage);
+    setStatus('error', failMessage);
+    return null;
+  }
+}
+
 function renderSettingsTabs() {
   return '<div class="browser-settings-tabs" role="tablist">' + browserSettingsTabs.map(function (tab) {
     var tabId = textValue(tab.id);
@@ -6426,6 +6462,7 @@ globalThis.handleAppPanelAction = handleAppPanelAction;
 globalThis.openMetaAppShareModal = openMetaAppShareModal;
 globalThis.confirmAppShareBuzz = confirmAppShareBuzz;
 globalThis.openAppShareBuzzPost = openAppShareBuzzPost;
+globalThis.requestMetaAppRemix = requestMetaAppRemix;
 globalThis.openInspector = openInspector;
 globalThis.closeInspector = closeInspector;
 globalThis.renderInspector = renderInspector;

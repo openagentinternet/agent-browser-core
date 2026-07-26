@@ -961,3 +961,36 @@ test('Buzz it does not declare publication for waiting envelopes', async () => {
   assert.doesNotMatch(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
   assert.match(nodes['[data-browser-toast]'].textContent, /Confirm in wallet/);
 });
+
+test('Remix opens the unsupported modal when the host lacks the remix feature', async () => {
+  const { context, nodes, requests } = createContext();
+  context.state.current = metaAppCurrent();
+  await context.requestMetaAppRemix();
+  assert.equal(requests.length, 0);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /standalone-unsupported/);
+});
+
+test('Remix posts the metaapp-remix trusted action with the current pinId', async () => {
+  const { context, nodes, requests } = createContext();
+  context.state.current = metaAppCurrent();
+  context.state.runtime.features.remix = true;
+  await context.requestMetaAppRemix();
+  assert.equal(requests.length, 1);
+  const body = requests[0].body;
+  assert.equal(body.kind, 'metaapp-remix');
+  assert.equal(body.resourceUri, `metaapp://${METAAPP_PIN_ID}`);
+  assert.deepEqual(body.payload, { pinId: METAAPP_PIN_ID });
+  assert.match(nodes['[data-browser-toast]'].textContent, /Remix request sent to the host/);
+});
+
+test('Remix surfaces host failures as a toast', async () => {
+  const { context, nodes, requests } = createContext({
+    actionResponse: { ok: false, state: 'failed', code: 'remix_failed', message: 'remix broke' },
+  });
+  context.state.current = metaAppCurrent();
+  context.state.runtime.features.remix = true;
+  const result = await context.requestMetaAppRemix();
+  assert.equal(result, null);
+  assert.equal(requests.length, 1);
+  assert.match(nodes['[data-browser-toast]'].textContent, /remix broke/);
+});
