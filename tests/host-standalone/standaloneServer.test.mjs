@@ -296,6 +296,7 @@ test('memory standalone Browser host accepts connected wallet actor aliases', as
 
   const runtime = await host.getRuntime({ actorId });
   assert.equal(runtime.ok, true);
+  assert.equal(runtime.data.features.remix, false);
 
   const resolved = await host.resolveResource({
     actorId,
