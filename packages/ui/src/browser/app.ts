@@ -2004,10 +2004,17 @@ function openMetaAppShareModal() {
     '<div class="browser-app-share-rows">' +
       appShareRowHtml(webUrl) +
       appShareRowHtml(appUri) +
-    '</div>' +
-    '<textarea data-browser-app-share-message rows="3" placeholder="' + escapeHtml(browserText('appShare.messagePlaceholder', 'Say something about this app...')) + '">' + escapeHtml(defaultAppShareText(title, appUri)) + '</textarea>',
+      '<div class="browser-app-share-row browser-app-share-composer">' +
+        '<textarea data-browser-app-share-message rows="3" placeholder="' + escapeHtml(browserText('appShare.messagePlaceholder', 'Say something about this app...')) + '">' + escapeHtml(defaultAppShareText(title, appUri)) + '</textarea>' +
+        '<button type="button" class="browser-app-share-buzz" data-browser-modal-action="app-share-buzz">' + escapeHtml(browserText('appShare.buzzIt', 'Buzz it')) + '</button>' +
+      '</div>' +
+    '</div>',
     browserText('appShare.buzzIt', 'Buzz it'),
-    'app-share-buzz'
+    'app-share-buzz',
+    {
+      cancelLabel: browserText('modal.close', 'Close'),
+      hideConfirm: true
+    }
   );
 }
 
@@ -2074,7 +2081,7 @@ function setAppShareSending(sending) {
   state.appShareSending = sending;
   var root = elements.modalRoot;
   var canQuery = root && typeof root.querySelector === 'function';
-  var confirmBtn = canQuery ? root.querySelector('[data-browser-modal-confirm]') : null;
+  var confirmBtn = canQuery ? root.querySelector('[data-browser-app-share-buzz]') : null;
   if (sending) {
     if (confirmBtn) {
       confirmBtn.disabled = true;
@@ -4040,7 +4047,7 @@ function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
     '<footer class="browser-modal-footer">' +
       '<div class="browser-modal-footer-start">' + (modalOptions.secondaryButtonHtml || '') + '</div>' +
       '<div class="browser-modal-footer-end"><button type="button" data-browser-modal-close>' + escapeHtml(modalOptions.cancelLabel || browserText('modal.cancel', 'Cancel')) + '</button>' +
-      '<button type="button" data-browser-modal-confirm data-browser-modal-action="' + escapeHtml(confirmAction) + '">' + escapeHtml(confirmLabel) + '</button></div>' +
+      (modalOptions.hideConfirm ? '' : '<button type="button" data-browser-modal-confirm data-browser-modal-action="' + escapeHtml(confirmAction) + '">' + escapeHtml(confirmLabel) + '</button>') + '</div>' +
     '</footer></section>';
 }
 

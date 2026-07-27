@@ -890,7 +890,10 @@ test('share modal shows web URL, metaapp URI, and editable default buzz text', (
   assert.match(html, /I found an interesting app &#39;Fun App&#39;/);
   assert.match(html, /data-browser-app-share-message/);
   assert.match(html, /Buzz it/);
-  assert.match(html, /data-browser-modal-action="app-share-buzz"/);
+  assert.match(html, /browser-app-share-composer/);
+  assert.match(html, /class="browser-app-share-buzz" data-browser-modal-action="app-share-buzz"/);
+  assert.equal((html.match(/data-browser-copy-value/g) || []).length, 2);
+  assert.doesNotMatch(html, /data-browser-modal-confirm/);
 });
 
 test('Buzz it posts a simplebuzz pin write through the actions endpoint', async () => {
