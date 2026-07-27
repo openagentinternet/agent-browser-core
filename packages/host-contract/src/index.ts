@@ -95,6 +95,7 @@ export type BrowserTrustedActionKind =
   | 'view-messages'
   | 'open-conversation'
   | 'share-resource'
+  | 'metaapp-remix'
   | 'metaid-pin-write'
   | 'metafile-upload';
 
@@ -212,6 +213,8 @@ export interface BrowserRuntimeSnapshot {
     cacheManagement: boolean;
     templateSettings: boolean;
     walletLogin: boolean;
+    // Optional capability flag: hosts that can remix the current MetaApp set this true.
+    remix?: boolean;
   };
   labels: BrowserRuntimeLabels;
 }

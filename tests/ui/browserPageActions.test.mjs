@@ -68,6 +68,9 @@ function elements() {
     '[data-browser-inspector]': new FakeElement(),
     '[data-browser-owner-panel]': new FakeElement(),
     '[data-browser-modal-root]': new FakeElement(),
+    '[data-browser-address-icon]': new FakeElement(),
+    '[data-browser-app-panel]': new FakeElement(),
+    '[data-browser-toast]': new FakeElement(),
   };
 }
 
@@ -750,4 +753,257 @@ test('owner panel Send Message opens the unsupported modal in standalone', async
   assert.equal(requests.length, 0);
   assert.equal(nodes['[data-browser-modal-root]'].hidden, false);
   assert.match(nodes['[data-browser-modal-root]'].innerHTML, /standalone-unsupported/);
+});
+
+const METAAPP_PIN_ID = `${'a'.repeat(64)}i0`;
+const METAAPP_ICON_PIN_ID = `${'b'.repeat(64)}i0`;
+
+function metaAppCurrent({ withProof = true } = {}) {
+  const record = {
+    pinId: METAAPP_PIN_ID,
+    firstPinId: METAAPP_PIN_ID,
+    operation: 'create',
+    title: 'Fun App',
+    appName: 'Fun App',
+    icon: `metafile://${METAAPP_ICON_PIN_ID}`,
+    version: '1.2.0',
+    runtime: 'html',
+    indexFile: 'index.html',
+    code: '',
+    content: '',
+    contentType: 'application/zip',
+    codeType: 'zip',
+    tags: [],
+    ownerGlobalMetaId: 'idq1owner',
+    network: 'mvc',
+    updatedAt: 1750000000000,
+    source: 'test',
+  };
+  return {
+    uri: `metaapp://${METAAPP_PIN_ID}`,
+    normalizedUri: `metaapp://${METAAPP_PIN_ID}`,
+    resourceType: 'metaapp',
+    title: 'Fun App',
+    owner: { kind: 'metaapp-publisher', globalMetaId: 'idq1owner', name: 'Owner Bot', verificationState: 'partial' },
+    renderer: { type: 'html-iframe', contentType: 'text/html', data: { record } },
+    proof: withProof ? { pinId: METAAPP_PIN_ID, protocolPath: '/protocols/metaapp', verificationState: 'partial' } : undefined,
+    status: { state: 'resolved', verificationState: 'partial', message: '' },
+    source: { resolver: 'test' },
+    actions: [],
+  };
+}
+
+test('metaAppIconUrl resolves http, metafile, bare pinId, and rejects junk', () => {
+  const { context } = createContext();
+  assert.equal(context.metaAppIconUrl('https://cdn.example/icon.png'), 'https://cdn.example/icon.png');
+  const fromMetafile = context.metaAppIconUrl(`metafile://${METAAPP_ICON_PIN_ID}`);
+  assert.ok(fromMetafile.includes(`/api/v1/files/accelerate/content/${METAAPP_ICON_PIN_ID}`), fromMetafile);
+  const fromBarePin = context.metaAppIconUrl(METAAPP_ICON_PIN_ID);
+  assert.ok(fromBarePin.endsWith(`/content/${METAAPP_ICON_PIN_ID}`), fromBarePin);
+  assert.equal(context.metaAppIconUrl('javascript:alert(1)'), '');
+  assert.equal(context.metaAppIconUrl(''), '');
+});
+
+test('address icon stays the default link glyph for non-MetaApp resources', () => {
+  const { context, nodes } = createContext();
+  context.renderAddressIcon();
+  const slot = nodes['[data-browser-address-icon]'];
+  assert.equal(slot.disabled, true);
+  assert.doesNotMatch(slot.innerHTML, /browser-app-icon-image/);
+  assert.equal(slot.getAttribute('title'), '');
+});
+
+test('address icon shows the MetaApp icon for MetaApp resources', () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent();
+  context.renderAddressIcon();
+  const slot = nodes['[data-browser-address-icon]'];
+  assert.equal(slot.disabled, false);
+  assert.match(slot.innerHTML, /browser-app-icon-image/);
+  assert.match(slot.innerHTML, new RegExp(METAAPP_ICON_PIN_ID));
+  assert.equal(slot.getAttribute('title'), 'Fun App');
+  assert.equal(slot.getAttribute('aria-haspopup'), 'dialog');
+});
+
+test('address icon restores the default glyph when leaving a MetaApp', () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent();
+  context.renderAddressIcon();
+  const slot = nodes['[data-browser-address-icon]'];
+  assert.equal(slot.disabled, false);
+  context.state.current = null;
+  context.renderAddressIcon();
+  assert.equal(slot.disabled, true);
+  assert.doesNotMatch(slot.innerHTML, /browser-app-icon-image/);
+  assert.equal(slot.getAttribute('aria-haspopup'), '');
+  assert.equal(slot.getAttribute('aria-expanded'), '');
+  assert.equal(slot.getAttribute('tabindex'), '-1');
+});
+
+test('app panel renders MetaApp metadata and actions', () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent();
+  context.openAppPanel();
+  const panel = nodes['[data-browser-app-panel]'];
+  assert.equal(panel.hidden, false);
+  assert.match(panel.innerHTML, /Fun App/);
+  assert.match(panel.innerHTML, /v1\.2\.0/);
+  assert.match(panel.innerHTML, /Updated 2025-06-15/);
+  assert.match(panel.innerHTML, /data-browser-app-panel-action="share"/);
+  assert.match(panel.innerHTML, /data-browser-app-panel-action="remix"/);
+  assert.match(panel.innerHTML, /data-browser-app-panel-action="view-pin"/);
+  assert.doesNotMatch(panel.innerHTML, /disabled/);
+  assert.equal(nodes['[data-browser-address-icon]'].getAttribute('aria-expanded'), 'true');
+  context.closeAppPanel();
+  assert.equal(panel.hidden, true);
+  assert.equal(nodes['[data-browser-address-icon]'].getAttribute('aria-expanded'), 'false');
+});
+
+test('app panel disables actions when the MetaApp has no on-chain pin', () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent({ withProof: false });
+  context.openAppPanel();
+  const html = nodes['[data-browser-app-panel]'].innerHTML;
+  assert.match(html, /data-browser-app-panel-action="share" disabled/);
+  assert.match(html, /data-browser-app-panel-action="remix" disabled/);
+  assert.match(html, /data-browser-app-panel-action="view-pin" disabled/);
+  assert.match(html, /Actions require an on-chain pin/);
+});
+
+test('app panel view-pin navigates to the pin URI', async () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent();
+  context.openAppPanel();
+  await context.handleAppPanelAction('view-pin');
+  assert.equal(nodes['[data-browser-app-panel]'].hidden, true);
+  assert.equal(nodes['[data-browser-uri-input]'].value, `pin://${METAAPP_PIN_ID}`);
+});
+
+test('share modal shows web URL, metaapp URI, and editable default buzz text', () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+  const html = nodes['[data-browser-modal-root]'].innerHTML;
+  assert.match(html, /Share MetaApp/);
+  assert.match(html, new RegExp(`https://openagentinternet\\.org/browser/metaapp/${METAAPP_PIN_ID}`));
+  assert.match(html, new RegExp(`metaapp://${METAAPP_PIN_ID}`));
+  assert.match(html, /I found an interesting app &#39;Fun App&#39;/);
+  assert.match(html, /data-browser-app-share-message/);
+  assert.match(html, /Buzz it/);
+  assert.match(html, /data-browser-modal-action="app-share-buzz"/);
+});
+
+test('Buzz it posts a simplebuzz pin write through the actions endpoint', async () => {
+  const { context, nodes, requests } = createContext({
+    actionResponse: {
+      ok: true,
+      data: { pinId: `${'d'.repeat(64)}i0`, txid: 'tx-buzz', operation: 'create', path: '/protocols/simplebuzz' },
+    },
+  });
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+  await context.confirmAppShareBuzz('hello buzz');
+  assert.equal(requests.length, 1);
+  const body = requests[0].body;
+  assert.equal(body.kind, 'metaid-pin-write');
+  assert.equal(body.resourceUri, `metaapp://${METAAPP_PIN_ID}`);
+  assert.equal(body.payload.operation, 'create');
+  assert.equal(body.payload.path, '/protocols/simplebuzz');
+  assert.equal(body.payload.encryption, '0');
+  assert.equal(body.payload.version, '1.0.0');
+  assert.equal(body.payload.contentType, 'application/json;utf-8');
+  assert.equal(body.payload.payload.encoding, 'utf8');
+  assert.equal(body.payload.payload.value, JSON.stringify({ content: 'hello buzz' }));
+  assert.equal(body.payload.display.title, 'Share MetaApp');
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
+});
+
+test('Buzz it keeps the new buzz pin id for view-post', async () => {
+  const buzzPinId = `${'c'.repeat(64)}i0`;
+  const { context } = createContext({
+    actionResponse: {
+      ok: true,
+      data: { pinId: buzzPinId, txid: 'tx-buzz', operation: 'create', path: '/protocols/simplebuzz' },
+    },
+  });
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+  await context.confirmAppShareBuzz('hello buzz');
+  assert.equal(context.state.pendingAppShareBuzzPinId, buzzPinId);
+});
+
+test('Buzz it is gated in standalone mode', async () => {
+  const { context, nodes, requests } = createContext();
+  context.state.current = metaAppCurrent();
+  context.state.runtime = standaloneRuntime();
+  context.openMetaAppShareModal();
+  await context.confirmAppShareBuzz('hello buzz');
+  assert.equal(requests.length, 0);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /standalone-unsupported/);
+});
+
+test('Buzz it requires a message', async () => {
+  const { context, requests } = createContext();
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+  const result = await context.confirmAppShareBuzz('   ');
+  assert.equal(result, null);
+  assert.equal(requests.length, 0);
+});
+
+test('Buzz it does not declare publication for waiting envelopes', async () => {
+  const { context, nodes } = createContext({
+    actionResponse: { ok: false, state: 'manual_action_required', code: 'wallet_confirm', message: 'Confirm in wallet' },
+  });
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+  await context.confirmAppShareBuzz('hello buzz');
+  assert.doesNotMatch(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
+  assert.match(nodes['[data-browser-toast]'].textContent, /Confirm in wallet/);
+});
+
+test('Remix opens the unsupported modal when the host lacks the remix feature', async () => {
+  const { context, nodes, requests } = createContext();
+  context.state.current = metaAppCurrent();
+  await context.requestMetaAppRemix();
+  assert.equal(requests.length, 0);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /standalone-unsupported/);
+});
+
+test('Remix posts the metaapp-remix trusted action with the current pinId', async () => {
+  const { context, nodes, requests } = createContext();
+  context.state.current = metaAppCurrent();
+  context.state.runtime.features.remix = true;
+  await context.requestMetaAppRemix();
+  assert.equal(requests.length, 1);
+  const body = requests[0].body;
+  assert.equal(body.kind, 'metaapp-remix');
+  assert.equal(body.resourceUri, `metaapp://${METAAPP_PIN_ID}`);
+  assert.deepEqual(body.payload, { pinId: METAAPP_PIN_ID });
+  assert.match(nodes['[data-browser-toast]'].textContent, /Remix request sent to the host/);
+});
+
+test('Remix surfaces host failures as a toast', async () => {
+  const { context, nodes, requests } = createContext({
+    actionResponse: { ok: false, state: 'failed', code: 'remix_failed', message: 'remix broke' },
+  });
+  context.state.current = metaAppCurrent();
+  context.state.runtime.features.remix = true;
+  const result = await context.requestMetaAppRemix();
+  assert.equal(result, null);
+  assert.equal(requests.length, 1);
+  assert.match(nodes['[data-browser-toast]'].textContent, /remix broke/);
+});
+
+test('renderAddressIcon re-renders an open app panel for the new MetaApp', () => {
+  const { context, nodes } = createContext();
+  context.state.current = metaAppCurrent();
+  context.openAppPanel();
+  assert.match(nodes['[data-browser-app-panel]'].innerHTML, /Fun App/);
+  const other = metaAppCurrent();
+  other.title = 'Other App';
+  other.renderer.data.record.title = 'Other App';
+  context.state.current = other;
+  context.renderAddressIcon();
+  assert.match(nodes['[data-browser-app-panel]'].innerHTML, /Other App/);
 });

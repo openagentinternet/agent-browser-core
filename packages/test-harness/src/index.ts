@@ -32,6 +32,7 @@ const TRUSTED_ACTION_KINDS = [
   'view-messages',
   'open-conversation',
   'share-resource',
+  'metaapp-remix',
   'metaid-pin-write',
   'metafile-upload',
 ];

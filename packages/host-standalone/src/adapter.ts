@@ -539,6 +539,7 @@ export function createStandaloneBrowserHostAdapter(
         cacheManagement: true,
         templateSettings: true,
         walletLogin: true,
+        remix: false,
       },
       labels: {
         actorChip: 'Wallet',

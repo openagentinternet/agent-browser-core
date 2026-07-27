@@ -67,9 +67,12 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
             </button>
           </nav>
           <form class="browser-address-form" data-browser-address-form>
-            <span class="browser-address-icon" aria-hidden="true">
-              <svg viewBox="0 0 24 24" focusable="false"><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"></path></svg>
-            </span>
+            <div class="browser-address-icon-wrap">
+              <button type="button" class="browser-address-icon" data-browser-address-icon disabled tabindex="-1" title="">
+                <svg viewBox="0 0 24 24" focusable="false"><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"></path></svg>
+              </button>
+              <div class="browser-app-panel" data-browser-app-panel role="dialog" hidden></div>
+            </div>
             <input data-browser-uri-input aria-label="Agent Internet URI" title="Search or enter address" placeholder="metaid://idq1example" />
             <button type="submit" class="browser-address-submit" aria-label="Visit URI" title="Go">
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M5 12h14"></path><path d="M13 6l6 6-6 6"></path></svg>
@@ -139,6 +142,9 @@ var OFFICIAL_RECOMMENDATIONS = [
   { uri: 'metaapp://765570486edfc94bb0b393bfb8c48d100fb84be9fcf2b9b0b39df68e997135c1i0', title: 'A/I YellowPaper', kind: 'official' },
   { uri: 'metaid://idq1skptl242lfuuqq8f0z9mhu88tgj0e0kvlqd6vk', title: 'Agent_Internet', kind: 'official' }
 ];
+// Public web gateway used when sharing a MetaApp with web2 users. Matches the
+// standalone client router shape /browser/metaapp/<pinId> (app.ts browserUriFromPath).
+var METAAPP_SHARE_WEB_BASE_URL = 'https://openagentinternet.org/browser/metaapp/';
 var browserEndpoints = {
   runtime: '/api/browser/runtime',
   resolve: '/api/browser/resolve',
@@ -175,6 +181,10 @@ var state = {
   menuOpen: false,
   ownerPanelOpen: false,
   actorPanelOpen: false,
+  appPanelOpen: false,
+  pendingAppShare: null,
+  appShareSending: false,
+  pendingAppShareBuzzPinId: '',
   settingsTab: 'baseUrls',
   settingsData: null,
   cacheData: null,
@@ -562,6 +572,7 @@ function syncToolbarForActiveTab() {
   renderBookmarkStar();
   // The reload button's spinning state belongs to the active tab.
   syncLoadingButton();
+  renderAddressIcon();
 }
 
 function textValue(value) {
@@ -1428,6 +1439,9 @@ function iconHtml(name) {
     layout: '<rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="M4 10h16M9 10v9"></path>',
     info: '<circle cx="12" cy="12" r="9"></circle><path d="M12 11v6"></path><circle class="browser-info-dot" cx="12" cy="7.5" r="1.1"></circle>',
     link: '<path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"></path>',
+    share: '<circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="M8.59 13.51L15.42 17.49M15.41 6.51L8.59 10.49"></path>',
+    remix: '<circle cx="12" cy="18" r="3"></circle><circle cx="6" cy="6" r="3"></circle><circle cx="18" cy="6" r="3"></circle><path d="M18 9v2c0 .6-.5 1-1 1H7c-.6 0-1-.4-1-1V9"></path><path d="M12 12v3"></path>',
+    scroll: '<path d="M19 17V5a2 2 0 0 0-2-2H4"></path><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2a1 1 0 0 0 1 1h3"></path>',
     message: '<path d="M5 6h14v9H8l-3 3V6z"></path>',
     database: '<ellipse cx="12" cy="5" rx="7" ry="3"></ellipse><path d="M5 5v6c0 1.7 3.1 3 7 3s7-1.3 7-3V5"></path><path d="M5 11v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"></path>',
     download: '<path d="M12 3v12"></path><path d="M8 11l4 4 4-4"></path><path d="M2 17v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2"></path>',
@@ -1496,6 +1510,8 @@ function bindElements() {
     drawerToggle: document.querySelector('[data-browser-drawer-toggle]'),
     resourceChip: document.querySelector('[data-browser-resource-chip]'),
     ownerPanel: document.querySelector('[data-browser-owner-panel]'),
+    addressIcon: document.querySelector('[data-browser-address-icon]'),
+    appPanel: document.querySelector('[data-browser-app-panel]'),
     usingChip: document.querySelector('[data-browser-using-selector]'),
     actorPanel: document.querySelector('[data-browser-actor-panel]'),
     menuTrigger: document.querySelector('[data-browser-menu-trigger]'),
@@ -1798,6 +1814,358 @@ function formatBytes(value) {
 function currentMetaAppPinId() {
   if (!state.current || state.current.resourceType !== 'metaapp') return '';
   return textValue(state.current.proof && state.current.proof.pinId);
+}
+
+// Returns the embedded MetaApp gallery record for the current resource, or null
+// when the current resource is not a MetaApp. Preview resources (preview-metaapp://)
+// also carry a record but no chain proof; callers gate pin actions separately.
+function currentMetaAppRecord() {
+  if (!state.current || state.current.resourceType !== 'metaapp') return null;
+  var data = objectValue(state.current.renderer && state.current.renderer.data);
+  var record = objectValue(data.record);
+  return Object.keys(record).length ? record : null;
+}
+
+function metaAppRecordTitle(record) {
+  return textValue(record && record.title) ||
+    textValue(record && record.appName) ||
+    textValue(state.current && state.current.title) ||
+    'MetaApp';
+}
+
+// The chain icon field is free-form: http(s)/data/blob URL, metafile:// URI, or a
+// bare metafile pinId. Normalize to a fetchable URL; empty when unusable.
+function metaAppIconUrl(icon) {
+  var raw = textValue(icon);
+  if (!raw) return '';
+  if (raw.toLowerCase().indexOf('metafile://') === 0) return buildMetafileDownloadHref(raw);
+  if (isBrowserPinId(raw)) return buildMetafileContentHref(raw);
+  return safeUrl(raw);
+}
+
+function appIconHtml(record, className) {
+  var url = metaAppIconUrl(record && record.icon);
+  var classValue = className || 'browser-app-icon-image';
+  if (url) {
+    return '<img class="' + classValue + '" src="' + escapeHtml(url) + '" alt="" />';
+  }
+  return '<span class="browser-app-icon-fallback" aria-hidden="true">' + iconHtml('bot') + '</span>';
+}
+
+function formatAppUpdatedAt(value) {
+  var timestamp = typeof value === 'number' && Number.isFinite(value) ? value : 0;
+  if (!timestamp) return '';
+  var date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
+var ADDRESS_ICON_DEFAULT_HTML = iconHtml('link');
+
+// Keeps the address-bar leading icon in sync with the active tab: the default
+// link glyph for ordinary resources, the MetaApp's own icon (favicon-style,
+// clickable) for MetaApp resources.
+function renderAddressIcon() {
+  if (!elements.addressIcon) return;
+  var record = currentMetaAppRecord();
+  if (!record) {
+    closeAppPanel();
+    elements.addressIcon.innerHTML = ADDRESS_ICON_DEFAULT_HTML;
+    elements.addressIcon.disabled = true;
+    elements.addressIcon.classList.remove('has-app-icon');
+    elements.addressIcon.setAttribute('tabindex', '-1');
+    elements.addressIcon.removeAttribute('aria-haspopup');
+    elements.addressIcon.removeAttribute('aria-expanded');
+    elements.addressIcon.setAttribute('title', '');
+    return;
+  }
+  elements.addressIcon.innerHTML = appIconHtml(record, 'browser-app-icon-image');
+  elements.addressIcon.disabled = false;
+  elements.addressIcon.classList.add('has-app-icon');
+  elements.addressIcon.removeAttribute('tabindex');
+  elements.addressIcon.setAttribute('aria-haspopup', 'dialog');
+  elements.addressIcon.setAttribute('aria-expanded', state.appPanelOpen ? 'true' : 'false');
+  elements.addressIcon.setAttribute('title', metaAppRecordTitle(record));
+  if (state.appPanelOpen) renderAppPanel();
+}
+
+function closeAppPanel() {
+  state.appPanelOpen = false;
+  if (elements.appPanel) elements.appPanel.hidden = true;
+  if (elements.addressIcon && typeof elements.addressIcon.setAttribute === 'function') {
+    elements.addressIcon.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function openAppPanel() {
+  if (!elements.appPanel || !currentMetaAppRecord()) return;
+  state.appPanelOpen = true;
+  renderAppPanel();
+  elements.appPanel.hidden = false;
+  if (elements.addressIcon && typeof elements.addressIcon.setAttribute === 'function') {
+    elements.addressIcon.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function toggleAppPanel() {
+  if (state.appPanelOpen) {
+    closeAppPanel();
+  } else {
+    openAppPanel();
+  }
+}
+
+// Renders the MetaApp info panel: identity header (icon, title, version,
+// last-updated date) plus the Share / Remix / View-pin actions. All actions
+// require the on-chain pin; preview MetaApps (no chain proof) get them
+// disabled with an explanatory note.
+function renderAppPanel() {
+  if (!elements.appPanel) return;
+  var record = currentMetaAppRecord();
+  if (!record) {
+    elements.appPanel.innerHTML = '';
+    return;
+  }
+  var pinId = currentMetaAppPinId();
+  var title = metaAppRecordTitle(record);
+  var version = textValue(record.version);
+  var updated = formatAppUpdatedAt(record.updatedAt);
+  var actionsDisabled = pinId ? '' : ' disabled';
+  var metaLine = '';
+  if (version) {
+    metaLine = version.charAt(0).toLowerCase() === 'v' ? escapeHtml(version) : 'v' + escapeHtml(version);
+  }
+  if (updated) {
+    metaLine += (metaLine ? ' · ' : '') + escapeHtml(browserText('appPanel.updated', 'Updated')) + ' ' + escapeHtml(updated);
+  }
+  elements.appPanel.innerHTML =
+    '<div class="browser-app-panel-head">' +
+      '<span class="browser-app-panel-icon">' + appIconHtml(record, 'browser-app-icon-image') + '</span>' +
+      '<div class="browser-app-panel-id">' +
+        '<span class="browser-app-panel-name">' + escapeHtml(title) + '</span>' +
+        '<span class="browser-app-panel-meta">' + (metaLine || escapeHtml(shortId(pinId) || 'MetaApp')) + '</span>' +
+      '</div>' +
+    '</div>' +
+    '<div class="browser-app-panel-menu" role="none">' +
+      '<button type="button" class="browser-app-panel-item" data-browser-app-panel-action="share"' + actionsDisabled + '>' +
+        iconHtml('share') + '<span>' + escapeHtml(browserText('appPanel.share', 'Share')) + '</span>' +
+      '</button>' +
+      '<button type="button" class="browser-app-panel-item" data-browser-app-panel-action="remix"' + actionsDisabled + '>' +
+        iconHtml('remix') + '<span>' + escapeHtml(browserText('appPanel.remix', 'Remix')) + '</span>' +
+      '</button>' +
+      '<button type="button" class="browser-app-panel-item" data-browser-app-panel-action="view-pin"' + actionsDisabled + '>' +
+        iconHtml('scroll') + '<span>' + escapeHtml(browserText('appPanel.viewPin', 'View pin')) + '</span>' +
+      '</button>' +
+    '</div>' +
+    (pinId ? '' : '<p class="browser-app-panel-note">' + escapeHtml(browserText('appPanel.pinRequired', 'Actions require an on-chain pin for this MetaApp.')) + '</p>');
+}
+
+async function handleAppPanelAction(action) {
+  closeAppPanel();
+  if (action === 'share') {
+    openMetaAppShareModal();
+    return Promise.resolve();
+  }
+  if (action === 'remix') {
+    return requestMetaAppRemix();
+  }
+  if (action === 'view-pin') {
+    var href = pinHref(currentMetaAppPinId());
+    if (href) return navigateTo(href);
+  }
+  return Promise.resolve();
+}
+
+function defaultAppShareText(title, uri) {
+  return "I found an interesting app '" + title + "' — worth sharing: " + uri;
+}
+
+function appShareRowHtml(value) {
+  var copyLabel = browserText('appShare.copy', 'Copy');
+  return '<div class="browser-app-share-row">' +
+    '<code class="browser-app-share-value">' + escapeHtml(value) + '</code>' +
+    '<button type="button" class="browser-app-share-copy" data-browser-copy-value="' + escapeHtml(value) + '" aria-label="' + escapeHtml(copyLabel) + '" title="' + escapeHtml(copyLabel) + '">' + iconHtml('copy') + '</button>' +
+  '</div>';
+}
+
+function openMetaAppShareModal() {
+  var record = currentMetaAppRecord();
+  var pinId = currentMetaAppPinId();
+  if (!record || !pinId) {
+    setStatus('error', 'MetaApp pin is missing.');
+    return;
+  }
+  var title = metaAppRecordTitle(record);
+  var appUri = metaAppHref(pinId);
+  var webUrl = METAAPP_SHARE_WEB_BASE_URL + encodeURIComponent(pinId);
+  state.pendingAppShare = { pinId: pinId, uri: appUri, title: title };
+  renderModal(
+    browserText('appShare.title', 'Share MetaApp'),
+    '<div class="browser-app-share-rows">' +
+      appShareRowHtml(webUrl) +
+      appShareRowHtml(appUri) +
+    '</div>' +
+    '<textarea data-browser-app-share-message rows="3" placeholder="' + escapeHtml(browserText('appShare.messagePlaceholder', 'Say something about this app...')) + '">' + escapeHtml(defaultAppShareText(title, appUri)) + '</textarea>',
+    browserText('appShare.buzzIt', 'Buzz it'),
+    'app-share-buzz'
+  );
+}
+
+async function confirmAppShareBuzz(messageText) {
+  var pending = state.pendingAppShare;
+  var content = textValue(messageText);
+  if (!pending || !content) {
+    setStatus('error', 'Message is required.');
+    return null;
+  }
+  if (isStandaloneHostRuntime()) {
+    openStandaloneUnsupportedModal();
+    return null;
+  }
+  // Debounce: the on-chain publish can be slow, so ignore repeat clicks while a
+  // publish is in flight (the Buzz it button is also disabled).
+  if (state.appShareSending) {
+    return null;
+  }
+  setAppShareSending(true);
+  try {
+    var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        resourceUri: pending.uri,
+        kind: 'metaid-pin-write',
+        payload: {
+          operation: 'create',
+          path: '/protocols/simplebuzz',
+          encryption: '0',
+          version: '1.0.0',
+          contentType: 'application/json;utf-8',
+          payload: { encoding: 'utf8', value: JSON.stringify({ content: content }) },
+          display: { title: 'Share MetaApp', summary: content.slice(0, 80) }
+        }
+      })
+    });
+    state.appShareSending = false;
+    setStatus('sent', '');
+    if (textValue(result && result.pinId)) {
+      showAppShareBuzzSentModal(result);
+    } else {
+      // waiting/manual_action_required envelopes carry no pinId: the host owns
+      // the follow-up (e.g. wallet confirmation), so surface its message
+      // instead of declaring the buzz published.
+      showToast(textValue(result && result.message) ||
+        browserText('appShare.submitted', 'Buzz submitted. The host may require further action.'));
+      closeModal();
+    }
+    return result;
+  } catch (err) {
+    setAppShareSending(false);
+    var failMessage = textValue(err && err.message) ||
+      browserText('appShare.sendFailed', 'Failed to publish the buzz. Please try again.');
+    setAppShareStatus('error', failMessage);
+    setStatus('error', failMessage);
+    return null;
+  }
+}
+
+// Busy-state toggle for the Buzz it button, mirroring setPrivateChatSending.
+function setAppShareSending(sending) {
+  state.appShareSending = sending;
+  var root = elements.modalRoot;
+  var canQuery = root && typeof root.querySelector === 'function';
+  var confirmBtn = canQuery ? root.querySelector('[data-browser-modal-confirm]') : null;
+  if (sending) {
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.classList.add('is-busy');
+      confirmBtn.textContent = browserText('appShare.sending', 'Publishing...');
+    }
+    setAppShareStatus('sending',
+      browserText('appShare.sendingHint', 'Publishing buzz... please wait.'));
+  } else if (confirmBtn) {
+    confirmBtn.disabled = false;
+    confirmBtn.classList.remove('is-busy');
+    confirmBtn.textContent = browserText('appShare.buzzIt', 'Buzz it');
+  }
+}
+
+// Status note at the bottom of the share modal, mirroring setPrivateChatStatus.
+function setAppShareStatus(tone, message) {
+  var root = elements.modalRoot;
+  if (!root || typeof root.querySelector !== 'function') return;
+  var body = root.querySelector('.browser-modal-body');
+  if (!body) return;
+  var note = body.querySelector('[data-browser-app-share-status]');
+  if (!note && typeof document !== 'undefined' && document.createElement) {
+    note = document.createElement('p');
+    note.className = 'browser-app-share-status';
+    note.setAttribute('data-browser-app-share-status', '');
+    note.setAttribute('role', 'status');
+    note.setAttribute('aria-live', 'polite');
+    body.appendChild(note);
+  }
+  if (note) {
+    note.className = 'browser-app-share-status is-' + tone;
+    note.textContent = message;
+  }
+}
+
+function showAppShareBuzzSentModal(result) {
+  state.pendingAppShareBuzzPinId = textValue(result && result.pinId);
+  renderModal(
+    browserText('appShare.sentTitle', 'Buzz published'),
+    '<p>' + escapeHtml(browserText('appShare.sentBody', 'Your buzz has been published.')) + '</p>',
+    browserText('appShare.viewPost', 'View post'),
+    'app-share-view-post',
+    {
+      cancelLabel: browserText('modal.close', 'Close')
+    }
+  );
+}
+
+function openAppShareBuzzPost() {
+  var buzzPinId = textValue(state.pendingAppShareBuzzPinId);
+  closeModal();
+  var href = pinHref(buzzPinId);
+  if (href) return navigateTo(href);
+  return Promise.resolve();
+}
+
+// Remix = host-driven re-editing of the current MetaApp. The browser only
+// bridges the intent (kind + pinId); the host owns the whole remix UX, so a
+// success result never navigates browser-side (the safe-href allowlist in
+// safeTrustedActionHref only covers /ui/bot and /ui/conversations anyway).
+async function requestMetaAppRemix() {
+  var pinId = currentMetaAppPinId();
+  if (!pinId) {
+    setStatus('error', 'MetaApp pin is missing.');
+    return null;
+  }
+  if (runtimeFeatures().remix !== true) {
+    openStandaloneUnsupportedModal();
+    return null;
+  }
+  try {
+    var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        resourceUri: currentResourceUri(),
+        kind: 'metaapp-remix',
+        payload: { pinId: pinId }
+      })
+    });
+    setStatus('remix-requested', '');
+    showToast(browserText('remix.requestSent', 'Remix request sent to the host.'));
+    return result;
+  } catch (err) {
+    var failMessage = textValue(err && err.message) ||
+      browserText('remix.failed', 'Remix request failed.');
+    showToast(failMessage);
+    setStatus('error', failMessage);
+    return null;
+  }
 }
 
 function renderSettingsTabs() {
@@ -2639,6 +3007,7 @@ function renderCurrent() {
   var paintedTab = activeTab();
   if (paintedTab) paintedTab.painted = true;
   renderBookmarkStar();
+  renderAddressIcon();
   syncPanelState();
 }
 
@@ -3681,6 +4050,9 @@ function closeModal() {
   state.privateChatSending = false;
   state.pendingConversationHref = '';
   state.pendingServiceCall = null;
+  state.pendingAppShare = null;
+  state.appShareSending = false;
+  state.pendingAppShareBuzzPinId = '';
   if (elements.usingChip && typeof elements.usingChip.setAttribute === 'function') {
     elements.usingChip.setAttribute('aria-expanded', 'false');
   }
@@ -5619,6 +5991,7 @@ async function resolveUri(uri, options) {
     applyActiveTabState();
     setStatus('error', errorMessage);
     syncBrowserPageTitle('Resolve failed');
+    renderAddressIcon();
     var errorPane = activeViewportPane();
     if (errorPane) {
       errorPane.innerHTML = '<section class="browser-empty-state"><h2>Resolve failed</h2><p>' + escapeHtml(state.error) + '</p></section>';
@@ -5849,6 +6222,15 @@ async function initialize() {
         openPendingConversation();
         return;
       }
+      if (action === 'app-share-buzz') {
+        var shareInput = elements.modalRoot.querySelector('[data-browser-app-share-message]');
+        confirmAppShareBuzz(shareInput ? shareInput.value : '');
+        return;
+      }
+      if (action === 'app-share-view-post') {
+        openAppShareBuzzPost();
+        return;
+      }
       if (action === 'service-call') {
         var task = elements.modalRoot.querySelector('[data-browser-service-task]');
         confirmServiceCall(task ? task.value : '');
@@ -5970,6 +6352,24 @@ async function initialize() {
     if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
     toggleOwnerPanel();
   });
+  if (elements.addressIcon) {
+    elements.addressIcon.addEventListener('click', function (event) {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      if (elements.addressIcon.disabled) return;
+      toggleAppPanel();
+    });
+  }
+  if (elements.appPanel) {
+    elements.appPanel.addEventListener('click', function (event) {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      var target = closestWithAttribute(event && event.target, 'data-browser-app-panel-action');
+      if (!target) return;
+      if (target.disabled) return;
+      handleAppPanelAction(target.getAttribute('data-browser-app-panel-action')).catch(function (error) {
+        setStatus('error', error && error.message ? error.message : 'App action failed.');
+      });
+    });
+  }
   if (elements.ownerPanel) {
     elements.ownerPanel.addEventListener('click', function (event) {
       if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
@@ -5999,6 +6399,7 @@ async function initialize() {
     if (state.menuOpen) closeBrowserMenu();
     if (state.ownerPanelOpen) closeOwnerPanel();
     if (state.actorPanelOpen) closeStandaloneActorPanel();
+    if (state.appPanelOpen) closeAppPanel();
   });
   if (elements.statusTxid) elements.statusTxid.addEventListener('click', openInspector);
 
@@ -6053,6 +6454,17 @@ globalThis.closeDrawer = closeDrawer;
 globalThis.openCreatorFromChip = openCreatorFromChip;
 globalThis.toggleOwnerPanel = toggleOwnerPanel;
 globalThis.handleOwnerPanelAction = handleOwnerPanelAction;
+globalThis.metaAppIconUrl = metaAppIconUrl;
+globalThis.renderAddressIcon = renderAddressIcon;
+globalThis.openAppPanel = openAppPanel;
+globalThis.closeAppPanel = closeAppPanel;
+globalThis.toggleAppPanel = toggleAppPanel;
+globalThis.renderAppPanel = renderAppPanel;
+globalThis.handleAppPanelAction = handleAppPanelAction;
+globalThis.openMetaAppShareModal = openMetaAppShareModal;
+globalThis.confirmAppShareBuzz = confirmAppShareBuzz;
+globalThis.openAppShareBuzzPost = openAppShareBuzzPost;
+globalThis.requestMetaAppRemix = requestMetaAppRemix;
 globalThis.openInspector = openInspector;
 globalThis.closeInspector = closeInspector;
 globalThis.renderInspector = renderInspector;
