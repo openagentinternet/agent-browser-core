@@ -1,13 +1,13 @@
 {
-  "version": "0.4.1",
+  "version": "0.4.2",
   "packages": {
-    "@openagentinternet/agent-browser-host-contract": "0.4.1",
-    "@openagentinternet/agent-browser-core": "0.4.1",
-    "@openagentinternet/agent-browser-renderers": "0.4.1",
-    "@openagentinternet/agent-browser-name-resolvers": "0.4.1",
-    "@openagentinternet/agent-browser-ui": "0.4.1",
-    "@openagentinternet/agent-browser-host-standalone": "0.4.1",
-    "@openagentinternet/agent-browser-test-harness": "0.4.1"
+    "@openagentinternet/agent-browser-host-contract": "0.4.2",
+    "@openagentinternet/agent-browser-core": "0.4.2",
+    "@openagentinternet/agent-browser-renderers": "0.4.2",
+    "@openagentinternet/agent-browser-name-resolvers": "0.4.2",
+    "@openagentinternet/agent-browser-ui": "0.4.2",
+    "@openagentinternet/agent-browser-host-standalone": "0.4.2",
+    "@openagentinternet/agent-browser-test-harness": "0.4.2"
   },
   "hosts": {
     "standalone": "development-preview",
