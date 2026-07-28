@@ -245,12 +245,17 @@ function settingsData() {
 function createBrowserContext(options = {}) {
   const elements = createElements();
   const fetchCalls = [];
+  const hostMessages = [];
+  const parentWindow = { postMessage: (message) => hostMessages.push(message) };
   const runtimeResponse = options.runtimeResponse ?? runtimePayload();
   const resolveResponse = options.resolveResponse ?? ((uri) => resolvedBot(uri));
   const data = settingsData();
   const storage = options.storage ?? createMemoryStorage();
   if (options.seedBookmarks) {
     storage.setItem('agent-browser:bookmarks', JSON.stringify(options.seedBookmarks));
+  }
+  if (options.seedHistory) {
+    storage.setItem('agent-browser:history', JSON.stringify(options.seedHistory));
   }
   const context = {
     console,
@@ -268,6 +273,7 @@ function createBrowserContext(options = {}) {
       location: { pathname: options.pathname || '/ui/browser', search: options.search || '' },
       history: { replaceState() {} },
       localStorage: storage,
+      parent: parentWindow,
     },
     document: {
       readyState: 'complete',
@@ -296,7 +302,7 @@ function createBrowserContext(options = {}) {
     },
   };
   vm.runInNewContext(buildBrowserPageDefinition().script, context);
-  return { context, elements, fetchCalls, storage };
+  return { context, elements, fetchCalls, storage, hostMessages, parentWindow };
 }
 
 function makeClickTarget(attrName, attrValue) {
@@ -427,4 +433,132 @@ test('loadBookmarks restores saved bookmarks from localStorage on startup', asyn
   assert.equal(context.state.bookmarks.length, 1);
   assert.equal(context.state.bookmarks[0].uri, 'metaid://idq1saved');
   assert.equal(context.state.bookmarks[0].title, 'Saved Bot');
+});
+
+test('AgentBrowserLibrary returns rich cloned snapshots for bookmarks and recent activity', () => {
+  const seededBookmarks = [
+    { uri: 'metaapp://app-pin', title: 'Saved App', resourceType: 'metaapp', createdAt: 100 },
+    { uri: 'metaid://idq1saved', title: 'Saved Bot', resourceType: 'bot' },
+  ];
+  const seededHistory = [
+    { uri: 'metaid://idq1older', title: 'Older Bot', resourceType: 'bot', firstVisitedAt: 10, lastVisitedAt: 20, visitCount: 2 },
+    { uri: 'metaapp://app-pin', title: 'Saved App', resourceType: 'metaapp', firstVisitedAt: 30, lastVisitedAt: 40, visitCount: 3 },
+    { uri: 'metaid://idq1latest', title: 'Latest Bot', resourceType: 'bot' },
+  ];
+  const { context } = createBrowserContext({ seedBookmarks: seededBookmarks, seedHistory: seededHistory });
+
+  const bookmarks = context.AgentBrowserLibrary.getBookmarks();
+  assert.deepEqual(JSON.parse(JSON.stringify(bookmarks[0])), {
+    uri: 'metaapp://app-pin',
+    title: 'Saved App',
+    resourceType: 'metaapp',
+    scheme: 'metaapp',
+    createdAt: 100,
+    firstVisitedAt: 30,
+    lastVisitedAt: 40,
+    visitCount: 3,
+    owner: null,
+    proof: null,
+    source: null,
+  });
+  assert.equal(bookmarks[1].createdAt, null, 'legacy bookmarks expose a nullable timestamp');
+
+  const history = context.AgentBrowserLibrary.getHistory();
+  assert.deepEqual(Array.from(history, (item) => item.uri), [
+    'metaid://idq1latest',
+    'metaapp://app-pin',
+    'metaid://idq1older',
+  ]);
+  assert.equal(history[0].lastVisitedAt, null, 'legacy history exposes nullable timestamps');
+  assert.equal(history[0].visitCount, 1, 'legacy history defaults to one known visit');
+  assert.deepEqual(Array.from(context.AgentBrowserLibrary.getRecentBots(), (item) => item.uri), [
+    'metaid://idq1latest',
+    'metaid://idq1older',
+  ]);
+  assert.deepEqual(Array.from(context.AgentBrowserLibrary.getRecentUris(2), (item) => item.uri), [
+    'metaid://idq1latest',
+    'metaapp://app-pin',
+  ]);
+  assert.deepEqual(Array.from(context.AgentBrowserLibrary.getRecentBots(0)), []);
+  assert.deepEqual(Array.from(context.AgentBrowserLibrary.getRecentUris(0)), []);
+
+  bookmarks[0].title = 'Mutated';
+  history[0].uri = 'metaid://mutated';
+  assert.equal(context.AgentBrowserLibrary.getBookmarks()[0].title, 'Saved App');
+  assert.equal(context.AgentBrowserLibrary.getHistory()[0].uri, 'metaid://idq1latest');
+
+  const snapshot = context.AgentBrowserLibrary.getSnapshot();
+  assert.equal(snapshot.schemaVersion, 1);
+  assert.equal(typeof snapshot.capturedAt, 'number');
+  assert.deepEqual(JSON.parse(JSON.stringify(snapshot.counts)), {
+    bookmarks: 2,
+    history: 3,
+    totalKnownVisits: 6,
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(snapshot.retention)), {
+    historyMax: 20,
+    defaultRecentBotLimit: 5,
+    defaultRecentUriLimit: 10,
+  });
+});
+
+test('new bookmarks and repeat visits record timestamps, counts, and host change events', async () => {
+  const { context, hostMessages } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => context.state.current, 'current resource resolved');
+
+  const firstVisit = context.AgentBrowserLibrary.getHistory()[0];
+  assert.equal(typeof firstVisit.firstVisitedAt, 'number');
+  assert.equal(typeof firstVisit.lastVisitedAt, 'number');
+  assert.equal(firstVisit.visitCount, 1);
+  assert.equal(firstVisit.owner.globalMetaId, 'idq1alice');
+  assert.equal(firstVisit.owner.name, 'Alice Bot');
+  assert.equal(firstVisit.owner.verificationState, 'verified');
+  assert.equal(firstVisit.source.resolver, 'test');
+  assert.equal(firstVisit.proof, null);
+
+  await context.navigateTo(ALICE_URI);
+  const repeatedVisit = context.AgentBrowserLibrary.getHistory()[0];
+  assert.equal(repeatedVisit.visitCount, 2);
+  assert.equal(repeatedVisit.firstVisitedAt, firstVisit.firstVisitedAt);
+  assert.ok(repeatedVisit.lastVisitedAt >= firstVisit.lastVisitedAt);
+
+  context.addBookmark();
+  const bookmark = context.AgentBrowserLibrary.getBookmarks()[0];
+  assert.equal(typeof bookmark.createdAt, 'number');
+  context.removeBookmark(bookmark.uri);
+
+  const changeEvents = hostMessages.filter((message) =>
+    message.type === 'agent-browser:event' &&
+    (message.event === 'history-changed' || message.event === 'bookmarks-changed'));
+  assert.ok(changeEvents.some((message) => message.event === 'history-changed' && message.payload.reason === 'visit-recorded'));
+  assert.ok(changeEvents.some((message) => message.event === 'bookmarks-changed' && message.payload.reason === 'bookmark-added'));
+  assert.ok(changeEvents.some((message) => message.event === 'bookmarks-changed' && message.payload.reason === 'bookmark-removed'));
+});
+
+test('library read messages return correlated responses only to the parent host', () => {
+  const seededHistory = [
+    { uri: 'metaid://idq1saved', title: 'Saved Bot', resourceType: 'bot', lastVisitedAt: 40, visitCount: 2 },
+  ];
+  const { context, hostMessages, parentWindow } = createBrowserContext({ seedHistory: seededHistory });
+  const requests = [
+    ['agent-browser:get-library', 'agent-browser:get-library:response'],
+    ['agent-browser:get-bookmarks', 'agent-browser:get-bookmarks:response'],
+    ['agent-browser:get-history', 'agent-browser:get-history:response'],
+    ['agent-browser:get-recent-bots', 'agent-browser:get-recent-bots:response'],
+    ['agent-browser:get-recent-uris', 'agent-browser:get-recent-uris:response'],
+  ];
+
+  for (const [requestType, responseType] of requests) {
+    const requestId = `request-${requestType}`;
+    context.handleBrowserMessage({ source: parentWindow, data: { type: requestType, requestId, limit: 1 } });
+    const response = hostMessages.find((message) => message.type === responseType && message.requestId === requestId);
+    assert.equal(response?.ok, true, `missing successful ${responseType}`);
+  }
+
+  const before = hostMessages.length;
+  context.handleBrowserMessage({
+    source: { postMessage() {} },
+    data: { type: 'agent-browser:get-library', requestId: 'untrusted' },
+  });
+  assert.equal(hostMessages.length, before, 'non-parent frames cannot read library data');
 });

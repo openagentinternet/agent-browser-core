@@ -454,3 +454,5 @@ badge.textContent = String(count);
   `docs/metaapp-host-bridge-v1-host-requirements.md`
 - Theme host integration (separate host-facing channel):
   `docs/browser-theme-host-integration.md`
+- Browser Library host integration (bookmarks and recent activity):
+  `docs/browser-library-host-integration.md`

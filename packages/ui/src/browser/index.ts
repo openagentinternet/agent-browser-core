@@ -7,6 +7,19 @@ export {
   BROWSER_INDEX_HTML,
 } from './indexHtml.js';
 export {
+  BROWSER_LIBRARY_MESSAGE_VERSION,
+  BROWSER_LIBRARY_REQUEST_TYPES,
+  type AgentBrowserLibraryApi,
+  type BrowserLibraryBookmark,
+  type BrowserLibraryHostEvent,
+  type BrowserLibraryOwner,
+  type BrowserLibraryProof,
+  type BrowserLibraryRequestType,
+  type BrowserLibrarySnapshot,
+  type BrowserLibrarySource,
+  type BrowserLibraryVisit,
+} from './library.js';
+export {
   BROWSER_BASE_URL_FIELDS,
   BROWSER_BOT_HOMEPAGE_TEMPLATES,
   BROWSER_MENU_SECTIONS,

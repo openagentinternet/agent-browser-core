@@ -37,6 +37,19 @@ export {
   type ResolvedBrowserTheme,
 } from './browser/theme.js';
 export {
+  BROWSER_LIBRARY_MESSAGE_VERSION,
+  BROWSER_LIBRARY_REQUEST_TYPES,
+  type AgentBrowserLibraryApi,
+  type BrowserLibraryBookmark,
+  type BrowserLibraryHostEvent,
+  type BrowserLibraryOwner,
+  type BrowserLibraryProof,
+  type BrowserLibraryRequestType,
+  type BrowserLibrarySnapshot,
+  type BrowserLibrarySource,
+  type BrowserLibraryVisit,
+} from './browser/library.js';
+export {
   escapeHtml,
   renderBotPageHtml,
   renderResourceHtml,

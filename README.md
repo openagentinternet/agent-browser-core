@@ -27,6 +27,8 @@ integration are planned as follow-up implementation phases.
 
 ## Reference Documents
 
+- `docs/browser-library-host-integration.md` — downstream host access to ABC
+  bookmarks, history, recent Bots, and recent URIs.
 - `docs/superpowers/specs/2026-06-08-agent-browser-core-independent-project-design.md`
 - `docs/superpowers/plans/2026-06-08-agent-browser-core-bootstrap-extraction.md`
 
