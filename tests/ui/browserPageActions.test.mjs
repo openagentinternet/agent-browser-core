@@ -852,6 +852,9 @@ test('app panel renders MetaApp metadata and actions', () => {
   assert.match(panel.innerHTML, /data-browser-app-panel-action="share"/);
   assert.match(panel.innerHTML, /data-browser-app-panel-action="remix"/);
   assert.match(panel.innerHTML, /data-browser-app-panel-action="view-pin"/);
+  assert.match(panel.innerHTML, /data-browser-app-panel-action="share"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>Share<\/span>/);
+  assert.match(panel.innerHTML, /data-browser-app-panel-action="remix"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>Remix<\/span>/);
+  assert.match(panel.innerHTML, /data-browser-app-panel-action="view-pin"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>View pin<\/span>/);
   assert.doesNotMatch(panel.innerHTML, /disabled/);
   assert.equal(nodes['[data-browser-address-icon]'].getAttribute('aria-expanded'), 'true');
   context.closeAppPanel();
@@ -888,15 +891,19 @@ test('share modal shows web URL, metaapp URI, and editable default buzz text', (
   assert.match(html, new RegExp(`https://openagentinternet\\.org/browser/metaapp/${METAAPP_PIN_ID}`));
   assert.match(html, new RegExp(`metaapp://${METAAPP_PIN_ID}`));
   assert.match(html, /I found an interesting app &#39;Fun App&#39;/);
+  assert.match(html, /class="browser-app-share-label">Web2 URL:<\/span>/);
+  assert.match(html, /class="browser-app-share-label">A\/I URI:<\/span>/);
+  assert.match(html, /<label class="browser-app-share-label" for="browser-app-share-message">Share with Buzz<\/label>/);
   assert.match(html, /data-browser-app-share-message/);
-  assert.match(html, /Buzz it/);
+  assert.match(html, />Share<\/button>/);
+  assert.doesNotMatch(html, /Buzz it/);
   assert.match(html, /browser-app-share-composer/);
   assert.match(html, /class="browser-app-share-buzz" data-browser-modal-action="app-share-buzz"/);
   assert.equal((html.match(/data-browser-copy-value/g) || []).length, 2);
   assert.doesNotMatch(html, /data-browser-modal-confirm/);
 });
 
-test('Buzz it posts a simplebuzz pin write through the actions endpoint', async () => {
+test('Share posts a simplebuzz pin write through the actions endpoint', async () => {
   const { context, nodes, requests } = createContext({
     actionResponse: {
       ok: true,
@@ -921,7 +928,7 @@ test('Buzz it posts a simplebuzz pin write through the actions endpoint', async 
   assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
 });
 
-test('Buzz it keeps the new buzz pin id for view-post', async () => {
+test('Share keeps the new buzz pin id for view-post', async () => {
   const buzzPinId = `${'c'.repeat(64)}i0`;
   const { context } = createContext({
     actionResponse: {
@@ -935,7 +942,7 @@ test('Buzz it keeps the new buzz pin id for view-post', async () => {
   assert.equal(context.state.pendingAppShareBuzzPinId, buzzPinId);
 });
 
-test('Buzz it is gated in standalone mode', async () => {
+test('Share is gated in standalone mode', async () => {
   const { context, nodes, requests } = createContext();
   context.state.current = metaAppCurrent();
   context.state.runtime = standaloneRuntime();
@@ -945,7 +952,7 @@ test('Buzz it is gated in standalone mode', async () => {
   assert.match(nodes['[data-browser-modal-root]'].innerHTML, /standalone-unsupported/);
 });
 
-test('Buzz it requires a message', async () => {
+test('Share requires a message', async () => {
   const { context, requests } = createContext();
   context.state.current = metaAppCurrent();
   context.openMetaAppShareModal();
@@ -954,7 +961,7 @@ test('Buzz it requires a message', async () => {
   assert.equal(requests.length, 0);
 });
 
-test('Buzz it does not declare publication for waiting envelopes', async () => {
+test('Share does not declare publication for waiting envelopes', async () => {
   const { context, nodes } = createContext({
     actionResponse: { ok: false, state: 'manual_action_required', code: 'wallet_confirm', message: 'Confirm in wallet' },
   });

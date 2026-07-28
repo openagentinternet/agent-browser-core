@@ -1980,11 +1980,14 @@ function defaultAppShareText(title, uri) {
   return "I found an interesting app '" + title + "' — worth sharing: " + uri;
 }
 
-function appShareRowHtml(value) {
+function appShareRowHtml(label, value) {
   var copyLabel = browserText('appShare.copy', 'Copy');
-  return '<div class="browser-app-share-row">' +
-    '<code class="browser-app-share-value">' + escapeHtml(value) + '</code>' +
-    '<button type="button" class="browser-app-share-copy" data-browser-copy-value="' + escapeHtml(value) + '" aria-label="' + escapeHtml(copyLabel) + '" title="' + escapeHtml(copyLabel) + '">' + iconHtml('copy') + '</button>' +
+  return '<div class="browser-app-share-field">' +
+    '<span class="browser-app-share-label">' + escapeHtml(label) + '</span>' +
+    '<div class="browser-app-share-row">' +
+      '<code class="browser-app-share-value">' + escapeHtml(value) + '</code>' +
+      '<button type="button" class="browser-app-share-copy" data-browser-copy-value="' + escapeHtml(value) + '" aria-label="' + escapeHtml(copyLabel) + '" title="' + escapeHtml(copyLabel) + '">' + iconHtml('copy') + '</button>' +
+    '</div>' +
   '</div>';
 }
 
@@ -2002,14 +2005,17 @@ function openMetaAppShareModal() {
   renderModal(
     browserText('appShare.title', 'Share MetaApp'),
     '<div class="browser-app-share-rows">' +
-      appShareRowHtml(webUrl) +
-      appShareRowHtml(appUri) +
-      '<div class="browser-app-share-row browser-app-share-composer">' +
-        '<textarea data-browser-app-share-message rows="3" placeholder="' + escapeHtml(browserText('appShare.messagePlaceholder', 'Say something about this app...')) + '">' + escapeHtml(defaultAppShareText(title, appUri)) + '</textarea>' +
-        '<button type="button" class="browser-app-share-buzz" data-browser-modal-action="app-share-buzz">' + escapeHtml(browserText('appShare.buzzIt', 'Buzz it')) + '</button>' +
+      appShareRowHtml(browserText('appShare.web2Url', 'Web2 URL:'), webUrl) +
+      appShareRowHtml(browserText('appShare.aiUri', 'A/I URI:'), appUri) +
+      '<div class="browser-app-share-field">' +
+        '<label class="browser-app-share-label" for="browser-app-share-message">' + escapeHtml(browserText('appShare.buzzLabel', 'Share with Buzz')) + '</label>' +
+        '<div class="browser-app-share-row browser-app-share-composer">' +
+          '<textarea id="browser-app-share-message" data-browser-app-share-message rows="3" placeholder="' + escapeHtml(browserText('appShare.messagePlaceholder', 'Say something about this app...')) + '">' + escapeHtml(defaultAppShareText(title, appUri)) + '</textarea>' +
+          '<button type="button" class="browser-app-share-buzz" data-browser-modal-action="app-share-buzz">' + escapeHtml(browserText('appShare.share', 'Share')) + '</button>' +
+        '</div>' +
       '</div>' +
     '</div>',
-    browserText('appShare.buzzIt', 'Buzz it'),
+    browserText('appShare.share', 'Share'),
     'app-share-buzz',
     {
       cancelLabel: browserText('modal.close', 'Close'),
@@ -2030,7 +2036,7 @@ async function confirmAppShareBuzz(messageText) {
     return null;
   }
   // Debounce: the on-chain publish can be slow, so ignore repeat clicks while a
-  // publish is in flight (the Buzz it button is also disabled).
+  // publish is in flight (the Share button is also disabled).
   if (state.appShareSending) {
     return null;
   }
@@ -2076,7 +2082,7 @@ async function confirmAppShareBuzz(messageText) {
   }
 }
 
-// Busy-state toggle for the Buzz it button, mirroring setPrivateChatSending.
+// Busy-state toggle for the Share button, mirroring setPrivateChatSending.
 function setAppShareSending(sending) {
   state.appShareSending = sending;
   var root = elements.modalRoot;
@@ -2093,7 +2099,7 @@ function setAppShareSending(sending) {
   } else if (confirmBtn) {
     confirmBtn.disabled = false;
     confirmBtn.classList.remove('is-busy');
-    confirmBtn.textContent = browserText('appShare.buzzIt', 'Buzz it');
+    confirmBtn.textContent = browserText('appShare.share', 'Share');
   }
 }
 

@@ -53,6 +53,11 @@ test('Browser root API uses the generated mature inline CSS template', async () 
   assert.match(template, /\.browser-settings-section-label \{/);
   assert.match(template, /\.browser-address-form input:focus-visible \{\n        outline: none;\n        outline-offset: 0;\n      \}/);
   assert.match(html, /body:has\(\.browser-shell\)/);
+  assert.match(html, /\.browser-app-panel-meta \{\n        font-size: 11px;/);
+  assert.match(html, /\.browser-app-panel-item \{[\s\S]*?flex-direction: row;[\s\S]*?font-size: 11px;/);
+  assert.match(html, /\.browser-app-share-label \{[\s\S]*?font-size: 11px;/);
+  assert.match(html, /\.browser-app-share-copy \.browser-icon \{\n        width: 20px;\n        height: 20px;/);
+  assert.match(html, /\.browser-modal-panel \.browser-app-share-buzz \{[\s\S]*?background: var\(--browser-surface\);[\s\S]*?color: var\(--browser-text\);/);
   assert.doesNotMatch(html, /__PAGE_CONTENT__|__PAGE_TITLE__|__PAGE_SCRIPT__/);
 });
 
