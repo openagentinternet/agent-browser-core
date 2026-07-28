@@ -54,9 +54,13 @@ test('Browser root API uses the generated mature inline CSS template', async () 
   assert.match(template, /\.browser-address-form input:focus-visible \{\n        outline: none;\n        outline-offset: 0;\n      \}/);
   assert.match(html, /body:has\(\.browser-shell\)/);
   assert.match(html, /\.browser-app-panel-meta \{\n        font-size: 11px;/);
-  assert.match(html, /\.browser-app-panel-item \{[\s\S]*?flex-direction: row;[\s\S]*?font-size: 11px;/);
+  assert.match(html, /\.browser-address-form \.browser-app-panel-item \{[\s\S]*?flex-direction: row;[\s\S]*?color: var\(--browser-muted\);[\s\S]*?font-size: 11px;/);
   assert.match(html, /\.browser-app-share-label \{[\s\S]*?font-size: 11px;/);
-  assert.match(html, /\.browser-app-share-copy \.browser-icon \{\n        width: 20px;\n        height: 20px;/);
+  assert.match(html, /\.browser-modal-panel \.browser-app-share-copy \{[\s\S]*?flex: 0 0 28px;[\s\S]*?padding: 0 !important;/);
+  assert.match(html, /\.browser-app-share-copy \.browser-icon \{[\s\S]*?width: 20px !important;[\s\S]*?min-width: 20px;/);
+  assert.match(html, /\.browser-app-share-composer \{\n        align-items: flex-end;/);
+  assert.match(html, /\.browser-modal-body \.browser-app-share-composer textarea \{[\s\S]*?height: 96px;/);
+  assert.match(html, /\.browser-modal-panel \.browser-app-share-buzz \{\n        align-self: flex-end;/);
   assert.match(html, /\.browser-modal-panel \.browser-app-share-buzz \{[\s\S]*?background: var\(--browser-surface\);[\s\S]*?color: var\(--browser-text\);/);
   assert.doesNotMatch(html, /__PAGE_CONTENT__|__PAGE_TITLE__|__PAGE_SCRIPT__/);
 });

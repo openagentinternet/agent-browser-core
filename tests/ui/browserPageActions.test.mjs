@@ -854,7 +854,7 @@ test('app panel renders MetaApp metadata and actions', () => {
   assert.match(panel.innerHTML, /data-browser-app-panel-action="view-pin"/);
   assert.match(panel.innerHTML, /data-browser-app-panel-action="share"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>Share<\/span>/);
   assert.match(panel.innerHTML, /data-browser-app-panel-action="remix"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>Remix<\/span>/);
-  assert.match(panel.innerHTML, /data-browser-app-panel-action="view-pin"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>View pin<\/span>/);
+  assert.match(panel.innerHTML, /data-browser-app-panel-action="view-pin"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>View Pin<\/span>/);
   assert.doesNotMatch(panel.innerHTML, /disabled/);
   assert.equal(nodes['[data-browser-address-icon]'].getAttribute('aria-expanded'), 'true');
   context.closeAppPanel();
@@ -894,7 +894,7 @@ test('share modal shows web URL, metaapp URI, and editable default buzz text', (
   assert.match(html, /class="browser-app-share-label">Web2 URL:<\/span>/);
   assert.match(html, /class="browser-app-share-label">A\/I URI:<\/span>/);
   assert.match(html, /<label class="browser-app-share-label" for="browser-app-share-message">Share with Buzz<\/label>/);
-  assert.match(html, /data-browser-app-share-message/);
+  assert.match(html, /data-browser-app-share-message rows="4"/);
   assert.match(html, />Share<\/button>/);
   assert.doesNotMatch(html, /Buzz it/);
   assert.match(html, /browser-app-share-composer/);

@@ -6,10 +6,11 @@ export const BROWSER_METAAPP_PANEL_CSS = `
         font-size: 11px;
         line-height: 1.3;
       }
-      .browser-app-panel-item {
+      .browser-address-form .browser-app-panel-item {
         flex-direction: row;
         gap: 5px;
         padding: 7px 5px;
+        color: var(--browser-muted);
         font-size: 11px;
         line-height: 1.2;
       }
@@ -31,9 +32,30 @@ export const BROWSER_METAAPP_PANEL_CSS = `
         font-weight: 600;
         line-height: 1.2;
       }
+      .browser-modal-panel .browser-app-share-copy {
+        box-sizing: border-box;
+        flex: 0 0 28px;
+        width: 28px;
+        min-width: 28px;
+        height: 28px;
+        min-height: 28px;
+        padding: 0 !important;
+        line-height: 0;
+      }
       .browser-app-share-copy .browser-icon {
-        width: 20px;
-        height: 20px;
+        display: block;
+        width: 20px !important;
+        min-width: 20px;
+        height: 20px !important;
+      }
+      .browser-app-share-composer {
+        align-items: flex-end;
+      }
+      .browser-modal-body .browser-app-share-composer textarea {
+        height: 96px;
+      }
+      .browser-modal-panel .browser-app-share-buzz {
+        align-self: flex-end;
       }
       .browser-modal-panel .browser-app-share-copy,
       .browser-modal-panel .browser-app-share-buzz {

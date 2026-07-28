@@ -1954,7 +1954,7 @@ function renderAppPanel() {
         iconHtml('remix') + '<span>' + escapeHtml(browserText('appPanel.remix', 'Remix')) + '</span>' +
       '</button>' +
       '<button type="button" class="browser-app-panel-item" data-browser-app-panel-action="view-pin"' + actionsDisabled + '>' +
-        iconHtml('scroll') + '<span>' + escapeHtml(browserText('appPanel.viewPin', 'View pin')) + '</span>' +
+        iconHtml('scroll') + '<span>' + escapeHtml(browserText('appPanel.viewPin', 'View Pin')) + '</span>' +
       '</button>' +
     '</div>' +
     (pinId ? '' : '<p class="browser-app-panel-note">' + escapeHtml(browserText('appPanel.pinRequired', 'Actions require an on-chain pin for this MetaApp.')) + '</p>');
@@ -2010,7 +2010,7 @@ function openMetaAppShareModal() {
       '<div class="browser-app-share-field">' +
         '<label class="browser-app-share-label" for="browser-app-share-message">' + escapeHtml(browserText('appShare.buzzLabel', 'Share with Buzz')) + '</label>' +
         '<div class="browser-app-share-row browser-app-share-composer">' +
-          '<textarea id="browser-app-share-message" data-browser-app-share-message rows="3" placeholder="' + escapeHtml(browserText('appShare.messagePlaceholder', 'Say something about this app...')) + '">' + escapeHtml(defaultAppShareText(title, appUri)) + '</textarea>' +
+          '<textarea id="browser-app-share-message" data-browser-app-share-message rows="4" placeholder="' + escapeHtml(browserText('appShare.messagePlaceholder', 'Say something about this app...')) + '">' + escapeHtml(defaultAppShareText(title, appUri)) + '</textarea>' +
           '<button type="button" class="browser-app-share-buzz" data-browser-modal-action="app-share-buzz">' + escapeHtml(browserText('appShare.share', 'Share')) + '</button>' +
         '</div>' +
       '</div>' +
