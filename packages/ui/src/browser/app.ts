@@ -5,6 +5,7 @@ import {
   BROWSER_SETTINGS_TABS,
 } from './menuModel.js';
 import { LLM_PROVIDERS, GENERIC_ICON } from './llmProviders.js';
+import { BROWSER_LIBRARY_REQUEST_TYPES } from './library.js';
 import { BOT_HOMEPAGE_TEMPLATES } from '@openagentinternet/agent-browser-core';
 
 export interface BrowserPagePanelDefinition {
@@ -127,6 +128,7 @@ function buildBrowserPageScript(): string {
 var browserSettingsTabs = ${JSON.stringify(BROWSER_SETTINGS_TABS)};
 var browserBaseUrlFields = ${JSON.stringify(BROWSER_BASE_URL_FIELDS)};
 var browserBotHomepageTemplates = ${JSON.stringify(BROWSER_BOT_HOMEPAGE_TEMPLATES)};
+var browserLibraryRequestTypes = ${JSON.stringify(BROWSER_LIBRARY_REQUEST_TYPES)};
 var botHomepageTemplateIds = ${JSON.stringify(BOT_HOMEPAGE_TEMPLATES.map((template) => template.id))};
 var llmProviders = ${JSON.stringify(LLM_PROVIDERS)};
 var llmGenericIcon = ${JSON.stringify(GENERIC_ICON)};
@@ -1214,6 +1216,24 @@ function handleBrowserMessage(event) {
           message: 'No browser tab matches the requested tabId.'
         }));
       }
+      return;
+    }
+    if (data.type === browserLibraryRequestTypes.snapshot ||
+        data.type === browserLibraryRequestTypes.bookmarks ||
+        data.type === browserLibraryRequestTypes.history ||
+        data.type === browserLibraryRequestTypes.recentBots ||
+        data.type === browserLibraryRequestTypes.recentUris) {
+      var libraryRequestId = data.requestId !== undefined && data.requestId !== null ? data.requestId : data.id;
+      var libraryResult = data.type === browserLibraryRequestTypes.snapshot
+        ? getLibrarySnapshot()
+        : (data.type === browserLibraryRequestTypes.bookmarks
+          ? getLibraryBookmarks(data.limit)
+          : (data.type === browserLibraryRequestTypes.history
+            ? getLibraryHistory(data.limit)
+            : (data.type === browserLibraryRequestTypes.recentBots
+              ? getLibraryRecentBots(data.limit)
+              : getLibraryRecentUris(data.limit))));
+      postToHost(hostResponse(data.type + ':response', libraryRequestId, true, libraryResult));
       return;
     }
   }
@@ -3028,19 +3048,40 @@ function recordVisit(current) {
   if (!current) return;
   var uri = textValue(current.normalizedUri) || textValue(current.uri);
   if (!uri || !isHistoryUri(uri)) return;
+  var existing = null;
   for (var i = 0; i < state.visits.length; i += 1) {
     if (textValue(state.visits[i].uri) === uri) {
+      existing = state.visits[i];
       state.visits.splice(i, 1);
       break;
     }
   }
-  state.visits.push({
+  var recordedAt = Date.now();
+  var previousCount = existing && Number(existing.visitCount) > 0
+    ? Math.floor(Number(existing.visitCount))
+    : (existing ? 1 : 0);
+  var firstVisitedAt = existing && Number(existing.firstVisitedAt) > 0
+    ? Number(existing.firstVisitedAt)
+    : (existing && Number(existing.lastVisitedAt) > 0 ? Number(existing.lastVisitedAt) : recordedAt);
+  var visit = {
     uri: uri,
     title: currentDisplayTitle(current, uri),
-    resourceType: textValue(current.resourceType)
-  });
+    resourceType: textValue(current.resourceType),
+    firstVisitedAt: firstVisitedAt,
+    lastVisitedAt: recordedAt,
+    visitCount: previousCount + 1,
+    owner: libraryOwner(current.owner),
+    proof: libraryProof(current.proof),
+    source: librarySource(current.source)
+  };
+  state.visits.push(visit);
   while (state.visits.length > HISTORY_MAX) state.visits.shift();
   saveHistory();
+  emitHostEvent('history-changed', {
+    reason: 'visit-recorded',
+    item: visitToLibraryItem(visit),
+    total: state.visits.length
+  });
 }
 
 function uniqueRecent(type) {
@@ -3140,6 +3181,164 @@ function saveHistory() {
   }
 }
 
+function libraryTimestamp(value) {
+  var timestamp = Number(value);
+  return timestamp > 0 && isFinite(timestamp) ? timestamp : null;
+}
+
+function libraryVisitCount(value) {
+  var count = Number(value);
+  return count > 0 && isFinite(count) ? Math.floor(count) : 1;
+}
+
+function libraryScheme(uri) {
+  var value = textValue(uri);
+  var separator = value.indexOf('://');
+  return separator > 0 ? value.slice(0, separator).toLowerCase() : '';
+}
+
+function libraryLimit(value, fallback, maximum) {
+  if (value === undefined || value === null || value === '') return fallback;
+  var parsed = Number(value);
+  if (!isFinite(parsed) || parsed < 0) return fallback;
+  return Math.min(Math.floor(parsed), maximum);
+}
+
+function findVisitByUri(uri) {
+  var key = textValue(uri);
+  for (var index = 0; index < state.visits.length; index += 1) {
+    if (textValue(state.visits[index] && state.visits[index].uri) === key) return state.visits[index];
+  }
+  return null;
+}
+
+function libraryOwner(owner) {
+  if (!owner || typeof owner !== 'object') return null;
+  return {
+    kind: textValue(owner.kind) || 'unknown',
+    globalMetaId: textValue(owner.globalMetaId) || null,
+    metaid: textValue(owner.metaid) || null,
+    address: textValue(owner.address) || null,
+    name: textValue(owner.name),
+    label: textValue(owner.label) || null,
+    avatar: textValue(owner.avatar) || null,
+    online: typeof owner.online === 'boolean' ? owner.online : null,
+    verificationState: textValue(owner.verificationState) || 'unverified'
+  };
+}
+
+function libraryProof(proof) {
+  if (!proof || typeof proof !== 'object') return null;
+  return {
+    txid: textValue(proof.txid) || null,
+    pinId: textValue(proof.pinId) || null,
+    protocolPath: textValue(proof.protocolPath) || null,
+    contentHash: textValue(proof.contentHash) || null,
+    publisherGlobalMetaId: textValue(proof.publisherGlobalMetaId) || null,
+    explorerUrl: textValue(proof.explorerUrl) || null,
+    verificationState: textValue(proof.verificationState) || 'unverified'
+  };
+}
+
+function librarySource(source) {
+  if (!source || typeof source !== 'object') return null;
+  return {
+    resolver: textValue(source.resolver),
+    url: textValue(source.url) || null,
+    fetchedAt: libraryTimestamp(source.fetchedAt),
+    indexedAt: libraryTimestamp(source.indexedAt),
+    stale: typeof source.stale === 'boolean' ? source.stale : null,
+    schemaVersion: textValue(source.schemaVersion) || null
+  };
+}
+
+function visitToLibraryItem(visit) {
+  return {
+    uri: textValue(visit && visit.uri),
+    title: textValue(visit && visit.title),
+    resourceType: textValue(visit && visit.resourceType),
+    scheme: libraryScheme(visit && visit.uri),
+    firstVisitedAt: libraryTimestamp(visit && visit.firstVisitedAt),
+    lastVisitedAt: libraryTimestamp(visit && visit.lastVisitedAt),
+    visitCount: libraryVisitCount(visit && visit.visitCount),
+    owner: libraryOwner(visit && visit.owner),
+    proof: libraryProof(visit && visit.proof),
+    source: librarySource(visit && visit.source)
+  };
+}
+
+function bookmarkToLibraryItem(bookmark) {
+  var visit = findVisitByUri(bookmark && bookmark.uri);
+  return {
+    uri: textValue(bookmark && bookmark.uri),
+    title: textValue(bookmark && bookmark.title),
+    resourceType: textValue(bookmark && bookmark.resourceType),
+    scheme: libraryScheme(bookmark && bookmark.uri),
+    createdAt: libraryTimestamp(bookmark && bookmark.createdAt),
+    firstVisitedAt: libraryTimestamp(visit && visit.firstVisitedAt),
+    lastVisitedAt: libraryTimestamp(visit && visit.lastVisitedAt),
+    visitCount: visit ? libraryVisitCount(visit.visitCount) : 0,
+    owner: libraryOwner((visit && visit.owner) || (bookmark && bookmark.owner)),
+    proof: libraryProof((visit && visit.proof) || (bookmark && bookmark.proof)),
+    source: librarySource((visit && visit.source) || (bookmark && bookmark.source))
+  };
+}
+
+function getLibraryBookmarks(limit) {
+  var maximum = state.bookmarks.length;
+  var resolvedLimit = libraryLimit(limit, maximum, maximum);
+  return state.bookmarks.slice(0, resolvedLimit).map(bookmarkToLibraryItem);
+}
+
+function getLibraryHistory(limit) {
+  var maximum = state.visits.length;
+  var resolvedLimit = libraryLimit(limit, maximum, maximum);
+  return state.visits.slice().reverse().slice(0, resolvedLimit).map(visitToLibraryItem);
+}
+
+function getLibraryRecentBots(limit) {
+  var resolvedLimit = libraryLimit(limit, RECENT_BOT_MAX, state.visits.length);
+  if (resolvedLimit === 0) return [];
+  var output = [];
+  for (var index = state.visits.length - 1; index >= 0; index -= 1) {
+    var visit = state.visits[index];
+    if (textValue(visit && visit.resourceType) !== 'bot') continue;
+    output.push(visitToLibraryItem(visit));
+    if (output.length >= resolvedLimit) break;
+  }
+  return output;
+}
+
+function getLibraryRecentUris(limit) {
+  var resolvedLimit = libraryLimit(limit, WELCOME_SHORTCUT_MAX, state.visits.length);
+  return state.visits.slice().reverse().slice(0, resolvedLimit).map(visitToLibraryItem);
+}
+
+function getLibrarySnapshot() {
+  var history = getLibraryHistory();
+  var totalKnownVisits = history.reduce(function (total, item) {
+    return total + item.visitCount;
+  }, 0);
+  return {
+    schemaVersion: 1,
+    capturedAt: Date.now(),
+    bookmarks: getLibraryBookmarks(),
+    history: history,
+    recentBots: getLibraryRecentBots(),
+    recentUris: getLibraryRecentUris(),
+    counts: {
+      bookmarks: state.bookmarks.length,
+      history: state.visits.length,
+      totalKnownVisits: totalKnownVisits
+    },
+    retention: {
+      historyMax: HISTORY_MAX,
+      defaultRecentBotLimit: RECENT_BOT_MAX,
+      defaultRecentUriLimit: WELCOME_SHORTCUT_MAX
+    }
+  };
+}
+
 function currentBookmarkKey() {
   if (!state.current) return '';
   return textValue(state.current.normalizedUri) || textValue(state.current.uri);
@@ -3194,14 +3393,24 @@ function addBookmark() {
   var uri = currentBookmarkKey();
   if (!uri) return false;
   if (findBookmarkIndex(uri) !== -1) return false;
-  state.bookmarks.push({
+  var bookmark = {
     uri: uri,
     title: currentDisplayTitle(state.current, 'Current resource'),
-    resourceType: textValue(state.current.resourceType)
-  });
+    resourceType: textValue(state.current.resourceType),
+    createdAt: Date.now(),
+    owner: libraryOwner(state.current.owner),
+    proof: libraryProof(state.current.proof),
+    source: librarySource(state.current.source)
+  };
+  state.bookmarks.push(bookmark);
   saveBookmarks();
   renderBookmarkStar();
   if (state.drawerOpen) renderDrawer();
+  emitHostEvent('bookmarks-changed', {
+    reason: 'bookmark-added',
+    item: bookmarkToLibraryItem(bookmark),
+    total: state.bookmarks.length
+  });
   return true;
 }
 
@@ -3210,10 +3419,16 @@ function removeBookmark(uri) {
   if (!key) return false;
   var index = findBookmarkIndex(key);
   if (index === -1) return false;
+  var removed = bookmarkToLibraryItem(state.bookmarks[index]);
   state.bookmarks.splice(index, 1);
   saveBookmarks();
   renderBookmarkStar();
   if (state.drawerOpen) renderDrawer();
+  emitHostEvent('bookmarks-changed', {
+    reason: 'bookmark-removed',
+    item: removed,
+    total: state.bookmarks.length
+  });
   return true;
 }
 
@@ -6543,6 +6758,13 @@ globalThis.AgentBrowserTabs = {
   getActiveTab: getActiveTab,
   getTabContent: getTabContent,
   getTabInfo: getTabInfo
+};
+globalThis.AgentBrowserLibrary = {
+  getSnapshot: getLibrarySnapshot,
+  getBookmarks: getLibraryBookmarks,
+  getHistory: getLibraryHistory,
+  getRecentBots: getLibraryRecentBots,
+  getRecentUris: getLibraryRecentUris
 };
 
 if (document.readyState === 'loading') {
