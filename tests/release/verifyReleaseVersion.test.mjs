@@ -35,16 +35,16 @@ async function mutateJson(filePath, mutate) {
   await writeFile(filePath, `${JSON.stringify(contents, null, 2)}\n`, "utf8");
 }
 
-test("accepts repo tag v0.4.2", async () => {
-  const result = await verifyReleaseVersion({ tag: "v0.4.2", repoRoot });
+test("accepts repo tag v0.4.3", async () => {
+  const result = await verifyReleaseVersion({ tag: "v0.4.3", repoRoot });
 
-  assert.deepEqual(result, { version: "0.4.2" });
+  assert.deepEqual(result, { version: "0.4.3" });
 });
 
 test("rejects repo tag v0.2.0", async () => {
   await assert.rejects(
     () => verifyReleaseVersion({ tag: "v0.2.0", repoRoot }),
-    /Tag version 0\.2\.0 does not match root package version 0\.4\.2/,
+    /Tag version 0\.2\.0 does not match root package version 0\.4\.3/,
   );
 });
 
@@ -57,8 +57,8 @@ test("rejects mismatched internal dependency pin", async () => {
     });
 
     await assert.rejects(
-      () => verifyReleaseVersion({ tag: "v0.4.2", repoRoot: fixtureRoot }),
-      /@openagentinternet\/agent-browser-core depends on @openagentinternet\/agent-browser-host-contract@0\.2\.0, expected 0\.4\.2/,
+      () => verifyReleaseVersion({ tag: "v0.4.3", repoRoot: fixtureRoot }),
+      /@openagentinternet\/agent-browser-core depends on @openagentinternet\/agent-browser-host-contract@0\.2\.0, expected 0\.4\.3/,
     );
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true });
