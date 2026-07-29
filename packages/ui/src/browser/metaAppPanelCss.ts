@@ -3,20 +3,40 @@
 // continue to share the same layout and surface tokens.
 export const BROWSER_METAAPP_PANEL_CSS = `
       .browser-app-panel-meta {
+        padding: 0 10px;
+        color: var(--browser-muted);
         font-size: 11px;
         line-height: 1.3;
       }
-      .browser-address-form .browser-app-panel-item {
-        flex-direction: row;
-        gap: 5px;
-        padding: 7px 5px;
+      .browser-address-form .browser-app-panel .browser-owner-panel-copy {
+        width: 28px;
+        height: 28px;
+        margin-right: 0;
+        margin-left: auto;
+        padding: 0;
+        border: none;
+        background: transparent;
         color: var(--browser-muted);
-        font-size: 11px;
-        line-height: 1.2;
       }
-      .browser-app-panel-item .browser-icon {
-        width: 14px;
-        height: 14px;
+      .browser-address-form .browser-app-panel .browser-owner-panel-copy:hover {
+        border: none;
+        background: var(--browser-hover, rgba(15, 23, 42, .06));
+        color: var(--browser-text);
+      }
+      .browser-address-form .browser-app-panel .browser-owner-panel-item {
+        justify-content: flex-start;
+        width: 100%;
+        height: auto;
+        margin-right: 0;
+        padding: 8px 10px;
+        border: none;
+        background: transparent;
+        color: var(--browser-text);
+      }
+      .browser-address-form .browser-app-panel .browser-owner-panel-item:not(:disabled):hover {
+        border: none;
+        background: var(--browser-hover, rgba(15, 23, 42, .06));
+        color: var(--browser-text);
       }
       .browser-app-share-rows {
         gap: 12px;

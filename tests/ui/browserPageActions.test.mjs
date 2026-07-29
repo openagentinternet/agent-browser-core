@@ -847,14 +847,17 @@ test('app panel renders MetaApp metadata and actions', () => {
   const panel = nodes['[data-browser-app-panel]'];
   assert.equal(panel.hidden, false);
   assert.match(panel.innerHTML, /Fun App/);
+  assert.match(panel.innerHTML, /class="browser-owner-panel-meta">aaaaaaaaaa\.\.\.aaaai0<\/span>/);
+  assert.match(panel.innerHTML, new RegExp(`data-browser-copy-value="${METAAPP_PIN_ID}"`));
+  assert.match(panel.innerHTML, /aria-label="Copy Pin ID"/);
   assert.match(panel.innerHTML, /v1\.2\.0/);
   assert.match(panel.innerHTML, /Updated 2025-06-15/);
+  assert.match(panel.innerHTML, /browser-owner-panel-head[\s\S]*?<\/div><div class="browser-app-panel-meta">v1\.2\.0 · Updated 2025-06-15<\/div><div class="browser-owner-panel-menu"/);
   assert.match(panel.innerHTML, /data-browser-app-panel-action="share"/);
-  assert.match(panel.innerHTML, /data-browser-app-panel-action="remix"/);
   assert.match(panel.innerHTML, /data-browser-app-panel-action="view-pin"/);
-  assert.match(panel.innerHTML, /data-browser-app-panel-action="share"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>Share<\/span>/);
-  assert.match(panel.innerHTML, /data-browser-app-panel-action="remix"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>Remix<\/span>/);
-  assert.match(panel.innerHTML, /data-browser-app-panel-action="view-pin"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>View Pin<\/span>/);
+  assert.doesNotMatch(panel.innerHTML, /data-browser-app-panel-action="remix"/);
+  assert.match(panel.innerHTML, /class="browser-owner-panel-item" data-browser-app-panel-action="share"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>Share<\/span>/);
+  assert.match(panel.innerHTML, /class="browser-owner-panel-item" data-browser-app-panel-action="view-pin"[^>]*><svg[^>]*>[\s\S]*?<\/svg><span>View Pin<\/span>/);
   assert.doesNotMatch(panel.innerHTML, /disabled/);
   assert.equal(nodes['[data-browser-address-icon]'].getAttribute('aria-expanded'), 'true');
   context.closeAppPanel();
@@ -868,9 +871,18 @@ test('app panel disables actions when the MetaApp has no on-chain pin', () => {
   context.openAppPanel();
   const html = nodes['[data-browser-app-panel]'].innerHTML;
   assert.match(html, /data-browser-app-panel-action="share" disabled/);
-  assert.match(html, /data-browser-app-panel-action="remix" disabled/);
   assert.match(html, /data-browser-app-panel-action="view-pin" disabled/);
+  assert.doesNotMatch(html, /data-browser-copy-value=/);
+  assert.doesNotMatch(html, /data-browser-app-panel-action="remix"/);
   assert.match(html, /Actions require an on-chain pin/);
+});
+
+test('app panel Pin ID copy control copies the full on-chain pin', async () => {
+  const { context, clipboardWrites } = createContext();
+  const target = browserActionTarget({ 'data-browser-copy-value': METAAPP_PIN_ID });
+  assert.equal(context.handleCopyValue({ target, preventDefault() {} }), true);
+  await waitFor(() => clipboardWrites.length === 1, 'MetaApp Pin ID copy');
+  assert.deepEqual(clipboardWrites, [METAAPP_PIN_ID]);
 });
 
 test('app panel view-pin navigates to the pin URI', async () => {

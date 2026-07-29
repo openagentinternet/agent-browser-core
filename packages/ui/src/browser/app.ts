@@ -1935,10 +1935,8 @@ function toggleAppPanel() {
   }
 }
 
-// Renders the MetaApp info panel: identity header (icon, title, version,
-// last-updated date) plus the Share / Remix / View-pin actions. All actions
-// require the on-chain pin; preview MetaApps (no chain proof) get them
-// disabled with an explanatory note.
+// Renders the MetaApp info panel with the same identity and menu structure as
+// the owner panel. Pin-backed actions are disabled for preview MetaApps.
 function renderAppPanel() {
   if (!elements.appPanel) return;
   var record = currentMetaAppRecord();
@@ -1959,21 +1957,20 @@ function renderAppPanel() {
     metaLine += (metaLine ? ' · ' : '') + escapeHtml(browserText('appPanel.updated', 'Updated')) + ' ' + escapeHtml(updated);
   }
   elements.appPanel.innerHTML =
-    '<div class="browser-app-panel-head">' +
+    '<div class="browser-owner-panel-head">' +
       '<span class="browser-app-panel-icon">' + appIconHtml(record, 'browser-app-icon-image') + '</span>' +
-      '<div class="browser-app-panel-id">' +
-        '<span class="browser-app-panel-name">' + escapeHtml(title) + '</span>' +
-        '<span class="browser-app-panel-meta">' + (metaLine || escapeHtml(shortId(pinId) || 'MetaApp')) + '</span>' +
+      '<div class="browser-owner-panel-id">' +
+        '<span class="browser-owner-panel-name">' + escapeHtml(title) + '</span>' +
+        (pinId ? '<span class="browser-owner-panel-meta">' + escapeHtml(shortId(pinId)) + '</span>' : '') +
       '</div>' +
+      (pinId ? '<button type="button" class="browser-owner-panel-copy" data-browser-copy-value="' + escapeHtml(pinId) + '" aria-label="' + escapeHtml(browserText('appPanel.copyPinId', 'Copy Pin ID')) + '" title="' + escapeHtml(browserText('appPanel.copyPinId', 'Copy Pin ID')) + '">' + iconHtml('copy') + '</button>' : '') +
     '</div>' +
-    '<div class="browser-app-panel-menu" role="none">' +
-      '<button type="button" class="browser-app-panel-item" data-browser-app-panel-action="share"' + actionsDisabled + '>' +
+    (metaLine ? '<div class="browser-app-panel-meta">' + metaLine + '</div>' : '') +
+    '<div class="browser-owner-panel-menu" role="none">' +
+      '<button type="button" role="menuitem" class="browser-owner-panel-item" data-browser-app-panel-action="share"' + actionsDisabled + '>' +
         iconHtml('share') + '<span>' + escapeHtml(browserText('appPanel.share', 'Share')) + '</span>' +
       '</button>' +
-      '<button type="button" class="browser-app-panel-item" data-browser-app-panel-action="remix"' + actionsDisabled + '>' +
-        iconHtml('remix') + '<span>' + escapeHtml(browserText('appPanel.remix', 'Remix')) + '</span>' +
-      '</button>' +
-      '<button type="button" class="browser-app-panel-item" data-browser-app-panel-action="view-pin"' + actionsDisabled + '>' +
+      '<button type="button" role="menuitem" class="browser-owner-panel-item" data-browser-app-panel-action="view-pin"' + actionsDisabled + '>' +
         iconHtml('scroll') + '<span>' + escapeHtml(browserText('appPanel.viewPin', 'View Pin')) + '</span>' +
       '</button>' +
     '</div>' +
@@ -6590,6 +6587,7 @@ async function initialize() {
   if (elements.appPanel) {
     elements.appPanel.addEventListener('click', function (event) {
       if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      if (handleCopyValue(event)) return;
       var target = closestWithAttribute(event && event.target, 'data-browser-app-panel-action');
       if (!target) return;
       if (target.disabled) return;

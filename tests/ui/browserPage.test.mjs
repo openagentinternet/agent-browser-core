@@ -53,8 +53,9 @@ test('Browser root API uses the generated mature inline CSS template', async () 
   assert.match(template, /\.browser-settings-section-label \{/);
   assert.match(template, /\.browser-address-form input:focus-visible \{\n        outline: none;\n        outline-offset: 0;\n      \}/);
   assert.match(html, /body:has\(\.browser-shell\)/);
-  assert.match(html, /\.browser-app-panel-meta \{\n        font-size: 11px;/);
-  assert.match(html, /\.browser-address-form \.browser-app-panel-item \{[\s\S]*?flex-direction: row;[\s\S]*?color: var\(--browser-muted\);[\s\S]*?font-size: 11px;/);
+  assert.match(html, /\.browser-app-panel-meta \{[\s\S]*?padding: 0 10px;[\s\S]*?font-size: 11px;/);
+  assert.match(html, /\.browser-address-form \.browser-app-panel \.browser-owner-panel-copy \{[\s\S]*?margin-left: auto;[\s\S]*?border: none;[\s\S]*?background: transparent;/);
+  assert.match(html, /\.browser-address-form \.browser-app-panel \.browser-owner-panel-item \{[\s\S]*?justify-content: flex-start;[\s\S]*?width: 100%;[\s\S]*?padding: 8px 10px;[\s\S]*?border: none;[\s\S]*?background: transparent;/);
   assert.match(html, /\.browser-app-share-label \{[\s\S]*?font-size: 11px;/);
   assert.match(html, /\.browser-modal-panel \.browser-app-share-copy \{[\s\S]*?flex: 0 0 28px;[\s\S]*?padding: 0 !important;/);
   assert.match(html, /\.browser-app-share-copy \.browser-icon \{[\s\S]*?width: 20px !important;[\s\S]*?min-width: 20px;/);
