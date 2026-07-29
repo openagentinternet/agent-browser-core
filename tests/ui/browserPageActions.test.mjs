@@ -1044,6 +1044,86 @@ test('Share renders the shared PIN confirmation and resubmits the exact host req
   assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
 });
 
+test('Share presents one renewed confirmation when the host rejects an expired confirmation', async () => {
+  const firstConfirmRequest = {
+    resourceUri: `metaapp://${METAAPP_PIN_ID}`,
+    kind: 'metaid-pin-write',
+    payload: {
+      operation: 'create',
+      path: '/protocols/simplebuzz',
+      confirmed: true,
+      hostConfirmation: { id: 'confirmation-expired', token: 'expired-token' },
+    },
+  };
+  const renewedConfirmRequest = {
+    resourceUri: `metaapp://${METAAPP_PIN_ID}`,
+    kind: 'metaid-pin-write',
+    payload: {
+      operation: 'create',
+      path: '/protocols/simplebuzz',
+      confirmed: true,
+      hostConfirmation: { id: 'confirmation-renewed', token: 'renewed-token' },
+    },
+  };
+  const buzzPinId = `${'c'.repeat(64)}i0`;
+  const { context, nodes, requests } = createContext({
+    actionResponses: [
+      {
+        ok: false,
+        state: 'manual_action_required',
+        code: 'manual_action_required',
+        message: 'Confirm this write.',
+        data: {
+          confirmation: {
+            actor: { uri: 'metaid://idq1worker', globalMetaId: 'idq1worker', name: 'Worker Bot' },
+            operation: 'create',
+            path: '/protocols/simplebuzz',
+            contentType: 'application/json;utf-8',
+            payloadSize: 24,
+          },
+          confirmRequest: firstConfirmRequest,
+        },
+      },
+      {
+        ok: false,
+        state: 'manual_action_required',
+        code: 'manual_action_required',
+        message: 'Confirm this MetaID PIN write before the host signs or broadcasts it.',
+        data: {
+          confirmation: {
+            actor: { uri: 'metaid://idq1worker', globalMetaId: 'idq1worker', name: 'Worker Bot Renewed' },
+            operation: 'create',
+            path: '/protocols/simplebuzz',
+            contentType: 'application/json;utf-8',
+            payloadSize: 24,
+          },
+          confirmRequest: renewedConfirmRequest,
+        },
+      },
+      {
+        ok: true,
+        data: { pinId: buzzPinId, txid: 'tx-renewed', operation: 'create', path: '/protocols/simplebuzz' },
+      },
+    ],
+  });
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+
+  const publish = context.confirmAppShareBuzz('hello buzz');
+  await waitFor(() => nodes['[data-browser-modal-root]'].innerHTML.includes('browser-pin-write-confirmation'), 'initial PIN confirmation modal');
+  context.settlePinWriteConfirmation(true);
+
+  await waitFor(() => nodes['[data-browser-modal-root]'].innerHTML.includes('Worker Bot Renewed'), 'renewed PIN confirmation modal');
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests[1].body, firstConfirmRequest);
+  context.settlePinWriteConfirmation(true);
+
+  await publish;
+  assert.equal(requests.length, 3);
+  assert.deepEqual(requests[2].body, renewedConfirmRequest);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
+});
+
 test('MetaApp PIN bridge uses the shared confirmation without exposing the host token', async () => {
   const confirmRequest = {
     resourceUri: `metaapp://${METAAPP_PIN_ID}`,

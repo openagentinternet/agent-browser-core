@@ -1205,31 +1205,44 @@ async function submitMetaIdPinWrite(resourceUri, payload) {
   var structured = structuredPinWriteConfirmation(phaseOne);
   if (!structured) return phaseOne;
   if (textValue(structured.confirmRequest.resourceUri) !== textValue(resourceUri)) return phaseOne;
-  var approved = await promptMetaIdPinWrite(structured.confirmation);
-  if (!approved) {
-    var cancelled = new Error('MetaID PIN write was cancelled.');
-    cancelled.code = 'user_cancelled';
-    throw cancelled;
-  }
-  setPinWriteConfirmationSending(true);
-  setPinWriteConfirmationStatus('sending', browserText('pinWrite.writingHint', 'Signing and broadcasting this PIN write...'));
-  try {
-    var phaseTwo = await postMetaIdPinWrite(structured.confirmRequest);
-    if (phaseTwo && phaseTwo.ok === false) {
-      var phaseTwoError = new Error(textValue(phaseTwo.message) || 'MetaID PIN write confirmation failed.');
-      phaseTwoError.code = textValue(phaseTwo.code) || 'pin_write_failed';
-      throw phaseTwoError;
+  var confirmationRenewals = 0;
+  while (structured) {
+    var approved = await promptMetaIdPinWrite(structured.confirmation);
+    if (!approved) {
+      var cancelled = new Error('MetaID PIN write was cancelled.');
+      cancelled.code = 'user_cancelled';
+      throw cancelled;
     }
-    closeModal();
-    return phaseTwo && phaseTwo.data ? phaseTwo.data : phaseTwo;
-  } catch (error) {
-    var failureMessage = textValue(error && error.message) || 'MetaID PIN write failed.';
-    setPinWriteConfirmationFailed(failureMessage);
-    setStatus('error', failureMessage);
-    if (error && (typeof error === 'object' || typeof error === 'function')) {
-      error.pinWriteConfirmation = true;
+    setPinWriteConfirmationSending(true);
+    setPinWriteConfirmationStatus('sending', browserText('pinWrite.writingHint', 'Signing and broadcasting this PIN write...'));
+    try {
+      var phaseTwo = await postMetaIdPinWrite(structured.confirmRequest);
+      var renewed = structuredPinWriteConfirmation(phaseTwo);
+      if (
+        renewed &&
+        confirmationRenewals < 1 &&
+        textValue(renewed.confirmRequest.resourceUri) === textValue(resourceUri)
+      ) {
+        structured = renewed;
+        confirmationRenewals += 1;
+        continue;
+      }
+      if (phaseTwo && phaseTwo.ok === false) {
+        var phaseTwoError = new Error(textValue(phaseTwo.message) || 'MetaID PIN write confirmation failed.');
+        phaseTwoError.code = textValue(phaseTwo.code) || 'pin_write_failed';
+        throw phaseTwoError;
+      }
+      closeModal();
+      return phaseTwo && phaseTwo.data ? phaseTwo.data : phaseTwo;
+    } catch (error) {
+      var failureMessage = textValue(error && error.message) || 'MetaID PIN write failed.';
+      setPinWriteConfirmationFailed(failureMessage);
+      setStatus('error', failureMessage);
+      if (error && (typeof error === 'object' || typeof error === 'function')) {
+        error.pinWriteConfirmation = true;
+      }
+      throw error;
     }
-    throw error;
   }
 }
 
