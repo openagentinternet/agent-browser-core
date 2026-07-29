@@ -139,6 +139,32 @@ export interface BrowserMetaIdPinWriteResult {
   actor: BrowserMetaAppBridgeActor;
 }
 
+export interface BrowserMetaIdPinWriteConfirmation {
+  actor: BrowserMetaAppBridgeActor;
+  operation: 'create' | 'modify' | 'revoke';
+  path: string;
+  contentType: string;
+  payloadSize: number;
+  confirmationId?: string;
+  expiresAt?: number;
+  display?: {
+    title?: string;
+    summary?: string;
+  };
+}
+
+export interface BrowserMetaIdPinWriteConfirmRequest {
+  resourceUri: string;
+  kind: 'metaid-pin-write';
+  // Host-issued authorization fields stay opaque to ABC and are resubmitted unchanged.
+  payload: Record<string, unknown>;
+}
+
+export interface BrowserMetaIdPinWriteManualActionData {
+  confirmation: BrowserMetaIdPinWriteConfirmation;
+  confirmRequest: BrowserMetaIdPinWriteConfirmRequest;
+}
+
 export interface BrowserSimpleMsgComposeRequest {
   to: string;
   content: string;

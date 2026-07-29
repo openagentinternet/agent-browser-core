@@ -96,6 +96,7 @@ function createContext(options = {}) {
   const nodes = elements();
   const requests = [];
   const clipboardWrites = [];
+  let actionResponseIndex = 0;
   const context = {
     console,
     URL,
@@ -125,9 +126,12 @@ function createContext(options = {}) {
     fetch: async (url, fetchOptions = {}) => {
       if (String(url).startsWith('/api/browser/actions')) {
         requests.push({ url: String(url), body: fetchOptions.body ? JSON.parse(fetchOptions.body) : null });
+        const queuedResponse = Array.isArray(options.actionResponses)
+          ? options.actionResponses[Math.min(actionResponseIndex++, options.actionResponses.length - 1)]
+          : options.actionResponse;
         return {
           ok: true,
-          json: async () => options.actionResponse || ({ ok: true, data: { accepted: true } }),
+          json: async () => queuedResponse || ({ ok: true, data: { accepted: true } }),
         };
       }
       if (String(url).startsWith('/api/browser/runtime')) {
@@ -982,6 +986,157 @@ test('Share does not declare publication for waiting envelopes', async () => {
   await context.confirmAppShareBuzz('hello buzz');
   assert.doesNotMatch(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
   assert.match(nodes['[data-browser-toast]'].textContent, /Confirm in wallet/);
+});
+
+test('Share renders the shared PIN confirmation and resubmits the exact host request', async () => {
+  const confirmRequest = {
+    resourceUri: `metaapp://${METAAPP_PIN_ID}`,
+    kind: 'metaid-pin-write',
+    payload: {
+      operation: 'create',
+      path: '/protocols/simplebuzz',
+      confirmed: true,
+      hostConfirmation: { id: 'confirmation-1', token: 'host-secret-token' },
+    },
+  };
+  const buzzPinId = `${'a'.repeat(64)}i0`;
+  const { context, nodes, requests } = createContext({
+    actionResponses: [
+      {
+        ok: false,
+        state: 'manual_action_required',
+        code: 'manual_action_required',
+        message: 'Confirm this write.',
+        data: {
+          confirmation: {
+            actor: { uri: 'metaid://idq1worker', globalMetaId: 'idq1worker', name: 'Worker Bot' },
+            operation: 'create',
+            path: '/protocols/simplebuzz',
+            contentType: 'application/json;utf-8',
+            payloadSize: 24,
+            display: { title: 'Share MetaApp', summary: 'hello buzz' },
+          },
+          confirmRequest,
+        },
+      },
+      {
+        ok: true,
+        data: { pinId: buzzPinId, txid: 'tx-confirmed', operation: 'create', path: '/protocols/simplebuzz' },
+      },
+    ],
+  });
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+
+  const publish = context.confirmAppShareBuzz('hello buzz');
+  await waitFor(() => nodes['[data-browser-modal-root]'].innerHTML.includes('browser-pin-write-confirmation'), 'PIN confirmation modal');
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Write PIN/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Worker Bot/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /idq1worker/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /\/protocols\/simplebuzz/);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /24 bytes/);
+  assert.equal(requests.length, 1);
+
+  context.settlePinWriteConfirmation(true);
+  await publish;
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests[1].body, confirmRequest);
+  assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
+});
+
+test('MetaApp PIN bridge uses the shared confirmation without exposing the host token', async () => {
+  const confirmRequest = {
+    resourceUri: `metaapp://${METAAPP_PIN_ID}`,
+    kind: 'metaid-pin-write',
+    payload: {
+      operation: 'create',
+      path: '/protocols/simplebuzz',
+      confirmed: true,
+      hostConfirmation: { id: 'confirmation-2', token: 'bridge-host-token' },
+    },
+  };
+  const sourceWindow = {
+    messages: [],
+    postMessage(message) { this.messages.push(message); },
+  };
+  const { context, nodes, requests } = createContext({
+    actionResponses: [
+      {
+        ok: false,
+        state: 'manual_action_required',
+        code: 'manual_action_required',
+        message: 'Confirm this write.',
+        data: {
+          confirmation: {
+            actor: { uri: 'metaid://idq1worker', globalMetaId: 'idq1worker', name: 'Worker Bot' },
+            operation: 'create',
+            path: '/protocols/simplebuzz',
+            contentType: 'application/json;utf-8',
+            payloadSize: 18,
+          },
+          confirmRequest,
+        },
+      },
+      {
+        ok: true,
+        data: { pinId: `${'b'.repeat(64)}i0`, txid: 'tx-bridge', operation: 'create', path: '/protocols/simplebuzz' },
+      },
+    ],
+  });
+  context.state.current = metaAppCurrent();
+  const write = context.handleBridgePinWrite(sourceWindow, 'write-1', {
+    operation: 'create',
+    path: '/protocols/simplebuzz',
+    encryption: '0',
+    version: '1.0.0',
+    contentType: 'application/json;utf-8',
+    payload: { encoding: 'utf8', value: '{"content":"hi"}' },
+  });
+
+  await waitFor(() => nodes['[data-browser-modal-root]'].innerHTML.includes('browser-pin-write-confirmation'), 'bridge PIN confirmation modal');
+  assert.equal(sourceWindow.messages.length, 0);
+  context.settlePinWriteConfirmation(true);
+  await write;
+
+  assert.equal(requests.length, 2);
+  assert.deepEqual(requests[1].body, confirmRequest);
+  assert.equal(sourceWindow.messages.length, 1);
+  assert.equal(sourceWindow.messages[0].ok, true);
+  assert.doesNotMatch(JSON.stringify(sourceWindow.messages[0]), /bridge-host-token/);
+});
+
+test('Cancelling the shared PIN confirmation never submits the host confirm request', async () => {
+  const { context, nodes, requests } = createContext({
+    actionResponse: {
+      ok: false,
+      state: 'manual_action_required',
+      code: 'manual_action_required',
+      message: 'Confirm this write.',
+      data: {
+        confirmation: {
+          actor: { uri: 'metaid://idq1worker', globalMetaId: 'idq1worker', name: 'Worker Bot' },
+          operation: 'create',
+          path: '/protocols/simplebuzz',
+          contentType: 'application/json;utf-8',
+          payloadSize: 24,
+        },
+        confirmRequest: {
+          resourceUri: `metaapp://${METAAPP_PIN_ID}`,
+          kind: 'metaid-pin-write',
+          payload: { confirmed: true, hostConfirmation: { id: 'confirmation-3', token: 'unused-token' } },
+        },
+      },
+    },
+  });
+  context.state.current = metaAppCurrent();
+  context.openMetaAppShareModal();
+  const publish = context.confirmAppShareBuzz('hello buzz');
+  await waitFor(() => nodes['[data-browser-modal-root]'].innerHTML.includes('browser-pin-write-confirmation'), 'cancel PIN confirmation modal');
+
+  context.closeModal();
+  assert.equal(await publish, null);
+  assert.equal(requests.length, 1);
+  assert.equal(nodes['[data-browser-modal-root]'].hidden, true);
 });
 
 test('Remix opens the unsupported modal when the host lacks the remix feature', async () => {

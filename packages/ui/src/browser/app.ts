@@ -187,6 +187,7 @@ var state = {
   pendingAppShare: null,
   appShareSending: false,
   pendingAppShareBuzzPinId: '',
+  pendingPinWriteConfirmation: null,
   settingsTab: 'baseUrls',
   settingsData: null,
   cacheData: null,
@@ -1044,15 +1045,7 @@ async function handleBridgePinWrite(sourceWindow, id, params) {
     return;
   }
   try {
-    var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        resourceUri: currentResourceUri(),
-        kind: 'metaid-pin-write',
-        payload: validation.value
-      })
-    });
+    var result = await submitMetaIdPinWrite(currentResourceUri(), validation.value);
     if (result && result.ok === false) {
       bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
         code: textValue(result.code) || 'pin_write_failed',
@@ -1066,6 +1059,177 @@ async function handleBridgePinWrite(sourceWindow, id, params) {
       code: error && error.code ? error.code : 'pin_write_failed',
       message: error && error.message ? error.message : 'MetaID PIN write failed.'
     }));
+  }
+}
+
+function structuredPinWriteConfirmation(result) {
+  if (!result || result.ok !== false || result.state !== 'manual_action_required') return null;
+  var data = isPlainObject(result.data) ? result.data : null;
+  var confirmation = data && isPlainObject(data.confirmation) ? data.confirmation : null;
+  var confirmRequest = data && isPlainObject(data.confirmRequest) ? data.confirmRequest : null;
+  if (!confirmation || !confirmRequest) return null;
+  if (textValue(confirmRequest.kind) !== 'metaid-pin-write') return null;
+  if (!textValue(confirmRequest.resourceUri) || !isPlainObject(confirmRequest.payload)) return null;
+  return { confirmation: confirmation, confirmRequest: confirmRequest };
+}
+
+function pinWriteConfirmationField(label, value, valueClass) {
+  var text = textValue(value);
+  if (!text) return '';
+  return '<div class="browser-pin-write-field">' +
+    '<dt>' + escapeHtml(label) + '</dt>' +
+    '<dd' + (valueClass ? ' class="' + escapeHtml(valueClass) + '"' : '') + '>' + escapeHtml(text) + '</dd>' +
+  '</div>';
+}
+
+function pinWriteConfirmationHtml(confirmation) {
+  var actor = isPlainObject(confirmation.actor) ? confirmation.actor : {};
+  var actorName = textValue(actor.name) || 'Current actor';
+  var actorGlobalMetaId = textValue(actor.globalMetaId);
+  var display = isPlainObject(confirmation.display) ? confirmation.display : {};
+  var operation = textValue(confirmation.operation).toUpperCase();
+  var payloadSize = typeof confirmation.payloadSize === 'number' && confirmation.payloadSize >= 0
+    ? confirmation.payloadSize + ' bytes'
+    : '';
+  var copyLabel = browserText('pinWrite.copyActor', 'Copy Global MetaID');
+  return '<div class="browser-pin-write-confirmation">' +
+    '<div class="browser-pin-write-intro">' +
+      '<span class="browser-pin-write-mark">' + iconHtml('shield') + '</span>' +
+      '<div><span class="browser-pin-write-eyebrow">' + escapeHtml(browserText('pinWrite.eyebrow', 'ON-CHAIN WRITE')) + '</span>' +
+      '<p>' + escapeHtml(browserText('pinWrite.intro', 'Review the record that the current host will sign and broadcast.')) + '</p></div>' +
+    '</div>' +
+    '<div class="browser-pin-write-actor">' +
+      avatarHtml('', actorName, 'browser-pin-write-actor-avatar') +
+      '<div class="browser-pin-write-actor-copy"><strong>' + escapeHtml(actorName) + '</strong>' +
+        (actorGlobalMetaId ? '<code>' + escapeHtml(actorGlobalMetaId) + '</code>' : '') +
+      '</div>' +
+      (actorGlobalMetaId ? '<button type="button" class="browser-pin-write-copy" data-browser-copy-value="' + escapeHtml(actorGlobalMetaId) + '" aria-label="' + escapeHtml(copyLabel) + '" title="' + escapeHtml(copyLabel) + '">' + iconHtml('copy') + '</button>' : '') +
+    '</div>' +
+    '<dl class="browser-pin-write-details">' +
+      pinWriteConfirmationField(browserText('pinWrite.operation', 'Operation'), operation, 'browser-pin-write-operation') +
+      pinWriteConfirmationField(browserText('pinWrite.path', 'Protocol path'), confirmation.path, 'browser-pin-write-code') +
+      pinWriteConfirmationField(browserText('pinWrite.contentType', 'Content type'), confirmation.contentType, 'browser-pin-write-code') +
+      pinWriteConfirmationField(browserText('pinWrite.payloadSize', 'Payload'), payloadSize, '') +
+    '</dl>' +
+    ((textValue(display.title) || textValue(display.summary)) ?
+      '<div class="browser-pin-write-content">' +
+        (textValue(display.title) ? '<strong>' + escapeHtml(display.title) + '</strong>' : '') +
+        (textValue(display.summary) ? '<p>' + escapeHtml(display.summary) + '</p>' : '') +
+      '</div>' : '') +
+    '<p class="browser-pin-write-note">' + escapeHtml(browserText('pinWrite.note', 'Only this PIN write is authorized. No wallet balance or private key is shared with the MetaApp.')) + '</p>' +
+    '<p class="browser-pin-write-status" data-browser-pin-write-status role="status" aria-live="polite"></p>' +
+  '</div>';
+}
+
+function promptMetaIdPinWrite(confirmation) {
+  return new Promise(function (resolve) {
+    state.pendingPinWriteConfirmation = { resolve: resolve };
+    renderModal(
+      browserText('pinWrite.title', 'Write PIN'),
+      pinWriteConfirmationHtml(confirmation),
+      browserText('pinWrite.confirm', 'Write PIN'),
+      'pin-write-confirm',
+      {
+        cancelLabel: browserText('modal.cancel', 'Cancel'),
+        panelClass: 'browser-pin-write-modal'
+      }
+    );
+  });
+}
+
+function settlePinWriteConfirmation(approved) {
+  var pending = state.pendingPinWriteConfirmation;
+  if (!pending) return false;
+  state.pendingPinWriteConfirmation = null;
+  pending.resolve(approved === true);
+  return true;
+}
+
+function setPinWriteConfirmationStatus(tone, message) {
+  var root = elements.modalRoot;
+  var note = root && typeof root.querySelector === 'function'
+    ? root.querySelector('[data-browser-pin-write-status]')
+    : null;
+  if (!note) return;
+  note.className = 'browser-pin-write-status is-' + tone;
+  note.textContent = message;
+}
+
+function setPinWriteConfirmationSending(sending) {
+  var root = elements.modalRoot;
+  var button = root && typeof root.querySelector === 'function'
+    ? root.querySelector('[data-browser-modal-action="pin-write-confirm"]')
+    : null;
+  if (button) {
+    button.disabled = sending;
+    button.classList.toggle('is-busy', sending);
+    button.textContent = sending
+      ? browserText('pinWrite.writing', 'Writing...')
+      : browserText('pinWrite.confirm', 'Write PIN');
+  }
+  if (root && typeof root.querySelectorAll === 'function') {
+    var closeButtons = root.querySelectorAll('[data-browser-modal-close]');
+    for (var index = 0; index < closeButtons.length; index += 1) {
+      closeButtons[index].disabled = sending;
+    }
+  }
+}
+
+function setPinWriteConfirmationFailed(message) {
+  setPinWriteConfirmationSending(false);
+  setPinWriteConfirmationStatus('error', message);
+  var root = elements.modalRoot;
+  var button = root && typeof root.querySelector === 'function'
+    ? root.querySelector('[data-browser-modal-action="pin-write-confirm"]')
+    : null;
+  if (button) {
+    button.setAttribute('data-browser-modal-action', 'pin-write-dismiss');
+    button.textContent = browserText('modal.close', 'Close');
+  }
+}
+
+async function postMetaIdPinWrite(actionInput) {
+  return commandApi(endpointWithActor(browserEndpoints.actions), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(actionInput)
+  });
+}
+
+async function submitMetaIdPinWrite(resourceUri, payload) {
+  var phaseOne = await postMetaIdPinWrite({
+    resourceUri: resourceUri,
+    kind: 'metaid-pin-write',
+    payload: payload
+  });
+  var structured = structuredPinWriteConfirmation(phaseOne);
+  if (!structured) return phaseOne;
+  if (textValue(structured.confirmRequest.resourceUri) !== textValue(resourceUri)) return phaseOne;
+  var approved = await promptMetaIdPinWrite(structured.confirmation);
+  if (!approved) {
+    var cancelled = new Error('MetaID PIN write was cancelled.');
+    cancelled.code = 'user_cancelled';
+    throw cancelled;
+  }
+  setPinWriteConfirmationSending(true);
+  setPinWriteConfirmationStatus('sending', browserText('pinWrite.writingHint', 'Signing and broadcasting this PIN write...'));
+  try {
+    var phaseTwo = await postMetaIdPinWrite(structured.confirmRequest);
+    if (phaseTwo && phaseTwo.ok === false) {
+      var phaseTwoError = new Error(textValue(phaseTwo.message) || 'MetaID PIN write confirmation failed.');
+      phaseTwoError.code = textValue(phaseTwo.code) || 'pin_write_failed';
+      throw phaseTwoError;
+    }
+    closeModal();
+    return phaseTwo && phaseTwo.data ? phaseTwo.data : phaseTwo;
+  } catch (error) {
+    var failureMessage = textValue(error && error.message) || 'MetaID PIN write failed.';
+    setPinWriteConfirmationFailed(failureMessage);
+    setStatus('error', failureMessage);
+    if (error && (typeof error === 'object' || typeof error === 'function')) {
+      error.pinWriteConfirmation = true;
+    }
+    throw error;
   }
 }
 
@@ -2059,22 +2223,14 @@ async function confirmAppShareBuzz(messageText) {
   }
   setAppShareSending(true);
   try {
-    var result = await commandApi(endpointWithActor(browserEndpoints.actions), {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        resourceUri: pending.uri,
-        kind: 'metaid-pin-write',
-        payload: {
-          operation: 'create',
-          path: '/protocols/simplebuzz',
-          encryption: '0',
-          version: '1.0.0',
-          contentType: 'application/json;utf-8',
-          payload: { encoding: 'utf8', value: JSON.stringify({ content: content }) },
-          display: { title: 'Share MetaApp', summary: content.slice(0, 80) }
-        }
-      })
+    var result = await submitMetaIdPinWrite(pending.uri, {
+      operation: 'create',
+      path: '/protocols/simplebuzz',
+      encryption: '0',
+      version: '1.0.0',
+      contentType: 'application/json;utf-8',
+      payload: { encoding: 'utf8', value: JSON.stringify({ content: content }) },
+      display: { title: 'Share MetaApp', summary: content.slice(0, 80) }
     });
     state.appShareSending = false;
     setStatus('sent', '');
@@ -2091,9 +2247,13 @@ async function confirmAppShareBuzz(messageText) {
     return result;
   } catch (err) {
     setAppShareSending(false);
+    if (textValue(err && err.code) === 'user_cancelled') {
+      setStatus('ready', '');
+      return null;
+    }
     var failMessage = textValue(err && err.message) ||
       browserText('appShare.sendFailed', 'Failed to publish the buzz. Please try again.');
-    setAppShareStatus('error', failMessage);
+    if (!err || err.pinWriteConfirmation !== true) setAppShareStatus('error', failMessage);
     setStatus('error', failMessage);
     return null;
   }
@@ -4259,7 +4419,8 @@ function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
   if (!elements.modalRoot) return;
   var modalOptions = arguments[4] || {};
   elements.modalRoot.hidden = false;
-  elements.modalRoot.innerHTML = '<section class="browser-modal-panel" role="dialog" aria-modal="true">' +
+  var panelClass = textValue(modalOptions.panelClass);
+  elements.modalRoot.innerHTML = '<section class="browser-modal-panel' + (panelClass ? ' ' + escapeHtml(panelClass) : '') + '" role="dialog" aria-modal="true">' +
     '<header><h2>' + escapeHtml(title) + '</h2>' + modalCloseButtonHtml(browserText('modal.close', 'Close')) + '</header>' +
     '<div class="browser-modal-body">' + bodyHtml + '</div>' +
     '<footer class="browser-modal-footer">' +
@@ -4270,6 +4431,7 @@ function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
 }
 
 function closeModal() {
+  settlePinWriteConfirmation(false);
   flushPendingActorConsent('dismiss');
   state.pendingPrivateChat = null;
   state.privateChatSending = false;
@@ -6454,6 +6616,14 @@ async function initialize() {
       }
       if (action === 'app-share-view-post') {
         openAppShareBuzzPost();
+        return;
+      }
+      if (action === 'pin-write-confirm') {
+        settlePinWriteConfirmation(true);
+        return;
+      }
+      if (action === 'pin-write-dismiss') {
+        closeModal();
         return;
       }
       if (action === 'service-call') {

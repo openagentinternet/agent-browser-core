@@ -13,10 +13,11 @@ host contract lives in `packages/host-contract/src/index.ts`.
 ## Summary
 
 ABC provides the shared iframe bridge, in-Browser navigation, request validation, sanitized actor
-snapshots, and host-neutral TypeScript contracts. A downstream host provides the real side effects:
+snapshots, host-neutral TypeScript contracts, and the shared PIN-write confirmation modal. A
+downstream host provides the real side effects and authorization:
 
 - current Actor Bot selection;
-- host-controlled confirmation UI;
+- host-issued, single-use confirmation authorization;
 - MetaID PIN transaction building, signing, and broadcast;
 - MetaFile file picking, upload, and progress handling;
 - stable success and error responses back to the ABC bridge.
@@ -171,9 +172,8 @@ Host requirements:
 - Require a selected actor with a usable MetaID signing path.
 - Re-read the selected actor at execution time, even when the request includes an `actorId` query
   parameter from the Browser page.
-- Show a host-owned confirmation UI before signing or broadcasting.
-- The confirmation UI should display the actor, operation, path, content type, payload size, and
-  optional `display.title` and `display.summary`.
+- Before signing or broadcasting, return the structured two-phase confirmation response documented
+  below. ABC renders the shared confirmation modal; the host still owns authorization and execution.
 - Build the MetaID OP_RETURN tuple from the request fields: `metaid`, operation, path, encryption,
   version, content type, and payload body.
 - Broadcast using the host's current Actor Bot signing and broadcast stack.
@@ -194,6 +194,65 @@ interface BrowserMetaIdPinWriteResult {
 ```
 
 The host action response should wrap that result in the existing Browser command result shape.
+
+### Shared Two-Phase Confirmation
+
+For a PIN write that has not been authorized, return `manual_action_required` with sanitized display
+data and a host-issued confirmation request:
+
+```ts
+browserManualActionRequired(
+  'manual_action_required',
+  'Confirm this MetaID PIN write before the host signs or broadcasts it.',
+  {
+    data: {
+      confirmation: {
+        actor,
+        operation: request.operation,
+        path: request.path,
+        contentType: request.contentType,
+        payloadSize,
+        confirmationId,
+        expiresAt,
+        display: request.display
+      },
+      confirmRequest: {
+        resourceUri,
+        kind: 'metaid-pin-write',
+        payload: {
+          ...request,
+          confirmed: true,
+          hostConfirmation: { id: confirmationId, token: opaqueToken }
+        }
+      }
+    }
+  }
+);
+```
+
+ABC keeps `confirmRequest` in the trusted parent page, displays only `confirmation`, and resubmits the
+exact host-issued request after the user chooses **Write PIN**. The MetaApp iframe receives only the
+final success or error response and never receives the host token.
+
+Host requirements:
+
+- Bind the confirmation to the actor, resource URI, normalized write request, an expiration time,
+  and a single use.
+- Re-read the current actor and validate the confirmation when the second request arrives.
+- Reject client-supplied `confirmed` fields unless a valid host-issued authorization accompanies
+  them.
+- Consume the authorization before signing so retries cannot replay it.
+- Return `user_cancelled`, `pin_write_failed`, or another stable error when the write cannot finish.
+
+A host with an existing trusted native confirmation can continue returning the final success result
+directly. To adopt the shared ABC visual treatment, it should switch to the structured two-phase
+response instead of opening its native dialog.
+
+`commandApi()` intentionally resolves `waiting` and `manual_action_required` responses; it does not
+throw them. A host wrapper that still intercepts `handleBridgePinWrite` must inspect the resolved
+result in `.then(...)` or after `await`. Do not put the confirmation branch only in `.catch(...)`.
+Hosts consuming an ABC package that includes the shared flow should remove custom PIN-write modal
+overrides and let ABC handle both Browser chrome actions and MetaApp iframe requests consistently.
 
 ## MetaFile Upload Requirements
 
@@ -283,7 +342,9 @@ Recommended OAC responsibilities:
   host adapter.
 - Add `metaid-pin-write` handling in the OAC Browser host adapter.
 - Connect that handling to the selected OAC Actor Bot identity, existing MetaID write stack, and
-  host-owned confirmation flow.
+  host-issued two-phase confirmation flow.
+- Remove wrapper-level `handleBridgePinWrite` confirmation overrides after adopting ABC's shared
+  modal; otherwise Browser chrome writes and iframe writes can follow different code paths.
 - Add or route `POST /api/browser/metafile-upload` to the OAC-owned MetaFile upload flow.
 - Keep OAC identity ids, local daemon routes, database ids, and wallet internals out of bridge
   responses.
@@ -310,7 +371,9 @@ Recommended IDBots responsibilities:
 - Route Browser action requests from renderer to main process through explicit IPC handlers.
 - Add `metaid-pin-write` handling in the IDBots Browser host adapter or main-process service layer.
 - Connect that handling to the selected Bot identity, existing MetaID write stack, and host-owned
-  confirmation flow.
+  confirmation authorization.
+- To use the shared visual treatment, return the two-phase response from trusted main-process code
+  instead of opening an Electron `dialog.showMessageBox` confirmation.
 - Add a host-owned file picker for `metafile.upload`; the renderer iframe must not receive local file
   paths.
 - Return sanitized `pinId`, `txid`, `metafile://...`, and actor snapshots only.
@@ -324,7 +387,7 @@ adapter boundary.
 
 - Accept bridge messages only from the active MetaApp iframe.
 - Treat MetaApps as untrusted content, even when they are chain-hosted.
-- Keep all write, upload, signer, wallet, and file access behind host confirmation.
+- Keep all write, upload, signer, wallet, and file access behind host-controlled authorization.
 - Never expose private keys, arbitrary signing, balances, payments, host routes, local paths, or
   internal ids to iframe content.
 - Do not trust display text from MetaApps as protocol authority. It is only confirmation copy.
@@ -342,7 +405,8 @@ A downstream host implementation is ready when all of these checks pass:
 - A custom MetaApp can call `browser.actor.current` and receive only MetaID actor fields.
 - A custom MetaApp receives `browser.actor.changed` when the user switches the selected actor.
 - A valid `metaid.pin.write` request reaches the host adapter as `metaid-pin-write`.
-- The host confirmation UI shows the current actor and the write details before signing.
+- The shared ABC confirmation modal shows the current actor and write details, backed by a
+  host-issued authorization, before signing.
 - `create`, `modify`, and `revoke` all either succeed through the same code path or fail with a
   documented bridge error.
 - Successful writes return `pinId`, `txid`, operation, path, and sanitized actor.

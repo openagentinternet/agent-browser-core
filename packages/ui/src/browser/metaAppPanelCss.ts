@@ -89,4 +89,194 @@ export const BROWSER_METAAPP_PANEL_CSS = `
         background: var(--browser-surface2);
         color: var(--browser-text);
       }
+      .browser-pin-write-modal {
+        width: min(520px, 100%);
+      }
+      .browser-pin-write-modal header h2 {
+        font-size: 15px;
+        letter-spacing: 0;
+      }
+      .browser-pin-write-confirmation {
+        display: grid;
+        gap: 0;
+      }
+      .browser-pin-write-intro {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 11px;
+        align-items: start;
+        padding-bottom: 14px;
+        border-bottom: 1px solid var(--browser-border);
+      }
+      .browser-pin-write-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        height: 34px;
+        border: 1px solid var(--browser-border);
+        border-radius: 7px;
+        background: var(--browser-surface2);
+        color: var(--browser-accent);
+      }
+      .browser-pin-write-eyebrow {
+        display: block;
+        margin: 1px 0 3px;
+        color: var(--browser-accent);
+        font: 650 10px/1.3 var(--mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+      }
+      .browser-pin-write-intro p {
+        color: var(--browser-muted);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .browser-pin-write-actor {
+        display: grid;
+        grid-template-columns: 32px minmax(0, 1fr) 28px;
+        gap: 10px;
+        align-items: center;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--browser-border);
+      }
+      .browser-pin-write-actor-avatar {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 7px;
+        background: var(--browser-accent-soft);
+        color: var(--browser-accent);
+        font-size: 11px;
+        font-weight: 700;
+      }
+      .browser-pin-write-actor-copy {
+        display: grid;
+        gap: 2px;
+        min-width: 0;
+      }
+      .browser-pin-write-actor-copy strong {
+        color: var(--browser-text);
+        font-size: 13px;
+        font-weight: 650;
+      }
+      .browser-pin-write-actor-copy code {
+        overflow: hidden;
+        color: var(--browser-muted);
+        font: 11px/1.35 var(--mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .browser-modal-panel .browser-pin-write-copy {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: var(--browser-muted);
+      }
+      .browser-modal-panel .browser-pin-write-copy:hover {
+        border: none;
+        background: var(--browser-surface2);
+        color: var(--browser-text);
+      }
+      .browser-pin-write-details {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 0 !important;
+        margin: 0 !important;
+        padding: 8px 0 !important;
+        border-bottom: 1px solid var(--browser-border);
+      }
+      .browser-pin-write-field {
+        display: grid;
+        grid-template-columns: 112px minmax(0, 1fr);
+        gap: 12px;
+        align-items: baseline;
+        padding: 6px 0;
+      }
+      .browser-pin-write-field dt {
+        color: var(--browser-muted);
+        font: 11px/1.4 var(--sans, ui-sans-serif, system-ui, sans-serif);
+      }
+      .browser-pin-write-field dd {
+        margin: 0;
+        color: var(--browser-text);
+        font-size: 12px;
+        overflow-wrap: anywhere;
+      }
+      .browser-pin-write-field .browser-pin-write-code {
+        font-family: var(--mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace);
+      }
+      .browser-pin-write-operation {
+        color: var(--browser-accent) !important;
+        font: 650 11px/1.4 var(--mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace) !important;
+      }
+      .browser-pin-write-content {
+        display: grid;
+        gap: 4px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--browser-border);
+      }
+      .browser-pin-write-content strong {
+        color: var(--browser-text);
+        font-size: 13px;
+        font-weight: 650;
+      }
+      .browser-pin-write-content p {
+        color: var(--browser-muted);
+        font-size: 12px;
+        line-height: 1.5;
+        overflow-wrap: anywhere;
+      }
+      .browser-pin-write-note {
+        padding-top: 12px;
+        color: var(--browser-muted);
+        font-size: 11px;
+        line-height: 1.45;
+      }
+      .browser-pin-write-status {
+        min-height: 0;
+        color: var(--browser-muted);
+        font-size: 11px;
+        line-height: 1.4;
+      }
+      .browser-pin-write-status:not(:empty) {
+        margin-top: 8px;
+      }
+      .browser-pin-write-status.is-error {
+        color: var(--browser-danger);
+      }
+      .browser-pin-write-modal [data-browser-modal-confirm] {
+        border-color: var(--browser-accent);
+        background: var(--browser-accent);
+        color: #fff;
+      }
+      .browser-pin-write-modal [data-browser-modal-confirm]:not(:disabled):hover {
+        border-color: var(--browser-accent);
+        background: var(--browser-accent);
+        color: #fff;
+        box-shadow: 0 2px 8px rgba(47, 111, 237, .2);
+      }
+      @media (max-width: 540px) {
+        .browser-pin-write-field {
+          grid-template-columns: 1fr;
+          gap: 2px;
+        }
+        .browser-pin-write-modal footer,
+        .browser-pin-write-modal .browser-modal-footer-end {
+          width: 100%;
+        }
+        .browser-pin-write-modal .browser-modal-footer-end button {
+          flex: 1;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .browser-pin-write-modal button {
+          transition: none;
+        }
+      }
 `;
