@@ -37,6 +37,11 @@ security rules, or acceptance checks.
    capabilities, adapter behavior, routes, UI controls, and host policy must
    agree. Showing a control without implementing its trusted effect is not a
    complete integration.
+8. **Treat package updates and host integration as separate gates.** Updating
+   the pinned ABC packages installs shared UI and contracts, but it does not
+   replace a host-native confirmation, signing, IPC, or error-normalization
+   path. A capability is integrated only after the host preserves the required
+   command-result semantics and passes the feature acceptance checks.
 
 ## Package roles
 
@@ -137,6 +142,12 @@ MetaApps are untrusted child frames. ABC owns request validation, sanitized
 actor projection, in-Browser navigation, and bridge responses. The host owns
 identity consent and every trusted effect, including confirmation, MetaID PIN
 writes, signing and broadcast, file selection, and MetaFile upload.
+
+For the shared Write PIN modal, the host must return the complete structured
+`manual_action_required` result from its trusted boundary. Merely consuming the
+ABC release that contains the modal is insufficient; a wrapper that opens its
+own native dialog or collapses the result into a generic failure bypasses the
+shared UI.
 
 Read [MetaApp Host Bridge V1 Host Requirements](./metaapp-host-bridge-v1-host-requirements.md)
 for the required action/upload endpoints, actor rules, consent boundary,

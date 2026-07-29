@@ -45,6 +45,12 @@ through `window.AgentBrowser.request(...)` and the host adapter.
 Hosts may use different internal routes or IPC methods, but the ABC page must observe the same
 request and response semantics.
 
+Package consumption and host capability integration are separate gates. The shared Write PIN modal
+is available in ABC `0.4.3`, but updating packages alone does not replace a downstream host's native
+confirmation, IPC, signer, or result-normalization path. The host integration is complete only when
+the action result described below reaches the generated ABC page intact and the end-to-end
+acceptance checks pass.
+
 ## Navigation Bridge Compatibility
 
 MetaApps navigate inside the Browser with:
@@ -234,6 +240,41 @@ ABC keeps `confirmRequest` in the trusted parent page, displays only `confirmati
 exact host-issued request after the user chooses **Write PIN**. The MetaApp iframe receives only the
 final success or error response and never receives the host token.
 
+### Result Transport Invariants
+
+Every route, IPC handler, preload method, renderer wrapper, and host adapter between the trusted host
+service and the generated ABC page must preserve the complete `BrowserCommandResult`. In particular,
+the first response must still contain all of these fields when ABC receives it:
+
+```ts
+{
+  ok: false,
+  state: 'manual_action_required',
+  code: 'manual_action_required',
+  message: 'Confirm this MetaID PIN write before the host signs or broadcasts it.',
+  data: { confirmation, confirmRequest }
+}
+```
+
+Do not normalize that response with code equivalent to:
+
+```ts
+return browserFailure(result.code, result.message);
+```
+
+That conversion discards `state`, `data.confirmation`, and `data.confirmRequest`, so ABC cannot
+recognize the two-phase flow or display the shared modal. Return the original structured result, or
+construct an equivalent `browserManualActionRequired(...)` result with the full data envelope.
+
+If the host uses HTTP internally, treat `manual_action_required` as an expected command state rather
+than a transport error; return a response that the Browser client can parse normally. If the host
+uses IPC, resolve the IPC call with the complete result instead of throwing or reducing it to only a
+code and message.
+
+The first request must issue authorization only. It must not open a host-native confirmation, sign,
+build a transaction with irreversible side effects, or broadcast. Only the second, exact
+`confirmRequest` may consume the authorization and reach the signing path.
+
 Host requirements:
 
 - Bind the confirmation to the actor, resource URI, normalized write request, an expiration time,
@@ -374,6 +415,18 @@ Recommended IDBots responsibilities:
   confirmation authorization.
 - To use the shared visual treatment, return the two-phase response from trusted main-process code
   instead of opening an Electron `dialog.showMessageBox` confirmation.
+- Replace any `confirmPinWrite` callback that immediately opens a native dialog with a trusted
+  main-process authorization issuer and validator. The first call returns
+  `browserManualActionRequired(...)`; the confirmed second call validates and consumes the opaque
+  authorization before invoking the existing PIN writer.
+- Preserve `manual_action_required` unchanged through main-process IPC, preload, the renderer bridge,
+  `BrowserHostAdapter.runTrustedAction(...)`, and the Browser action endpoint. Do not convert every
+  `ok: false` result into `browserFailure(...)`.
+- Keep the complete structured result body when mapping it to an HTTP-like response. A
+  `manual_action_required` result is a successful transport round trip even though its command-level
+  `ok` value is `false`.
+- Remove the old native confirmation path after the shared flow passes end-to-end tests. Keeping both
+  paths can produce two prompts or let Browser chrome writes and MetaApp iframe writes diverge.
 - Add a host-owned file picker for `metafile.upload`; the renderer iframe must not receive local file
   paths.
 - Return sanitized `pinId`, `txid`, `metafile://...`, and actor snapshots only.
@@ -405,8 +458,17 @@ A downstream host implementation is ready when all of these checks pass:
 - A custom MetaApp can call `browser.actor.current` and receive only MetaID actor fields.
 - A custom MetaApp receives `browser.actor.changed` when the user switches the selected actor.
 - A valid `metaid.pin.write` request reaches the host adapter as `metaid-pin-write`.
+- The first PIN-write request returns `manual_action_required` with both `confirmation` and
+  `confirmRequest`, and neither the signer nor broadcaster has run.
 - The shared ABC confirmation modal shows the current actor and write details, backed by a
   host-issued authorization, before signing.
+- Choosing **Write PIN** submits the exact host-issued `confirmRequest`; the host validates and
+  consumes it once, then returns the final write result.
+- Cancelling the modal sends no confirmed request and performs no signing or broadcast.
+- Browser chrome Share and a MetaApp iframe `metaid.pin.write` request use the same shared
+  confirmation path; no host-native PIN confirmation appears in either flow.
+- Host adapter tests assert preservation of `state`, `data.confirmation`, and `data.confirmRequest`
+  across route or IPC boundaries, including an `ok: false` result.
 - `create`, `modify`, and `revoke` all either succeed through the same code path or fail with a
   documented bridge error.
 - Successful writes return `pinId`, `txid`, operation, path, and sanitized actor.
