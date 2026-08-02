@@ -939,9 +939,32 @@ test('Share posts a simplebuzz pin write through the actions endpoint', async ()
   assert.equal(body.payload.version, '1.0.0');
   assert.equal(body.payload.contentType, 'application/json;utf-8');
   assert.equal(body.payload.payload.encoding, 'utf8');
-  assert.equal(body.payload.payload.value, JSON.stringify({ content: 'hello buzz' }));
+  // The record icon is a metafile:// reference, so it is attached without re-upload.
+  assert.equal(
+    body.payload.payload.value,
+    JSON.stringify({ content: 'hello buzz', attachments: [`metafile://${METAAPP_ICON_PIN_ID}`] }),
+  );
   assert.equal(body.payload.display.title, 'Share MetaApp');
   assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
+});
+
+test('Share omits attachments when the record has no on-chain metafile image', async () => {
+  const { context, requests } = createContext({
+    actionResponse: {
+      ok: true,
+      data: { pinId: `${'d'.repeat(64)}i0`, txid: 'tx-buzz', operation: 'create', path: '/protocols/simplebuzz' },
+    },
+  });
+  const current = metaAppCurrent();
+  const record = current.renderer.data.record;
+  // Non-metafile image references can't reuse an on-chain metafile, so they are skipped.
+  record.icon = 'https://cdn.example/icon.png';
+  delete record.coverImg;
+  context.state.current = current;
+  context.openMetaAppShareModal();
+  await context.confirmAppShareBuzz('hello buzz');
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].body.payload.payload.value, JSON.stringify({ content: 'hello buzz' }));
 });
 
 test('Share keeps the new buzz pin id for view-post', async () => {
