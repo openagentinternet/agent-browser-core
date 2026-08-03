@@ -45,7 +45,11 @@ host support for local/public Browser previews.
 - Host-specific behavior belongs in host adapters.
 - Standalone wallet behavior belongs in a standalone host package, not in core.
 - Prefer small, verified commits.
-- Documentation and code comments must be written in English.
+- All produced artifacts — documentation, code comments, default user-facing UI text, and
+  on-chain development-journal posts (e.g. `metabot-post-buzz`) — must be written in English
+  by default, unless the user explicitly requests a different language for that artifact.
+- When replying to the user or asking clarifying questions, write in the same language the
+  user is using.
 - For docs-only changes, run `git diff --check`.
 - After TypeScript workspace bootstrap exists, run the package-specific build/test command
   named in the relevant implementation plan.
