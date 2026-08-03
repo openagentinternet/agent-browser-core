@@ -2048,6 +2048,20 @@ function metaAppIconUrl(icon) {
   return safeUrl(raw);
 }
 
+// Resolves a shareable MetaApp cover image to a metafile:// URI that can be
+// attached to a Buzz without re-uploading. Prefers coverImg, falls back to the
+// icon, and accepts either a metafile:// URI or a bare metafile pinId on chain.
+// http(s)/data/blob URLs can't reference an existing metafile, so they are skipped.
+function metaAppShareImageUri(record) {
+  if (!record) return '';
+  var raw = textValue(record.coverImg) || textValue(record.icon);
+  if (!raw) return '';
+  var pinId = '';
+  if (raw.toLowerCase().indexOf('metafile://') === 0) pinId = extractMetafilePinId(raw);
+  else if (isBrowserPinId(raw)) pinId = raw.toLowerCase();
+  return pinId ? 'metafile://' + pinId : '';
+}
+
 function appIconHtml(record, className) {
   var url = metaAppIconUrl(record && record.icon);
   var classValue = className || 'browser-app-icon-image';
@@ -2203,7 +2217,8 @@ function openMetaAppShareModal() {
   var title = metaAppRecordTitle(record);
   var appUri = metaAppHref(pinId);
   var webUrl = METAAPP_SHARE_WEB_BASE_URL + encodeURIComponent(pinId);
-  state.pendingAppShare = { pinId: pinId, uri: appUri, title: title };
+  var shareImageUri = metaAppShareImageUri(record);
+  state.pendingAppShare = { pinId: pinId, uri: appUri, title: title, imageUri: shareImageUri };
   renderModal(
     browserText('appShare.title', 'Share MetaApp'),
     '<div class="browser-app-share-rows">' +
@@ -2244,13 +2259,20 @@ async function confirmAppShareBuzz(messageText) {
   }
   setAppShareSending(true);
   try {
+    // Attach the MetaApp cover image (or icon) as a metafile:// reference so the
+    // Buzz carries the artwork without re-uploading it. Only chain metafile
+    // references qualify; other forms are skipped to avoid an extra upload.
+    var shareImageUri = textValue(pending.imageUri);
+    var buzzBody = shareImageUri
+      ? { content: content, attachments: [shareImageUri] }
+      : { content: content };
     var result = await submitMetaIdPinWrite(pending.uri, {
       operation: 'create',
       path: '/protocols/simplebuzz',
       encryption: '0',
       version: '1.0.0',
       contentType: 'application/json;utf-8',
-      payload: { encoding: 'utf8', value: JSON.stringify({ content: content }) },
+      payload: { encoding: 'utf8', value: JSON.stringify(buzzBody) },
       display: { title: 'Share MetaApp', summary: content.slice(0, 80) }
     });
     state.appShareSending = false;
