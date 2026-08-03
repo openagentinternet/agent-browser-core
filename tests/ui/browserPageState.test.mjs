@@ -701,6 +701,60 @@ test('Browser MAP alias deep link path is decoded into the address bar and resol
   assert.equal(fetchCalls[1], '/api/browser/resolve?uri=map%3A%2F%2Fbuzz.sunny.eth&actorId=worker');
 });
 
+test('Browser preview-metaapp directory deep link path is decoded into the address bar and resolved', async () => {
+  // Echo the URI verbatim so the address-bar assertion reflects the
+  // browserUriFromPath reconstruction, not resolver-side lowercasing.
+  const resolveResponse = (uri) => resolvedBot(uri).data && { ok: true, data: { ...resolvedBot(uri).data, normalizedUri: uri } };
+  const { elements, fetchCalls } = createBrowserContext({
+    pathname: '/browser/preview-metaapp/localhost/Users/a/b/app',
+    resolveResponse,
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and preview-metaapp directory resolve');
+
+  assert.equal(elements['[data-browser-uri-input]'].value, 'preview-metaapp://localhost/Users/a/b/app');
+  assert.equal(
+    fetchCalls[1],
+    '/api/browser/resolve?uri=preview-metaapp%3A%2F%2Flocalhost%2FUsers%2Fa%2Fb%2Fapp&actorId=worker',
+  );
+});
+
+test('Browser preview-metaapp entry-file deep link path is decoded into the address bar and resolved', async () => {
+  const resolveResponse = (uri) => ({ ok: true, data: { ...resolvedBot(uri).data, normalizedUri: uri } });
+  const { elements, fetchCalls } = createBrowserContext({
+    pathname: '/browser/preview-metaapp/localhost/Users/a/b/app/dist/index.html',
+    resolveResponse,
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and preview-metaapp entry-file resolve');
+
+  assert.equal(
+    elements['[data-browser-uri-input]'].value,
+    'preview-metaapp://localhost/Users/a/b/app/dist/index.html',
+  );
+  assert.equal(
+    fetchCalls[1],
+    '/api/browser/resolve?uri=preview-metaapp%3A%2F%2Flocalhost%2FUsers%2Fa%2Fb%2Fapp%2Fdist%2Findex.html&actorId=worker',
+  );
+});
+
+test('Browser preview-metaapp deep link path decodes percent-encoded segments', async () => {
+  const resolveResponse = (uri) => ({ ok: true, data: { ...resolvedBot(uri).data, normalizedUri: uri } });
+  const { elements, fetchCalls } = createBrowserContext({
+    pathname: '/browser/preview-metaapp/localhost/Users/a%20b/app',
+    resolveResponse,
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and preview-metaapp encoded resolve');
+
+  assert.equal(elements['[data-browser-uri-input]'].value, 'preview-metaapp://localhost/Users/a b/app');
+  // URLSearchParams encodes a space as '+', so the resolve request uses '+'.
+  assert.equal(
+    fetchCalls[1],
+    '/api/browser/resolve?uri=preview-metaapp%3A%2F%2Flocalhost%2FUsers%2Fa+b%2Fapp&actorId=worker',
+  );
+});
+
 test('Browser status TXID falls back to the proof pin transaction id', async () => {
   const txid = '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
   const pinId = `${txid}i0`;

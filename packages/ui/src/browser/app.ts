@@ -1848,6 +1848,14 @@ function browserUriFromPath(pathname, search) {
     return mapId ? 'map://' + mapId + textValue(search) : '';
   }
 
+  var previewMatch = path.match(/^\\/browser\\/preview-metaapp\\/(.+)$/);
+  if (previewMatch) {
+    var previewTarget = previewMatch[1].split('/').map(decodeURIComponentSafe).join('/');
+    previewTarget = textValue(previewTarget);
+    if (!previewTarget) return '';
+    return 'preview-metaapp://' + previewTarget;
+  }
+
   var bareMatch = path.match(/^\\/browser\\/([^/?#]+)$/);
   if (!bareMatch) return '';
   var bareInput = textValue(decodeURIComponentSafe(bareMatch[1]));
