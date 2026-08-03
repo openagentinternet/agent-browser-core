@@ -792,6 +792,17 @@ test('Browser loads runtime and resolves default URI when no query URI is presen
   assert.equal(elements['[data-browser-uri-input]'].value, 'metaid://idq1worker');
 });
 
+test('Browser preview-metaapp deep link path with empty target falls through to the default URI', async () => {
+  const { elements, fetchCalls } = createBrowserContext({
+    pathname: '/browser/preview-metaapp/',
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and default resolve');
+
+  assert.equal(elements['[data-browser-uri-input]'].value, 'metaid://idq1worker');
+  assert.equal(fetchCalls[1], '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1worker&actorId=worker');
+});
+
 test('Browser renders current resource identity separately from using identity', async () => {
   const { elements, fetchCalls } = createBrowserContext({
     resolveResponse: (uri) => resolvedBot(uri, 'Alice Resource'),
