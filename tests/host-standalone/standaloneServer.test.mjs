@@ -251,6 +251,111 @@ test('standalone Browser server maps bad client requests to explicit failures', 
   assert.equal(method.code, 'method_not_allowed');
 });
 
+test('standalone actions route forwards sessionId and serves the v1.1 grant flow over HTTP', async (t) => {
+  const server = standalone.createStandaloneBrowserServer({
+    llmComplete: async () => ({ text: 'h2e2', model: 'dev-model', finishReason: 'stop' }),
+  });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const resourceUri = 'metaapp://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
+  const sessionId = 'http-session-1';
+
+  const llmResponse = await fetch(`${baseUrl}/api/browser/actions?actorId=standalone-wallet`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      resourceUri,
+      kind: 'llm-complete',
+      sessionId,
+      payload: { messages: [{ role: 'user', content: 'board' }], purpose: 'llmchess-move' },
+    }),
+  });
+  const llm = await json(llmResponse);
+  assert.equal(llmResponse.status, 200);
+  assert.equal(llm.ok, true);
+  assert.equal(llm.data.data.text, 'h2e2');
+  assert.equal(llm.data.data.model, 'dev-model');
+
+  const phaseOneResponse = await fetch(`${baseUrl}/api/browser/actions?actorId=standalone-wallet`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      resourceUri,
+      kind: 'permissions-request',
+      sessionId,
+      payload: {
+        grants: [{ method: 'metaid.pin.write', operation: 'create', path: '/protocols/simplegroupchat' }],
+        reason: 'chess moves',
+      },
+    }),
+  });
+  const phaseOne = await json(phaseOneResponse);
+  assert.equal(phaseOneResponse.status, 200);
+  assert.equal(phaseOne.ok, false);
+  assert.equal(phaseOne.state, 'manual_action_required');
+  assert.equal(phaseOne.data.confirmRequest.resourceUri, resourceUri);
+
+  const phaseTwoResponse = await fetch(`${baseUrl}/api/browser/actions?actorId=standalone-wallet`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      resourceUri: phaseOne.data.confirmRequest.resourceUri,
+      kind: 'permissions-request',
+      sessionId,
+      payload: phaseOne.data.confirmRequest.payload,
+    }),
+  });
+  const phaseTwo = await json(phaseTwoResponse);
+  assert.equal(phaseTwo.ok, true);
+  assert.equal(phaseTwo.data.data.granted.length, 1);
+
+  const writeResponse = await fetch(`${baseUrl}/api/browser/actions?actorId=standalone-wallet`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      resourceUri,
+      kind: 'metaid-pin-write',
+      sessionId,
+      payload: {
+        operation: 'create',
+        path: '/protocols/simplegroupchat',
+        encryption: '0',
+        version: '1.0.0',
+        contentType: 'application/json;utf-8',
+        payload: { encoding: 'utf8', value: '{"app":"llmchess"}' },
+      },
+    }),
+  });
+  const write = await json(writeResponse);
+  // The grant skipped the two-phase confirmation envelope; the standalone host
+  // still cannot sign, so the write fails on the broadcast path.
+  assert.equal(write.state, 'failed');
+  assert.equal(write.code, 'pin_write_failed');
+  assert.notEqual(write.state, 'manual_action_required');
+
+  // A fresh session (page refresh) has no grants: two-phase flow returns.
+  const freshWriteResponse = await fetch(`${baseUrl}/api/browser/actions?actorId=standalone-wallet`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      resourceUri,
+      kind: 'metaid-pin-write',
+      sessionId: 'http-session-fresh',
+      payload: {
+        operation: 'create',
+        path: '/protocols/simplegroupchat',
+        encryption: '0',
+        version: '1.0.0',
+        contentType: 'application/json;utf-8',
+        payload: { encoding: 'utf8', value: '{"app":"llmchess"}' },
+      },
+    }),
+  });
+  const freshWrite = await json(freshWriteResponse);
+  assert.equal(freshWrite.state, 'manual_action_required');
+});
+
 test('memory standalone Browser host keeps settings global while cache remains actor-scoped', async () => {
   const host = standalone.createMemoryStandaloneBrowserHost();
 
