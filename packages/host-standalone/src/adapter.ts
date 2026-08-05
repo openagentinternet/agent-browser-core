@@ -836,6 +836,7 @@ export function createStandaloneBrowserHostAdapter(
         : LLM_COMPLETE_DEFAULT_TIMEOUT_MS;
     const timeoutMs = Math.min(requestedTimeout, LLM_COMPLETE_MAX_TIMEOUT_MS);
     llmInFlight.add(resourceKey);
+    let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     try {
       const result = await Promise.race([
         input.llmComplete({
@@ -844,20 +845,21 @@ export function createStandaloneBrowserHostAdapter(
           ...(normalizeText(payload.purpose) ? { purpose: normalizeText(payload.purpose) } : {}),
         }),
         new Promise<never>((_resolve, reject) => {
-          const handle = setTimeout(() => {
+          timeoutHandle = setTimeout(() => {
             const error = new Error('Local LLM completion timed out.');
             error.name = 'BrowserLlmTimeout';
             reject(error);
           }, timeoutMs);
-          if (typeof handle.unref === 'function') handle.unref();
         }),
       ]);
+      clearTimeout(timeoutHandle);
       recordTimestamp(llmTimestamps, resourceKey, now());
       const data: BrowserLlmCompleteResult = { text: normalizeText(result.text) };
       if (normalizeText(result.model)) data.model = normalizeText(result.model);
       if (result.finishReason) data.finishReason = result.finishReason;
       return browserSuccess({ kind: 'llm-complete', handled: true, data: { ...data } });
     } catch (error) {
+      clearTimeout(timeoutHandle);
       if (error instanceof Error && error.name === 'BrowserLlmTimeout') {
         return browserFailure('llm_timeout', 'Local LLM completion timed out.');
       }
