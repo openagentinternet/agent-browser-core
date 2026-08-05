@@ -95,28 +95,49 @@ interface TabInfo {
   title: string | null;
   /** True if this is the currently active tab. */
   isActive: boolean;
+  /** This tab's Using Actor id. The Using Actor is owned per tab. */
+  actorId: string;
 }
 ```
 
 The returned objects are **shallow copies**. Mutating them does not affect the
 Browser's internal state.
 
-### `openTab(uri?) -> number`
+### Using Actor is per-tab
 
-Creates a new tab, activates it, and returns the new tab's `id`.
+Each tab owns its **Using Actor** independently. Selecting an actor in one tab
+does not affect any other tab — not just visually, but at action time: the
+actor used for resolve, trusted actions (private-chat, service-call, on-chain
+pin-write), and signing is the **active tab's** actor, stamped as the
+`actorId` query parameter on every Browser API call.
+
+- A new tab's actor is seeded from the host-supplied default actor
+  (`getRuntime().defaultActor`) — i.e. the host selects the default bot shown
+  each time the browser opens or a tab is created.
+- The user can switch the actor within a tab at any time; the change is scoped
+  to that tab only.
+
+### `openTab(uri?, actorId?) -> number`
+
+Creates a new tab, activates it, and returns the new tab's `id`. An optional
+`actorId` lets the host open the tab with a specific Using Actor; it must
+exist in the runtime actors returned by `getRuntime()`, otherwise the new tab
+falls back to the host default actor.
 
 - `openTab('metaid://idq1alice')` — creates a tab and navigates it to the URI
   (the navigation is scoped to the new tab; other tabs are untouched).
+- `openTab('metaid://idq1alice', 'reviewer')` — creates a tab navigated to the
+  URI, using the `reviewer` actor as this tab's Using Actor.
 - `openTab()` (no argument, or `undefined`) — creates an empty tab showing the
   welcome page. No network request is made.
 
 ```js
 // Direct
-const newId = window.AgentBrowserTabs.openTab('metaid://idq1alice');
+const newId = window.AgentBrowserTabs.openTab('metaid://idq1alice', 'reviewer');
 
 // Bridge (the Browser accepts this from window.parent only)
 window.parent.postMessage(
-  { type: 'agent-browser:open-tab', uri: 'metaid://idq1alice' },
+  { type: 'agent-browser:open-tab', uri: 'metaid://idq1alice', actorId: 'reviewer' },
   '*'
 );
 ```
@@ -256,11 +277,11 @@ loaded in a tab from opening/closing the host's other tabs.
 Tab action messages are plain objects with a `type` string and are
 fire-and-forget (no response is sent back):
 
-| `type`                       | Payload        | Effect                                  |
-| ---------------------------- | -------------- | --------------------------------------- |
-| `agent-browser:open-tab`     | `{ uri? }`     | `openTab(uri)` (uri optional)           |
-| `agent-browser:close-tab`    | `{ id }`       | `closeTab(Number(id))`                  |
-| `agent-browser:switch-tab`   | `{ id }`       | `switchTab(Number(id))`                 |
+| `type`                       | Payload              | Effect                                                |
+| ---------------------------- | -------------------- | ----------------------------------------------------- |
+| `agent-browser:open-tab`     | `{ uri?, actorId? }` | `openTab(uri, actorId)` (both optional; unknown actorId falls back to host default) |
+| `agent-browser:close-tab`    | `{ id }`             | `closeTab(Number(id))`                                |
+| `agent-browser:switch-tab`   | `{ id }`             | `switchTab(Number(id))`                               |
 
 The two read APIs use correlated request/response pairs (added in `> 0.4.0`,
 unreleased; branch `feat/tab-content-events`). The Browser echoes the
@@ -314,13 +335,18 @@ best-effort (no ack). Envelope:
 { type: 'agent-browser:event', version: 1, event: '<name>', payload: {...} }
 ```
 
-| `event`                | `payload`                        | When                                   |
-| ---------------------- | -------------------------------- | -------------------------------------- |
-| `tab-opened`           | `{ tabId, uri? }`                | New tab created.                       |
-| `tab-closed`           | `{ tabId }`                      | Tab closed.                            |
-| `tab-activated`        | `{ tabId, uri?, title? }`        | Active tab changed (incl. `openTab`).  |
-| `navigation-committed` | `{ tabId, uri, title? }`         | A tab finished resolving/loading a URI (background tabs included). |
-| `title-updated`        | `{ tabId, title }`               | The applied page title changed (value-guarded; no repeats). |
+| `event`                | `payload`                             | When                                   |
+| ---------------------- | ------------------------------------- | -------------------------------------- |
+| `tab-opened`           | `{ tabId, uri?, actorId }`            | New tab created.                       |
+| `tab-closed`           | `{ tabId }`                           | Tab closed.                            |
+| `tab-activated`        | `{ tabId, uri?, title?, actorId }`    | Active tab changed (incl. `openTab`).  |
+| `navigation-committed` | `{ tabId, uri, title?, actorId }`     | A tab finished resolving/loading a URI (background tabs included). |
+| `title-updated`        | `{ tabId, title }`                    | The applied page title changed (value-guarded; no repeats). |
+
+The `actorId` field on `tab-opened` / `tab-activated` / `navigation-committed`
+is the **per-tab** Using Actor id of the tab the event refers to (see
+[Using Actor is per-tab](#using-actor-is-per-tab)). Hosts can use it to observe
+each tab's current actor.
 
 Note: `tabId` is the Browser's **numeric** tab id (the same token accepted by
 `closeTab`/`switchTab`/`getTabContent`). Events with an empty parent context

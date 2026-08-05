@@ -237,8 +237,11 @@ function activeTab() {
 
 // Copy the active tab's per-tab fields onto the state mirrors so the existing
 // state.current / state.history / state.historyIndex / state.status / state.error
-// / state.enrichToken read sites reflect the active tab. Call after every
-// navigation write and every switchTab.
+// / state.enrichToken / state.actorId read sites reflect the active tab. Call
+// after every navigation write and every switchTab. actorId is mirrored here so
+// endpointWithActor()/resolveUrl()/selectedActor() apply the active tab's actor
+// for resolve, trusted actions, and signing — making the Using Actor truly
+// independent per tab, not just visually.
 function applyActiveTabState() {
   var tab = activeTab();
   if (!tab) return;
@@ -248,11 +251,20 @@ function applyActiveTabState() {
   state.status = tab.status;
   state.error = tab.error;
   state.enrichToken = tab.enrichToken;
+  state.actorId = tab.actorId || '';
   syncAutoWriteContext();
+  renderUsingIdentity();
 }
 
 // Create a fresh tab (empty welcome by default) and return it. Does NOT activate it.
+// Each tab owns its own actorId (seeded from the stable host default) so the
+// Using Actor is independent per tab — switching an actor in one tab never
+// affects another. See applyActiveTabState() for the mirror onto state.actorId.
 function createTab() {
+  var defaultActorId = '';
+  if (state.runtime && state.runtime.defaultActor && state.runtime.defaultActor.id) {
+    defaultActorId = textValue(state.runtime.defaultActor.id);
+  }
   var tab = {
     id: state.nextTabId,
     current: null,
@@ -262,7 +274,8 @@ function createTab() {
     error: null,
     loading: false,
     painted: false,
-    enrichToken: 0
+    enrichToken: 0,
+    actorId: defaultActorId
   };
   state.nextTabId += 1;
   state.tabs.push(tab);
@@ -346,7 +359,7 @@ function tabToInfo(tab) {
   var isActive = tab.id === state.activeTabId;
   var uri = tab.current ? (textValue(tab.current.uri) || textValue(tab.current.normalizedUri) || null) : null;
   var title = tab.current ? currentDisplayTitle(tab.current, '') || null : null;
-  return { id: tab.id, uri: uri, title: title, isActive: isActive };
+  return { id: tab.id, uri: uri, title: title, isActive: isActive, actorId: tab.actorId || '' };
 }
 
 function getTabs() {
@@ -449,10 +462,25 @@ function getTabInfo(tabId) {
 }
 
 // Create + activate a new tab. If uri is provided, navigate the new tab to it;
-// otherwise show the welcome page. Returns the new tab id.
-function openTab(uri) {
+// otherwise show the welcome page. An optional actorId lets the host open the
+// tab with a specific Using Actor; it must exist in runtime.actors, otherwise
+// the new tab falls back to the host default actor. Returns the new tab id.
+function openTab(uri, actorId) {
   var previousTabId = state.activeTabId;
   var tab = createTab();
+  var requestedActorId = textValue(actorId);
+  if (requestedActorId) {
+    // Validate the requested actor against the host-supplied runtime actors.
+    // If unknown, ignore it and keep the host-default seed from createTab().
+    var known = false;
+    var actors = runtimeActors();
+    for (var index = 0; index < actors.length; index += 1) {
+      if (textValue(actors[index] && actors[index].id) === requestedActorId) { known = true; break; }
+    }
+    if (known) {
+      tab.actorId = requestedActorId;
+    }
+  }
   if (tab.id !== previousTabId) {
     // Opening a tab moves the active resource context away from the tab whose
     // resource a pending identity consent prompt names.
@@ -463,8 +491,11 @@ function openTab(uri) {
   applyActiveTabState();
   renderTabs();
   var openedUri = textValue(uri) || null;
-  emitHostEvent('tab-opened', openedUri ? { tabId: tab.id, uri: openedUri } : { tabId: tab.id });
-  emitHostEvent('tab-activated', { tabId: tab.id, uri: openedUri, title: null });
+  var openedActorId = tab.actorId || '';
+  emitHostEvent('tab-opened', openedUri
+    ? { tabId: tab.id, uri: openedUri, actorId: openedActorId }
+    : { tabId: tab.id, actorId: openedActorId });
+  emitHostEvent('tab-activated', { tabId: tab.id, uri: openedUri, title: null, actorId: openedActorId });
   if (uri) {
     navigateTo(uri);
   } else {
@@ -501,8 +532,9 @@ function closeTab(id) {
     renderWelcome();
     syncToolbarForActiveTab();
     renderTabs();
-    emitHostEvent('tab-opened', { tabId: fresh.id });
-    emitHostEvent('tab-activated', { tabId: fresh.id, uri: null, title: null });
+    var freshActorId = fresh.actorId || '';
+    emitHostEvent('tab-opened', { tabId: fresh.id, actorId: freshActorId });
+    emitHostEvent('tab-activated', { tabId: fresh.id, uri: null, title: null, actorId: freshActorId });
     return;
   }
   if (wasActive) {
@@ -514,7 +546,7 @@ function closeTab(id) {
     activeViewportPane();
     var neighborTab = activeTab();
     var neighborInfo = tabToInfo(neighborTab);
-    emitHostEvent('tab-activated', { tabId: neighborInfo.id, uri: neighborInfo.uri, title: neighborInfo.title });
+    emitHostEvent('tab-activated', { tabId: neighborInfo.id, uri: neighborInfo.uri, title: neighborInfo.title, actorId: neighborInfo.actorId });
     if (!neighborTab.painted) {
       if (state.current) renderCurrent();
       else renderWelcome();
@@ -551,7 +583,7 @@ function switchTab(id) {
   applyActiveTabState();
   renderTabs();
   var switchInfo = tabToInfo(tab);
-  emitHostEvent('tab-activated', { tabId: switchInfo.id, uri: switchInfo.uri, title: switchInfo.title });
+  emitHostEvent('tab-activated', { tabId: switchInfo.id, uri: switchInfo.uri, title: switchInfo.title, actorId: switchInfo.actorId });
   // Reveal the active pane (creates it lazily if missing). If the pane has
   // already been painted, reveal it WITHOUT rebuilding DOM, so iframe/game/
   // video/scroll state survives. If it was never painted — e.g. a background
@@ -1841,7 +1873,7 @@ function handleBrowserMessage(event) {
   // Host -> Browser tab messages are accepted only from window.parent.
   if (window && window.parent && event.source === window.parent && data && typeof data.type === 'string') {
     if (data.type === 'agent-browser:open-tab') {
-      openTab(textValue(data.uri) || undefined);
+      openTab(textValue(data.uri) || undefined, textValue(data.actorId) || undefined);
       return;
     }
     if (data.type === 'agent-browser:close-tab') {
@@ -3491,7 +3523,11 @@ function logoutStandaloneWalletActor() {
   state.runtime.actors = [placeholder];
   state.runtime.defaultActor = placeholder;
   state.runtime.defaultUri = null;
-  state.actorId = textValue(placeholder.id);
+  var placeholderId = textValue(placeholder.id);
+  // Reset the active tab's actor to the placeholder (per-tab).
+  var logoutTab = activeTab();
+  if (logoutTab) logoutTab.actorId = placeholderId;
+  state.actorId = placeholderId;
   closeStandaloneActorPanel();
   renderUsingIdentity();
   setStatus('wallet logged out', '');
@@ -5108,6 +5144,10 @@ async function connectStandaloneWalletActor() {
     if (!state.runtime) state.runtime = {};
     state.runtime.actors = [actor];
     state.runtime.defaultActor = actor;
+    // The connected wallet becomes the active tab's actor (per-tab). Other tabs
+    // keep whatever actor they had.
+    var walletTab = activeTab();
+    if (walletTab) walletTab.actorId = actor.id;
     state.actorId = actor.id;
     closeStandaloneActorPanel();
     renderUsingIdentity();
@@ -5171,7 +5211,6 @@ async function selectUsingIdentity(slug) {
   var selectedId = textValue(slug);
   var actors = runtimeActors();
   var selected = null;
-  var previousDefaultActor = state.runtime && state.runtime.defaultActor ? state.runtime.defaultActor : null;
   for (var index = 0; index < actors.length; index += 1) {
     if (textValue(actors[index] && actors[index].id) === selectedId) {
       selected = actors[index];
@@ -5182,44 +5221,15 @@ async function selectUsingIdentity(slug) {
     setStatus('error', runtimeLabel('actorChip', 'Actor') + ' not found.');
     return null;
   }
-  if (!state.runtime) state.runtime = {};
+  // The Using Actor is owned per tab: write the selection onto the active tab's
+  // actorId and mirror it onto state.actorId so endpointWithActor()/resolveUrl()
+  // apply this tab's actor for resolve, trusted actions, and signing. Other tabs
+  // keep their own actor. runtime.defaultActor / actors[].isDefault are the
+  // host-supplied defaults and are NOT mutated here — effectiveActor() merges a
+  // selected actor's missing avatar/label from the stable default when needed.
+  var tab = activeTab();
+  if (tab) tab.actorId = selectedId;
   state.actorId = selectedId;
-  var updatedActors = actors.map(function (actor) {
-    if (!actor || typeof actor !== 'object') return actor;
-    var actorId = textValue(actor.id);
-    var nextActor = {};
-    Object.keys(actor).forEach(function (key) {
-      nextActor[key] = actor[key];
-    });
-    if (
-      previousDefaultActor &&
-      textValue(previousDefaultActor.id) === actorId &&
-      !textValue(nextActor.avatar) &&
-      textValue(previousDefaultActor.avatar)
-    ) {
-      nextActor.avatar = previousDefaultActor.avatar;
-    }
-    nextActor.isDefault = actorId === selectedId;
-    return nextActor;
-  });
-  state.runtime.actors = updatedActors;
-  for (var updatedIndex = 0; updatedIndex < updatedActors.length; updatedIndex += 1) {
-    if (textValue(updatedActors[updatedIndex] && updatedActors[updatedIndex].id) === selectedId) {
-      selected = updatedActors[updatedIndex];
-      break;
-    }
-  }
-  if (
-    selected &&
-    !textValue(selected.avatar) &&
-    previousDefaultActor &&
-    textValue(previousDefaultActor.id) === selectedId &&
-    textValue(previousDefaultActor.avatar)
-  ) {
-    selected.avatar = previousDefaultActor.avatar;
-  }
-  state.runtime.defaultActor = selected;
-  state.runtime.defaultUri = actorDefaultUri(selected) || null;
   renderUsingIdentity();
   if (state.actorConsent[actorConsentKey()] === 'allow') {
     emitBridgeEvent('browser.actor.changed', { actor: sanitizedActorSnapshot(selectedActor()) });
@@ -6875,7 +6885,8 @@ async function resolveUri(uri, options) {
     emitHostEvent('navigation-committed', {
       tabId: resolvedTab.id,
       uri: resolvedUri,
-      title: currentDisplayTitle(result, '') || null
+      title: currentDisplayTitle(result, '') || null,
+      actorId: resolvedTab.actorId || ''
     });
     // Only sync the read-only mirrors + render the viewport if the originating
     // tab is still the one the user is looking at. Otherwise, leave the active
@@ -6961,7 +6972,13 @@ async function loadRuntime() {
   var data = await api(browserEndpoints.runtime);
   state.runtime = data || {};
   var actor = data && data.defaultActor;
-  state.actorId = actor && actor.id ? textValue(actor.id) : '';
+  var runtimeDefaultActorId = actor && actor.id ? textValue(actor.id) : '';
+  // Seed the active tab's actor from the host default so the boot tab (and any
+  // tab created before runtime loaded) reflects the host-selected default actor.
+  // runtime.defaultActor stays as the stable host default for future tabs.
+  var bootTab = activeTab();
+  if (bootTab) bootTab.actorId = runtimeDefaultActorId;
+  state.actorId = runtimeDefaultActorId;
   if (isStandaloneWalletRuntime() && actor && !isConnectedWalletActor(actor)) {
     state.standaloneWalletPlaceholderActor = cloneActor(actor);
   }

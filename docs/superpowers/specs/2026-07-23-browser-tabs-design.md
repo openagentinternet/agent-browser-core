@@ -43,6 +43,7 @@ type BrowserTab = {
   historyIndex: number;
   status: 'idle' | 'loading' | 'resolved' | 'error';
   error: string | null;
+  actorId: string;       // per-tab Using Actor (seeded from runtime.defaultActor)
 };
 ```
 
@@ -56,12 +57,13 @@ type BrowserTab = {
 | `current` / `history` / `historyIndex` | **read-only mirrors** | reflect `activeTab()`; refreshed by `applyActiveTabState()`. Kept (not removed) so the ~40 existing `state.current` read sites stay untouched |
 | `status` / `error` | **read-only mirrors** | reflect active tab |
 | `enrichToken` | **per-tab** (mirror of active tab's) | prevents stale async enrichment of tab A from polluting tab B after a switch |
-| `actorId` / `runtime` / `standaloneWalletPlaceholderActor` | **global** | identity shared across tabs |
+| `actorId` | **per-tab** (mirror of active tab's) | each tab owns its Using Actor; seeded from `runtime.defaultActor` (the host default) on creation and at boot. `selectUsingIdentity` writes to the active tab only; `applyActiveTabState()` mirrors it onto `state.actorId` so `endpointWithActor()`/`resolveUrl()` stamp the active tab's actor on resolve/trusted-action/signing calls. Switching an actor in one tab never affects another. |
+| `runtime` / `standaloneWalletPlaceholderActor` | **global** | runtime (incl. `defaultActor`, the host-supplied default for new tabs) is shared; standalone wallet placeholder is page-global |
 | `bookmarks` / `visits` | **global** | shared across tabs; still persisted |
 | `drawerOpen` / `inspectorOpen` / `menuOpen` / panels | **global** | UI panels shared |
 
 **Mirror approach (Option 2, chosen):** `state.tabs[]` is the single source of truth.
-`state.current/history/historyIndex/status/error/enrichToken` remain on `state` as
+`state.current/history/historyIndex/status/error/enrichToken/actorId` remain on `state` as
 read-only mirrors of the active tab, refreshed by one helper `applyActiveTabState()`
 after every mutation (nav) and every tab switch. Rationale: there are ~40 read-only
 `state.current` sites across ~20 functions (owner panel, inspector, bookmark logic,
@@ -210,10 +212,11 @@ interface TabInfo {
   uri: string | null;     // current?.uri ?? current?.normalizedUri ?? null (null for empty tab)
   title: string | null;   // currentDisplayTitle() result; null for empty tab
   isActive: boolean;
+  actorId: string;        // this tab's Using Actor id (per-tab; '' if none)
 }
 
 globalThis.AgentBrowserTabs = {
-  openTab,      // (uri?: string) => number   create + activate, return new tab id
+  openTab,      // (uri?: string, actorId?: string) => number   create + activate, return new tab id
   closeTab,     // (id: number) => void       close; closing the last auto-creates an empty one
   switchTab,    // (id: number) => void       activate the given tab
   getTabs,      // () => TabInfo[]            read-only snapshot of all tabs
@@ -225,7 +228,7 @@ globalThis.AgentBrowserTabs = {
 internal state via them.
 
 Bridge message channel (reuse the existing `postMessage` listener in `initialize()`):
-- `agent-browser:open-tab` `{ uri?: string }` → `openTab`
+- `agent-browser:open-tab` `{ uri?: string, actorId?: string }` → `openTab` (an unknown `actorId` falls back to the host default actor)
 - `agent-browser:close-tab` `{ id: number }` → `closeTab`
 - `agent-browser:switch-tab` `{ id: number }` → `switchTab`
 
