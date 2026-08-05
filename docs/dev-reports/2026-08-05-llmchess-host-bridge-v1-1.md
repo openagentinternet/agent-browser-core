@@ -96,8 +96,54 @@ MetaApp 一次性申请对精确 `/protocols/` 路径的 `metaid.pin.write`（�
 - 测试环境补充安装了 Playwright chromium（此前环境缺失）；
 - 所有文档改动通过 `git diff --check`。
 
+## 5.1 下游宿主验收记录（IDBots / OAC，2026-08-05）
+
+v0.5.0 发布后，IDBots 与 OAC 完成宿主集成，并使用同一份验收探针页
+（`abc-bridge-v11-acceptance.html`，作为 MetaApp 在各自 Browser 中逐步骤执行，探针仅调用
+`window.AgentBrowser`）完成端到端验收。探针页对"预期拒绝/用户取消"统一判红（FAIL 标签），
+实际行为以验收语义为准，均符合预期。
+
+**IDBots（actor = AI_Sunny，真实 MVC 链上写入，4 笔 `/protocols/simplegroupchat`）**
+
+| 验收点 | 结果 |
+|---|---|
+| Step 1/2 llm.complete 同意卡 + 同意记忆，返回 `{ text, finishReason }`（`model` 省略，零内部信息） | ✅ |
+| LLM 限流：并发占满时 `rate_limited`（"Another local LLM completion is already running"）实测触发 | ✅ |
+| Step 3 授权卡：3 个 group 协议 + reason + 风险提示，`granted` 返回 3 条 | ✅ |
+| Step 4 chrome 常驻锁徽章 + tooltip 正确 | ✅ |
+| **Step 5 命中 grant 免确认写入**：无弹窗直接返回 pinId/txid/actor（100% 生效） | ✅ |
+| Step 6 白名单外 `/protocols/metaapp` → `consent_denied`（页面判红，语义符合） | ✅ |
+| Step 7 modify 永不豁免：确认弹窗出现（页面判红，语义符合） | ✅ |
+| Step 8 徽章撤销 → 写入恢复确认弹窗；审计日志记录 permission-revoked | ✅ |
+| Step 9 整页刷新后旧 grant 失效（9a 弹窗重现）；新会话重新授权后可再次免确认（9b） | ✅ |
+| 审计日志：permission-granted / permission-revoked / granted-write 逐条落盘 | ✅ |
+
+LLM 接入：IPC `botBrowser:completeLlm` → 宿主限流（并发 1、≤6 次/分、180s 上限）→ MetaBot
+LLM 会话层 `chatCompletionWithTools`（按 Bot 的 llm_id 解析 → 本地代理 → DeepSeek
+`deepseek-v4-flash`，模型由宿主决定）。
+
+**OAC（actor = Alice，真实链上写入，10/10 PASS）**
+
+| 验收点 | 结果 |
+|---|---|
+| Step 1/2 llm.complete：返回 `{ text: "pong", model: "Codex (OpenAI)", finishReason }`，`model` 仅展示级，未暴露 endpoint/API key/runtime ID | ✅ |
+| Step 3 授权卡 3 条 granted | ✅ |
+| Step 4 chrome 锁徽章可见 | ✅ |
+| **Step 5 命中 grant 免确认写入**：真实上链 `987fa80c…25bc`，无弹窗 | ✅ |
+| Step 6 白名单外拒绝 `consent_denied`（页面判红，语义符合） | ✅ |
+| Step 7/8 modify 与撤销后均恢复确认弹窗（页面判红，语义符合） | ✅ |
+| Step 9 完整刷新后锁徽章消失、写入回到 Write PIN 确认弹窗（会话 grant 正确失效） | ✅ |
+| 全程无 `llm_unavailable` / `llm_timeout` / `rate_limited` | ✅ |
+
+LLM 接入：OAC agent LLM runtime resolver + fallback 执行层，使用当前 actor 的 agent LLM 配置。
+
+**验收结论**：两宿主均完整实现 v1.1 契约（`llm-complete` / `permissions-request` 两阶段、
+协议白名单、会话级 grant、撤销与审计），核心验收点"命中 grant 的写入跳过两阶段确认"在全部
+真实写入中 100% 生效。未覆盖项（均已有 ABC 层测试或 standalone 测试覆盖）：用户拒绝同意/授权
+卡的 `consent_denied` 路径、切换 actor 后 grant 失效、写入限流 12/min 实测。
+
 ## 6. 后续建议
 
-1. 各宿主（IDBots/OAC）按宿主要求文档实现新 adapter 后，可与象棋 MetaApp 联调走通「LLM 出子 → 校验 → 免确认写群聊」全链路；
+1. 两宿主已就绪，可与象棋 MetaApp 联调走通「LLM 出子 → 校验 → 免确认写群聊」全链路；
 2. 如需，可把三项同意合并为一张能力请求卡（需求 3.2）；
 3. 象棋 MetaApp 如需"房间列表/对局状态"API，由群聊聚合后端团队按 02 号文档交付。
