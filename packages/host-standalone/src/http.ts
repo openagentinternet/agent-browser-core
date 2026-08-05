@@ -219,6 +219,7 @@ export async function handleStandaloneBrowserApiRoute(
       resourceUri: text(body.resourceUri),
       kind: text(body.kind) as BrowserTrustedActionKind,
       ...(actorId ? { actorId } : {}),
+      ...(body.sessionId ? { sessionId: text(body.sessionId) } : {}),
       ...(body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload) ? { payload: body.payload as Record<string, unknown> } : {}),
     });
     sendJson(res, statusForBrowserResult(result), result);

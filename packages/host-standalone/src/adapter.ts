@@ -29,6 +29,9 @@ import {
   type BrowserCacheSnapshot,
   type BrowserCommandResult,
   type BrowserHostAdapter,
+  type BrowserLlmCompleteMessage,
+  type BrowserLlmCompleteResult,
+  type BrowserPermissionGrant,
   type BrowserResolveInput,
   type BrowserRuntimeInput,
   type BrowserRuntimeSnapshot,
@@ -58,6 +61,23 @@ const WALLET_PROVIDER_ID = WALLET_PROVIDER_NAME.toLowerCase();
 const SECONDARY_WALLET_PROVIDER_NAME = 'Meta' + 'Mask';
 const SECONDARY_WALLET_PROVIDER_ID = SECONDARY_WALLET_PROVIDER_NAME.toLowerCase();
 
+// MetaApp Host Bridge v1.1 defaults (host-owned policy; hosts may tune them).
+const LLM_COMPLETE_DEFAULT_TIMEOUT_MS = 120000;
+const LLM_COMPLETE_MAX_TIMEOUT_MS = 180000;
+const LLM_COMPLETE_RATE_LIMIT_PER_MINUTE = 6;
+const GRANTED_WRITE_RATE_LIMIT_PER_MINUTE = 12;
+const GRANTED_WRITE_MAX_PAYLOAD_BYTES = 16 * 1024;
+const PERMISSION_CONFIRMATION_TTL_MS = 5 * 60 * 1000;
+// Host policy whitelist: only these exact protocol paths may appear in a
+// session grant. Sensitive protocols (metaapp, simplemsg, payment...) never
+// qualify.
+const PROTOCOL_GRANT_WHITELIST = new Set([
+  '/protocols/simplegroupcreate',
+  '/protocols/simplegroupjoin',
+  '/protocols/simplegroupchat',
+]);
+const PROTOCOL_GRANT_PATH_PATTERN = /^\/protocols\/[A-Za-z0-9_-]+$/u;
+
 export interface StandaloneBrowserPreviewAsset {
   body: Buffer | string;
   contentType: string;
@@ -73,6 +93,20 @@ export interface StandaloneBrowserHostAdapter extends BrowserHostAdapter {
   resolveBotProfile(input: { globalMetaId: string }): Promise<BrowserCommandResult<{ globalMetaId: string; name: string; avatar: string }>>;
 }
 
+export interface StandaloneLlmCompleteInput {
+  messages: BrowserLlmCompleteMessage[];
+  options?: {
+    temperature?: number;
+    maxOutputTokens?: number;
+    timeoutMs?: number;
+  };
+  purpose?: string;
+}
+
+export type StandaloneLlmCompleteHandler = (
+  input: StandaloneLlmCompleteInput,
+) => Promise<BrowserLlmCompleteResult>;
+
 export interface CreateStandaloneBrowserHostAdapterInput {
   fetch?: typeof fetch;
   env?: Record<string, string | undefined>;
@@ -85,6 +119,9 @@ export interface CreateStandaloneBrowserHostAdapterInput {
     rpcUrls: string[];
     textKey: string;
   }) => BrowserNameAliasProvider;
+  // Optional local LLM stack. When absent, browser.llm.complete answers
+  // llm_unavailable. The handler must return display-safe data only.
+  llmComplete?: StandaloneLlmCompleteHandler;
 }
 
 interface PreviewSession {
@@ -93,6 +130,22 @@ interface PreviewSession {
   createdAt: number;
   source: 'cache' | 'local';
   cacheKey?: string;
+}
+
+interface StandalonePermissionGrantRecord {
+  actorId: string;
+  resourceUri: string;
+  operation: 'create';
+  path: string;
+}
+
+interface StandalonePendingPermissionConfirmation {
+  token: string;
+  sessionKey: string;
+  actorId: string;
+  resourceUri: string;
+  grants: BrowserPermissionGrant[];
+  expiresAt: number;
 }
 
 const ZIP_CONTENT_TYPES = new Set([
@@ -366,6 +419,79 @@ function resolveActor(input?: BrowserActorInput): BrowserCommandResult<never> | 
   return null;
 }
 
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isPermissionGrantShape(value: unknown): value is BrowserPermissionGrant {
+  if (!isPlainObject(value)) return false;
+  return (
+    value.method === 'metaid.pin.write' &&
+    value.operation === 'create' &&
+    typeof value.path === 'string' &&
+    PROTOCOL_GRANT_PATH_PATTERN.test(value.path)
+  );
+}
+
+function slidingWindowCount(
+  timestamps: Map<string, number[]>,
+  key: string,
+  nowValue: number,
+  windowMs: number,
+): number {
+  const active = (timestamps.get(key) ?? []).filter((stamp) => nowValue - stamp < windowMs);
+  if (active.length) {
+    timestamps.set(key, active);
+  } else {
+    timestamps.delete(key);
+  }
+  return active.length;
+}
+
+function recordTimestamp(timestamps: Map<string, number[]>, key: string, nowValue: number): void {
+  const active = timestamps.get(key) ?? [];
+  active.push(nowValue);
+  timestamps.set(key, active);
+}
+
+function standaloneActorSnapshot(): { uri: string; globalMetaId: string; name: string } {
+  return {
+    uri: '',
+    globalMetaId: '',
+    name: 'Standalone Wallet',
+  };
+}
+
+function buildStandalonePermissionManualAction(input: {
+  confirmationId: string;
+  token: string;
+  actorId: string;
+  resourceUri: string;
+  grants: BrowserPermissionGrant[];
+  reason: string;
+}): {
+  confirmation: { actor: ReturnType<typeof standaloneActorSnapshot>; grants: BrowserPermissionGrant[]; reason?: string };
+  confirmRequest: Record<string, unknown>;
+} {
+  return {
+    confirmation: {
+      actor: standaloneActorSnapshot(),
+      grants: input.grants,
+      ...(input.reason ? { reason: input.reason } : {}),
+    },
+    confirmRequest: {
+      resourceUri: input.resourceUri,
+      kind: 'permissions-request',
+      payload: {
+        grants: input.grants,
+        ...(input.reason ? { reason: input.reason } : {}),
+        confirmed: true,
+        hostConfirmation: { id: input.confirmationId, token: input.token },
+      },
+    },
+  };
+}
+
 export function createStandaloneBrowserHostAdapter(
   input: CreateStandaloneBrowserHostAdapterInput = {},
 ): StandaloneBrowserHostAdapter {
@@ -375,6 +501,14 @@ export function createStandaloneBrowserHostAdapter(
   let config = createStandaloneConfig();
   let cacheClearedAt: number | null = null;
   const previewSessions = new Map<string, PreviewSession>();
+  // Session-scoped protocol write grants, keyed by the Browser page session id
+  // (a fresh id per page load) so grants die on page refresh, actor switch, or
+  // navigation away (each is bound to resourceUri + actorId too).
+  const sessionGrants = new Map<string, StandalonePermissionGrantRecord[]>();
+  const pendingPermissionConfirmations = new Map<string, StandalonePendingPermissionConfirmation>();
+  const llmTimestamps = new Map<string, number[]>();
+  const llmInFlight = new Set<string>();
+  const grantedWriteTimestamps = new Map<string, number[]>();
   const artifactCache = createStandaloneMetaAppArtifactCacheStore({
     cacheRoot: input.cacheRoot ?? resolveStandaloneMetaAppCacheRoot({ env }),
     env,
@@ -661,6 +795,155 @@ export function createStandaloneBrowserHostAdapter(
     }
   }
 
+  function sessionGrantKey(actionInput: BrowserTrustedActionInput): string {
+    return normalizeText(actionInput.sessionId) || 'default-session';
+  }
+
+  function hasActiveGrant(actionInput: BrowserTrustedActionInput, operation: string, path: string): boolean {
+    if (operation !== 'create') return false;
+    const records = sessionGrants.get(sessionGrantKey(actionInput)) ?? [];
+    return records.some(
+      (record) =>
+        record.resourceUri === normalizeText(actionInput.resourceUri) &&
+        record.actorId === normalizeText(actionInput.actorId) &&
+        record.operation === operation &&
+        record.path === path,
+    );
+  }
+
+  async function handleStandaloneLlmComplete(
+    actionInput: BrowserTrustedActionInput,
+  ): Promise<BrowserCommandResult<BrowserTrustedActionResult>> {
+    const payload = isPlainObject(actionInput.payload) ? actionInput.payload : {};
+    const messages = Array.isArray(payload.messages) ? payload.messages : [];
+    if (!messages.length) {
+      return browserFailure('invalid_params', 'LLM completion requires at least one message.');
+    }
+    const resourceKey = normalizeText(actionInput.resourceUri) || 'default-llm';
+    if (slidingWindowCount(llmTimestamps, resourceKey, now(), 60_000) >= LLM_COMPLETE_RATE_LIMIT_PER_MINUTE) {
+      return browserFailure('rate_limited', 'Local LLM rate limit reached; try again in a minute.');
+    }
+    if (llmInFlight.has(resourceKey)) {
+      return browserFailure('rate_limited', 'Another local LLM completion is already running for this MetaApp.');
+    }
+    if (!input.llmComplete) {
+      return browserFailure('llm_unavailable', 'This host has no local LLM configured.');
+    }
+    const options = isPlainObject(payload.options) ? payload.options : {};
+    const requestedTimeout =
+      typeof options.timeoutMs === 'number' && Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
+        ? options.timeoutMs
+        : LLM_COMPLETE_DEFAULT_TIMEOUT_MS;
+    const timeoutMs = Math.min(requestedTimeout, LLM_COMPLETE_MAX_TIMEOUT_MS);
+    llmInFlight.add(resourceKey);
+    try {
+      const result = await Promise.race([
+        input.llmComplete({
+          messages: messages as BrowserLlmCompleteMessage[],
+          ...(Object.keys(options).length ? { options } : {}),
+          ...(normalizeText(payload.purpose) ? { purpose: normalizeText(payload.purpose) } : {}),
+        }),
+        new Promise<never>((_resolve, reject) => {
+          const handle = setTimeout(() => {
+            const error = new Error('Local LLM completion timed out.');
+            error.name = 'BrowserLlmTimeout';
+            reject(error);
+          }, timeoutMs);
+          if (typeof handle.unref === 'function') handle.unref();
+        }),
+      ]);
+      recordTimestamp(llmTimestamps, resourceKey, now());
+      const data: BrowserLlmCompleteResult = { text: normalizeText(result.text) };
+      if (normalizeText(result.model)) data.model = normalizeText(result.model);
+      if (result.finishReason) data.finishReason = result.finishReason;
+      return browserSuccess({ kind: 'llm-complete', handled: true, data: { ...data } });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'BrowserLlmTimeout') {
+        return browserFailure('llm_timeout', 'Local LLM completion timed out.');
+      }
+      const code = error instanceof Error && normalizeText((error as { code?: unknown }).code);
+      return browserFailure(code || 'llm_unavailable', error instanceof Error ? error.message : String(error));
+    } finally {
+      llmInFlight.delete(resourceKey);
+    }
+  }
+
+  function handleStandalonePermissionsRequest(
+    actionInput: BrowserTrustedActionInput,
+  ): BrowserCommandResult<BrowserTrustedActionResult> {
+    const sessionKey = sessionGrantKey(actionInput);
+    const resourceUri = normalizeText(actionInput.resourceUri);
+    const actorId = normalizeText(actionInput.actorId) || STANDALONE_ACTOR_ID;
+    const payload = isPlainObject(actionInput.payload) ? actionInput.payload : {};
+    if (payload.revoke === true) {
+      sessionGrants.delete(sessionKey);
+      return browserSuccess({ kind: 'permissions-request', handled: true, data: { revoked: true } });
+    }
+    const rawGrants = Array.isArray(payload.grants) ? payload.grants : [];
+    if (!rawGrants.length) {
+      return browserFailure('invalid_params', 'Permission request requires at least one grant.');
+    }
+    const hostConfirmation = isPlainObject(payload.hostConfirmation) ? payload.hostConfirmation : null;
+    if (payload.confirmed === true && hostConfirmation) {
+      const confirmationId = normalizeText(hostConfirmation.id);
+      const token = normalizeText(hostConfirmation.token);
+      const pending = pendingPermissionConfirmations.get(confirmationId);
+      if (!pending || pending.token !== token) {
+        return browserFailure('consent_denied', 'The permission confirmation is invalid or expired.');
+      }
+      pendingPermissionConfirmations.delete(confirmationId);
+      if (pending.expiresAt < now()) {
+        return browserFailure('consent_denied', 'The permission confirmation has expired.');
+      }
+      if (pending.resourceUri !== resourceUri || pending.actorId !== actorId) {
+        return browserFailure('consent_denied', 'The permission confirmation does not match this resource or actor.');
+      }
+      const records: StandalonePermissionGrantRecord[] = pending.grants.map((grant) => ({
+        actorId,
+        resourceUri,
+        operation: grant.operation,
+        path: grant.path,
+      }));
+      sessionGrants.set(sessionKey, records);
+      return browserSuccess({ kind: 'permissions-request', handled: true, data: { granted: pending.grants } });
+    }
+    const grants = rawGrants.filter(isPermissionGrantShape);
+    if (grants.length !== rawGrants.length) {
+      return browserFailure('invalid_params', 'Grants must be metaid.pin.write create operations on exact /protocols/ paths.');
+    }
+    for (const grant of grants) {
+      if (!PROTOCOL_GRANT_WHITELIST.has(grant.path)) {
+        return browserFailure(
+          'consent_denied',
+          `The requested protocol path is not on the host whitelist: ${grant.path}`,
+        );
+      }
+    }
+    const confirmationId = `perm-${randomUUID()}`;
+    const token = randomUUID();
+    pendingPermissionConfirmations.set(confirmationId, {
+      token,
+      sessionKey,
+      actorId,
+      resourceUri,
+      grants,
+      expiresAt: now() + PERMISSION_CONFIRMATION_TTL_MS,
+    });
+    const manualData = buildStandalonePermissionManualAction({
+      confirmationId,
+      token,
+      actorId,
+      resourceUri,
+      grants,
+      reason: normalizeText(payload.reason),
+    });
+    return browserManualActionRequired(
+      'permissions_required',
+      'Confirm the protocol write grants before the host records them.',
+      { data: manualData },
+    );
+  }
+
   async function runTrustedAction(
     actionInput: BrowserTrustedActionInput,
   ): Promise<BrowserCommandResult<BrowserTrustedActionResult>> {
@@ -683,7 +966,35 @@ export function createStandaloneBrowserHostAdapter(
         },
       );
     }
+    if (actionInput.kind === 'llm-complete') {
+      return handleStandaloneLlmComplete(actionInput);
+    }
+    if (actionInput.kind === 'permissions-request') {
+      return handleStandalonePermissionsRequest(actionInput);
+    }
     if (actionInput.kind === 'metaid-pin-write') {
+      const operation = normalizeText(actionInput.payload?.operation);
+      const path = normalizeText(actionInput.payload?.path);
+      if (hasActiveGrant(actionInput, operation, path)) {
+        // The grant covers this write: confirmation is skipped and the host
+        // goes straight to its validation -> signing -> broadcast path. The
+        // standalone host has no signer, so the write itself still fails, but
+        // the two-phase confirmation envelope is never produced.
+        const resourceKey = normalizeText(actionInput.resourceUri) || 'default-granted-write';
+        if (slidingWindowCount(grantedWriteTimestamps, resourceKey, now(), 60_000) >= GRANTED_WRITE_RATE_LIMIT_PER_MINUTE) {
+          return browserFailure('rate_limited', 'Too many granted writes in the last minute.');
+        }
+        const rawPayload = isPlainObject(actionInput.payload?.payload) ? actionInput.payload.payload : {};
+        const payloadValue = typeof rawPayload.value === 'string' ? rawPayload.value : '';
+        if (Buffer.byteLength(payloadValue, 'utf8') > GRANTED_WRITE_MAX_PAYLOAD_BYTES) {
+          return browserFailure('invalid_params', 'Granted write payload exceeds the 16KB limit.');
+        }
+        recordTimestamp(grantedWriteTimestamps, resourceKey, now());
+        return browserFailure(
+          'pin_write_failed',
+          'Standalone Browser cannot broadcast PIN writes. Confirmation was skipped because the request is covered by a session grant.',
+        );
+      }
       return browserManualActionRequired(
         'browser_identity_required',
         'Standalone Browser cannot write MetaID PINs until a signing actor is available.',
