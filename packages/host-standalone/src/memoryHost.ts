@@ -36,6 +36,20 @@ export interface MemoryStandaloneHostInput {
   now?: () => number;
 }
 
+interface MemoryPermissionGrantRecord {
+  actorId: string;
+  resourceUri: string;
+  operation: 'create';
+  path: string;
+}
+
+const PROTOCOL_GRANT_WHITELIST = new Set([
+  '/protocols/simplegroupcreate',
+  '/protocols/simplegroupjoin',
+  '/protocols/simplegroupchat',
+]);
+const PROTOCOL_GRANT_PATH_PATTERN = /^\/protocols\/[A-Za-z0-9_-]+$/u;
+
 function runtime(): BrowserRuntimeSnapshot {
   const actor: BrowserActor = {
     id: STANDALONE_ACTOR_ID,
@@ -100,6 +114,7 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
   let config: BrowserConfigContainer = { browser: { botHomepageTemplateId: 'document' } };
   let settings: BrowserSettingsSnapshot = toHostSettingsSnapshot(createBrowserSettingsSnapshot({ config }));
   let cacheClearedAt: number | null = null;
+  const sessionGrants = new Map<string, MemoryPermissionGrantRecord[]>();
 
   function ensureActor(actorId?: string) {
     if (
@@ -221,7 +236,51 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
           data: { requestId: 'dev-service-call' },
         });
       }
+      if (input.kind === 'llm-complete') {
+        return browserFailure('llm_unavailable', 'The memory development host has no local LLM configured.');
+      }
+      if (input.kind === 'permissions-request') {
+        const sessionKey = normalizeText(input.sessionId) || 'default-session';
+        const resourceUri = normalizeText(input.resourceUri);
+        const actorId = normalizeText(input.actorId) || 'standalone-wallet';
+        const payload = input.payload ?? {};
+        if (payload.revoke === true) {
+          sessionGrants.delete(sessionKey);
+          return browserSuccess({ kind: 'permissions-request', handled: true, data: { revoked: true } });
+        }
+        const grants = Array.isArray(payload.grants)
+          ? payload.grants.filter((grant) =>
+              grant && typeof grant === 'object' &&
+              grant.method === 'metaid.pin.write' &&
+              grant.operation === 'create' &&
+              typeof grant.path === 'string' &&
+              PROTOCOL_GRANT_PATH_PATTERN.test(grant.path))
+          : [];
+        if (!grants.length) {
+          return browserFailure('invalid_params', 'Permission request requires at least one valid grant.');
+        }
+        for (const grant of grants) {
+          if (!PROTOCOL_GRANT_WHITELIST.has(grant.path)) {
+            return browserFailure('consent_denied', `The requested protocol path is not on the host whitelist: ${grant.path}`);
+          }
+        }
+        const records = grants.map((grant) => ({ actorId, resourceUri, operation: grant.operation, path: grant.path }));
+        sessionGrants.set(sessionKey, records);
+        return browserSuccess({ kind: 'permissions-request', handled: true, data: { granted: grants } });
+      }
       if (input.kind === 'metaid-pin-write') {
+        const operation = normalizeText(input.payload?.operation);
+        const path = normalizeText(input.payload?.path);
+        const records = sessionGrants.get(normalizeText(input.sessionId) || 'default-session') ?? [];
+        const granted = operation === 'create' && records.some(
+          (record) => record.resourceUri === normalizeText(input.resourceUri) && record.path === path,
+        );
+        if (granted) {
+          return browserFailure(
+            'pin_write_failed',
+            'Standalone Browser cannot broadcast PIN writes. Confirmation was skipped because the request is covered by a session grant.',
+          );
+        }
         return browserManualActionRequired(
           'browser_identity_required',
           'Standalone Browser cannot write MetaID PINs until a signing actor is available.',

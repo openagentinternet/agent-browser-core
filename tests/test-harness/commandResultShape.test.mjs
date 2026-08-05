@@ -91,3 +91,35 @@ test('Browser command shape accepts MetaFile upload data', () => {
     'metafile-upload',
   );
 });
+
+test('Browser command shape accepts LLM completion data', () => {
+  harness.assertBrowserCommandResultShape(
+    contract.browserSuccess({
+      kind: 'llm-complete',
+      handled: true,
+      data: {
+        text: 'h2e2',
+        model: 'gpt-5.6',
+        finishReason: 'stop',
+      },
+    }),
+    'llm-complete',
+  );
+});
+
+test('Browser command shape accepts protocol permission grant data', () => {
+  harness.assertBrowserCommandResultShape(
+    contract.browserSuccess({
+      kind: 'permissions-request',
+      handled: true,
+      data: {
+        granted: [{
+          method: 'metaid.pin.write',
+          operation: 'create',
+          path: '/protocols/simplegroupchat',
+        }],
+      },
+    }),
+    'permissions-request',
+  );
+});

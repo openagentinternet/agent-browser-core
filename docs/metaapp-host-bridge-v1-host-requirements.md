@@ -10,6 +10,12 @@ MetaApp authors should read `docs/custom-bot-homepage-metaapp-guide.md` instead.
 source is `docs/superpowers/specs/2026-06-30-metaapp-host-bridge-v1-design.md`, and the compile-time
 host contract lives in `packages/host-contract/src/index.ts`.
 
+> **V1.1 (LLM completion + session protocol-write grants):** hosts consuming a package with the
+> v1.1 contract must also implement the `llm-complete` and `permissions-request` trusted action
+> kinds described in [MetaApp Host Bridge V1.1](#metaapp-host-bridge-v11). The v1.1 design source
+> is `docs/superpowers/specs/2026-08-05-metaapp-host-bridge-v1-1-design.md`. The v1
+> "persistent permission grants" non-goal is relaxed to session-scoped, in-memory grants only.
+
 ## Summary
 
 ABC provides the shared iframe bridge, in-Browser navigation, request validation, sanitized actor
@@ -39,6 +45,8 @@ through `window.AgentBrowser.request(...)` and the host adapter.
 6. Support the new trusted action kinds:
    - `metaid-pin-write`
    - `metafile-upload`
+   - `llm-complete` (v1.1)
+   - `permissions-request` (v1.1)
 7. Keep Browser core host-neutral. OAC, IDBots, wallet, database, IPC, filesystem, and daemon details
    must stay inside the downstream host adapter or wrapper.
 
@@ -489,3 +497,99 @@ A downstream host implementation is ready when all of these checks pass:
 - Upload progress events inside the MetaApp iframe.
 - Wallet balance, payment, transfer, or arbitrary signing APIs.
 - Host-specific bridge methods exposed to MetaApps.
+
+## MetaApp Host Bridge V1.1
+
+V1.1 adds two capabilities to the v1 bridge for LLM-driven MetaApps (for example the on-chain
+chess MetaApp, which runs its whole move loop inside the iframe). The v1 security model is
+unchanged: the MetaApp stays untrusted, the host owns every side effect and the authorization
+state, and bridge responses never leak host internals. The v1 "persistent permission grants"
+non-goal is relaxed to session-scoped, in-memory grants.
+
+### V1.1: `browser.llm.complete` (host local LLM completion)
+
+MetaApps request one text completion on the host's own LLM stack:
+
+```js
+await window.AgentBrowser.request({
+  method: 'browser.llm.complete',
+  params: {
+    messages: [
+      { role: 'system', content: 'You are a Chinese chess player.' },
+      { role: 'user', content: '<board text + legal move list>' }
+    ],
+    options: { temperature: 0.7, maxOutputTokens: 512, timeoutMs: 120000 },
+    purpose: 'llmchess-move'
+  }
+});
+// success: { text: string; model?: string; finishReason?: 'stop' | 'length' | 'error' }
+```
+
+Host requirements:
+
+- Support the trusted action kind `llm-complete` on `POST {apiBasePath}/actions`. The payload
+  is `{ messages, options?, purpose? }`; the result data is `{ text, model?, finishReason? }`.
+- Wire it to the host's local LLM stack (IDBots: MetaBot LLM session layer; OAC: the agent LLM
+  configuration). The host picks the model and configuration; the MetaApp cannot.
+- Consent model: same level as the v1 Identity Disclosure Consent. ABC gates the first call per
+  resource with an in-memory consent card; the host may additionally reject with
+  `consent_denied`. Approval must never be a persistent, global "allow for all MetaApps".
+- Rate limiting and quotas are host-owned (suggested defaults): one in-flight completion per
+  resource, ≤ 6 completions per minute per resource, completion timeout capped at 180 s.
+  Exceeded limits return `rate_limited` / `llm_timeout`.
+- Sanitize responses: no API keys, endpoints, local paths, or internal routing details; `model`
+  is a display-grade name only.
+- V1.1 does not support streaming, tool calls, or multimodal input.
+- Error codes: `consent_denied`, `llm_unavailable`, `llm_timeout`, `rate_limited`, plus the
+  existing `invalid_params` / `unsupported_method`.
+
+### V1.1: `browser.permissions.request` (session protocol-write grants)
+
+MetaApps ask once for session-scoped, no-confirmation `metaid.pin.write` access to exact
+`/protocols/` paths:
+
+```js
+await window.AgentBrowser.request({
+  method: 'browser.permissions.request',
+  params: {
+    grants: [
+      { method: 'metaid.pin.write', operation: 'create', path: '/protocols/simplegroupcreate' },
+      { method: 'metaid.pin.write', operation: 'create', path: '/protocols/simplegroupjoin' },
+      { method: 'metaid.pin.write', operation: 'create', path: '/protocols/simplegroupchat' }
+    ],
+    reason: 'Write chess moves automatically during the game.'
+  }
+});
+// success: { granted: Array<{ method, operation, path }>; expiresAt?: number }
+```
+
+Flow and host responsibilities:
+
+- Support the trusted action kind `permissions-request`. Phase 1 carries `{ grants, reason }`
+  and must return `manual_action_required` with `data.confirmation` (actor, grants, reason) and
+  a host-issued `data.confirmRequest` carrying an opaque authorization, exactly like the shared
+  PIN-write flow. ABC renders the card and resubmits the exact `confirmRequest` on approval.
+- The authorization is all-or-nothing per request group: no per-path checkboxes.
+- Only `operation: 'create'` may ever be granted. `modify` / `revoke` always keep the v1
+  two-phase confirmation.
+- Paths must be exact `/protocols/<name>` paths. No wildcards. The host keeps a **protocol
+  whitelist policy** (initial suggestion: `simplegroupcreate`, `simplegroupjoin`,
+  `simplegroupchat`); sensitive protocols (`metaapp`, `simplemsg`, payment-related, ...) must
+  never qualify. Off-list grants return `consent_denied` with a message.
+- The host records approved grants in memory bound to the four-tuple `(resourceUri, actorId,
+  operation, exact path)` plus the page session. ABC sends a fresh `sessionId` on every trusted
+  action request (`BrowserTrustedActionInput.sessionId`); scope grants by it so page refresh
+  invalidates them. Actor switch and navigation away are covered by the actor/resource binding.
+  No persistent grants.
+- On a grant hit, `metaid.pin.write` must skip the `manual_action_required` two-phase envelope
+  and go straight to the existing validation → signing → broadcast path, returning the standard
+  `BrowserMetaIdPinWriteResult`. Misses keep the v1 flow unchanged.
+- Granted-write rate limit (host-owned, suggested default): ≤ 12 writes per minute per
+  resource, payload ≤ 16 KB. Exceeded limits return `rate_limited` / `invalid_params`, never
+  silent queuing.
+- Revocation: `permissions-request` with `{ revoke: true }` drops the session's grants
+  immediately and returns `{ revoked: true }`. ABC renders a visible chrome indicator while the
+  current resource holds grants and offers the one-click revoke entry; it also fires an
+  automatic revoke when the active resource changes.
+- Grant and write events should be recorded in the host's local audit log (trace) for later
+  review.

@@ -236,6 +236,69 @@ path such as `/protocols/simplebuzz` for `create`. Use `@<pinId>` for `modify` a
 `originalId` is present, it must match the target pin id. `revoke` may use an empty UTF-8 payload.
 The host signs and broadcasts with the current actor when it supports write actions.
 
+## Calling The Host Local LLM
+
+MetaApps that run agent loops inside the iframe (for example an on-chain chess client that
+decides each move) can ask the host to run a text completion on the host's own LLM stack. The
+MetaApp cannot choose the model; the host decides which model and configuration to use.
+
+```js
+const completion = await window.AgentBrowser.request({
+  method: 'browser.llm.complete',
+  params: {
+    messages: [
+      { role: 'system', content: 'You are a Chinese chess player. Reply with a JSON move.' },
+      { role: 'user', content: '<board text + legal move list>' }
+    ],
+    options: { temperature: 0.7, maxOutputTokens: 512 },
+    purpose: 'llmchess-move'
+  }
+});
+console.log(completion.text);   // '{"mv":"h2e2","note":"..."}'
+console.log(completion.model);  // display-grade model name, may be absent
+```
+
+- The first call per MetaApp resource requires a user approval card; the decision is kept in
+  memory for the page session only.
+- Treat `completion.text` as untrusted output: validate it (for example against a chess rules
+  engine) before acting on it.
+- Stable errors: `consent_denied`, `llm_unavailable` (host has no LLM), `llm_timeout`,
+  `rate_limited`, `invalid_params`. On `unsupported_method`, degrade to spectator or sandbox
+  mode instead of failing the whole app.
+
+## Requesting Session Write Grants
+
+For flows that must write many PINs automatically (every chess move is a `simplegroupchat`
+message), request session-scoped, no-confirmation write access to the exact protocols you need.
+The user approves the whole group once; approved writes skip the per-message confirmation card.
+
+```js
+const grant = await window.AgentBrowser.request({
+  method: 'browser.permissions.request',
+  params: {
+    grants: [
+      { method: 'metaid.pin.write', operation: 'create', path: '/protocols/simplegroupcreate' },
+      { method: 'metaid.pin.write', operation: 'create', path: '/protocols/simplegroupjoin' },
+      { method: 'metaid.pin.write', operation: 'create', path: '/protocols/simplegroupchat' }
+    ],
+    reason: 'Write chess moves to the group chat automatically during the game.'
+  }
+});
+// grant.granted => the approved protocol paths
+```
+
+- Only `operation: 'create'` on exact `/protocols/<name>` paths can be granted. `modify` and
+  `revoke` always keep per-write confirmation.
+- The host only grants paths on its own protocol whitelist; anything else returns
+  `consent_denied`.
+- Grants are in-memory and session-scoped: they die on page refresh, actor switch, and
+  navigation away. While active, the Browser top bar shows a lock badge for the resource; users
+  can revoke with one click.
+- After approval, `metaid.pin.write` for a granted path returns the normal write result without
+  a confirmation card. Requests outside the grant fall back to the standard confirmation flow.
+- Use `grant.granted.length === 0` (or the `consent_denied` error) as the signal to run in
+  spectator or sandbox mode.
+
 ## Uploading Files
 
 Use `metafile.upload` for large files. Store the returned `metafile://...` URI inside a smaller

@@ -152,6 +152,7 @@ function runWithResolve(resolvePayload, options = {}) {
     Error,
     setTimeout,
     clearTimeout,
+    crypto: { randomUUID: () => 'test-session' },
     window: {
       location: { search: '?uri=metaid%3A%2F%2Fidq1fixturebot' },
       history: { replaceState() {} },
@@ -2161,6 +2162,7 @@ test('html-iframe bridge forwards MetaID PIN write requests to host actions', as
   assert.deepEqual(JSON.parse(actionRequest.options.body), {
     resourceUri: 'metaapp://pin',
     kind: 'metaid-pin-write',
+    sessionId: 'test-session',
     payload: {
       operation: 'create',
       path: '/protocols/simplebuzz',
@@ -2254,6 +2256,7 @@ test('html-iframe bridge forwards modify and revoke PIN writes with @pinId targe
     assert.deepEqual(JSON.parse(actionRequest.options.body), {
       resourceUri: 'metaapp://pin',
       kind: 'metaid-pin-write',
+      sessionId: 'test-session',
       payload: {
         operation,
         path: `@${servicePinId}`,

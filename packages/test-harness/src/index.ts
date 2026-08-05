@@ -35,6 +35,8 @@ const TRUSTED_ACTION_KINDS = [
   'metaapp-remix',
   'metaid-pin-write',
   'metafile-upload',
+  'llm-complete',
+  'permissions-request',
 ];
 
 function assertAllowedString(value: unknown, allowed: readonly string[], label: string): asserts value is string {

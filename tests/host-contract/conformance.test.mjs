@@ -236,6 +236,70 @@ test('host conformance accepts MetaApp bridge trusted action kinds', async () =>
   assert.equal(called, true);
 });
 
+test('host conformance accepts MetaApp bridge v1.1 trusted action kinds', async () => {
+  const seen = [];
+  const adapter = createConformantAdapter({
+    async runTrustedAction(input) {
+      if (input.kind === 'llm-complete') {
+        seen.push('llm-complete');
+        return browserSuccess({
+          kind: 'llm-complete',
+          handled: true,
+          data: { text: 'h2e2', model: 'gpt-5.6', finishReason: 'stop' },
+        });
+      }
+      if (input.kind === 'permissions-request') {
+        seen.push('permissions-request');
+        return browserSuccess({
+          kind: 'permissions-request',
+          handled: true,
+          data: {
+            granted: [{ method: 'metaid.pin.write', operation: 'create', path: '/protocols/simplegroupchat' }],
+          },
+        });
+      }
+      return browserFailure('unsupported_action', `Unsupported action: ${input.kind}`);
+    },
+  });
+
+  await assertBrowserHostConformance({
+    adapter,
+    expectedHostKind: 'standalone',
+    sampleUri: 'metaid://idq1fake',
+    trustedAction: {
+      resourceUri: 'metaapp://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+      kind: 'llm-complete',
+      sessionId: 'session-1',
+      payload: {
+        messages: [{ role: 'user', content: 'board' }],
+        purpose: 'llmchess-move',
+      },
+    },
+  });
+
+  const llm = await adapter.runTrustedAction({
+    resourceUri: 'metaapp://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    kind: 'llm-complete',
+    payload: { messages: [{ role: 'user', content: 'board' }] },
+  });
+  assert.equal(llm.ok, true);
+  assert.equal(llm.data.data.text, 'h2e2');
+
+  const permissions = await adapter.runTrustedAction({
+    resourceUri: 'metaapp://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    kind: 'permissions-request',
+    sessionId: 'session-2',
+    payload: {
+      grants: [{ method: 'metaid.pin.write', operation: 'create', path: '/protocols/simplegroupchat' }],
+    },
+  });
+  assert.equal(permissions.ok, true);
+  assert.equal(permissions.data.data.granted.length, 1);
+  // The harness itself invokes the configured trustedAction once, then the two
+  // explicit calls below round out the coverage.
+  assert.deepEqual(seen, ['llm-complete', 'llm-complete', 'permissions-request']);
+});
+
 test('host conformance accepts waiting trusted actions', async () => {
   const adapter = createConformantAdapter({
     async runTrustedAction() {

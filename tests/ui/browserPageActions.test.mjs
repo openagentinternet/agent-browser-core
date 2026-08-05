@@ -109,6 +109,7 @@ function createContext(options = {}) {
     JSON,
     setTimeout,
     clearTimeout,
+    crypto: { randomUUID: () => 'test-session' },
     navigator: options.clipboard === false ? {} : {
       clipboard: {
         writeText: async (value) => clipboardWrites.push(value),
@@ -1063,7 +1064,7 @@ test('Share renders the shared PIN confirmation and resubmits the exact host req
   context.settlePinWriteConfirmation(true);
   await publish;
   assert.equal(requests.length, 2);
-  assert.deepEqual(requests[1].body, confirmRequest);
+  assert.deepEqual(requests[1].body, { ...confirmRequest, sessionId: 'test-session' });
   assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
 });
 
@@ -1138,12 +1139,12 @@ test('Share presents one renewed confirmation when the host rejects an expired c
 
   await waitFor(() => nodes['[data-browser-modal-root]'].innerHTML.includes('Worker Bot Renewed'), 'renewed PIN confirmation modal');
   assert.equal(requests.length, 2);
-  assert.deepEqual(requests[1].body, firstConfirmRequest);
+  assert.deepEqual(requests[1].body, { ...firstConfirmRequest, sessionId: 'test-session' });
   context.settlePinWriteConfirmation(true);
 
   await publish;
   assert.equal(requests.length, 3);
-  assert.deepEqual(requests[2].body, renewedConfirmRequest);
+  assert.deepEqual(requests[2].body, { ...renewedConfirmRequest, sessionId: 'test-session' });
   assert.match(nodes['[data-browser-modal-root]'].innerHTML, /Buzz published/);
 });
 
@@ -1202,7 +1203,7 @@ test('MetaApp PIN bridge uses the shared confirmation without exposing the host 
   await write;
 
   assert.equal(requests.length, 2);
-  assert.deepEqual(requests[1].body, confirmRequest);
+  assert.deepEqual(requests[1].body, { ...confirmRequest, sessionId: 'test-session' });
   assert.equal(sourceWindow.messages.length, 1);
   assert.equal(sourceWindow.messages[0].ok, true);
   assert.doesNotMatch(JSON.stringify(sourceWindow.messages[0]), /bridge-host-token/);
