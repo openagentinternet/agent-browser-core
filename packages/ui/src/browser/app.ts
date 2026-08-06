@@ -2366,7 +2366,7 @@ function browserUriFromPath(pathname, search) {
     var resourceId = textValue(decodedId);
     if (!resourceId) return '';
     return match[1] + '://' + resourceId +
-      (match[1] === 'metaid' ? metaIdBotPageOverrideQuery(search) : (match[1] === 'pin' ? textValue(search) : ''));
+      (match[1] === 'metaid' ? metaIdBotPageOverrideQuery(search) : (match[1] === 'pin' || match[1] === 'metaapp' ? textValue(search) : ''));
   }
 
   var mapMatch = path.match(/^\\/browser\\/map\\/(.+)$/);

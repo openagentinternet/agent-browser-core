@@ -1,3 +1,5 @@
+import type { MetaAppLaunchContext } from './metaAppLaunchContext.js';
+import { serializeMetaAppLaunchQuery } from './metaAppLaunchContext.js';
 import type { BrowserRendererType, BrowserResolveResult, MetaAppGalleryRecord } from './types.js';
 
 function safeRendererUrl(value: unknown): string | undefined {
@@ -55,13 +57,30 @@ function selectRendererType(record: MetaAppGalleryRecord, url: string | undefine
   return 'unsupported';
 }
 
+function withLaunchContextQuery(
+  url: string | undefined,
+  launchContext: MetaAppLaunchContext | undefined,
+): string | undefined {
+  if (!url || !launchContext) {
+    return url;
+  }
+  const query = serializeMetaAppLaunchQuery(launchContext);
+  if (!query) {
+    return url;
+  }
+  const withoutFragment = url.split('#', 1)[0];
+  return `${withoutFragment}${withoutFragment.includes('?') ? '&' : '?'}${query}`;
+}
+
 export function buildMetaAppResolveResult(input: {
   uri: string;
   normalizedUri: string;
   record: MetaAppGalleryRecord;
   fetchedAt?: number;
+  /** MetaApp deep-link launch parameters to forward to the app entry URL. */
+  launchContext?: MetaAppLaunchContext;
 }): BrowserResolveResult {
-  const url = selectUrl(input.record);
+  const url = withLaunchContextQuery(selectUrl(input.record), input.launchContext);
   const rendererType = selectRendererType(input.record, url);
   const unsupported = rendererType === 'unsupported';
 

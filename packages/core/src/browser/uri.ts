@@ -6,3 +6,9 @@ export {
 } from '../uri/browserUri.js';
 export { parseMapUri, type ParsedMapUri } from './mapUri.js';
 export { parsePinUri, type ParsedPinUri } from './pinUri.js';
+export {
+  parseMetaAppLaunchUri,
+  serializeMetaAppLaunchQuery,
+  type MetaAppLaunchContext,
+  type MetaAppLaunchParseResult,
+} from './metaAppLaunchContext.js';

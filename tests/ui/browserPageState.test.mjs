@@ -473,6 +473,24 @@ test('Browser MetaApp deep link path is decoded into the address bar and resolve
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metaapp%3A%2F%2F${pinId}&actorId=worker`);
 });
 
+test('Browser MetaApp deep link path preserves launch parameters on refresh', async () => {
+  const pinId = '8544d8a15126296abe36a0bad740a4f293580575b5b00d345029bf99b74c78eci0';
+  const buzzPinId = 'a9c8e3f1d2b64705af8e6c3b1d4a5098c7f2e6d1b3a54870c9f1e2d3a4b5c607i0';
+  const query = `?view=buzz&pin=${buzzPinId}`;
+  const { elements, fetchCalls } = createBrowserContext({
+    pathname: `/browser/metaapp/${pinId}`,
+    search: query,
+  });
+
+  await waitFor(() => fetchCalls.length === 2, 'runtime and deep link resolve');
+
+  assert.equal(elements['[data-browser-uri-input]'].value, `metaapp://${pinId}${query}`);
+  assert.equal(
+    fetchCalls[1],
+    `/api/browser/resolve?uri=metaapp%3A%2F%2F${pinId}%3Fview%3Dbuzz%26pin%3D${buzzPinId}&actorId=worker`,
+  );
+});
+
 test('Browser displays disabled MetaApp resolver failures in the centered failure state', async () => {
   const pinId = 'b6bfe1ab3b605c03bbe27b8bd8fe4f7874552e9020f207b677ab9ea89a424cedi0';
   const { context, elements, fetchCalls } = createBrowserContext({
