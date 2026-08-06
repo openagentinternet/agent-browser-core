@@ -99,6 +99,7 @@ export interface StandaloneLlmCompleteInput {
     temperature?: number;
     maxOutputTokens?: number;
     timeoutMs?: number;
+    thinking?: 'enabled' | 'disabled';
   };
   purpose?: string;
 }

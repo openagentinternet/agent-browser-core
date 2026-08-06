@@ -199,6 +199,12 @@ export interface BrowserLlmCompletePayload {
     temperature?: number;
     maxOutputTokens?: number;
     timeoutMs?: number;
+    /**
+     * Thinking-mode toggle. DeepSeek v4-pro enables thinking by default
+     * (effort=high); lightweight llm.complete calls (e.g. chess moves) can
+     * opt out with 'disabled' to avoid multi-minute chain-of-thought.
+     */
+    thinking?: 'enabled' | 'disabled';
   };
   purpose?: string;
 }

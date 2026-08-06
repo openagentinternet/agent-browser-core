@@ -1034,6 +1034,9 @@ function validateLlmCompleteParams(params) {
     if (typeof options.timeoutMs === 'number' && isFinite(options.timeoutMs) && options.timeoutMs > 0) {
       normalizedOptions.timeoutMs = options.timeoutMs;
     }
+    if (options.thinking === 'enabled' || options.thinking === 'disabled') {
+      normalizedOptions.thinking = options.thinking;
+    }
     if (Object.keys(normalizedOptions).length) value.options = normalizedOptions;
   }
   if (textValue(input.purpose)) value.purpose = textValue(input.purpose).slice(0, 120);
