@@ -231,6 +231,94 @@ test('openTab with no uri creates an empty welcome tab without fetching', async 
   assert.equal(fetchCalls.length, fetchesBefore, 'no fetch for empty tab');
 });
 
+const reviewerActorTabs = {
+  id: 'reviewer', label: 'Reviewer Bot', kind: 'oac-bot', globalMetaId: 'idq1reviewer',
+  isDefault: false, capabilities: ['private-chat', 'service-call', 'template-settings'],
+};
+
+// The Using Actor is owned per tab. Selecting an actor in one tab must NOT
+// affect another tab's actor — neither visually (the chip) nor at action time
+// (the actorId query param stamped on resolve / trusted-action / signing calls).
+test('per-tab actor: selecting actors in two tabs stays independent across switches', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+    runtimeResponse: runtimePayload({ actors: [defaultActor, reviewerActorTabs] }),
+  });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+
+  // Tab 1 (boot): default actor is 'worker'.
+  const tab1Id = context.AgentBrowserTabs.getActiveTab().id;
+  assert.equal(context.state.actorId, 'worker');
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Using: Worker Bot/);
+
+  // Open Tab 2 and switch its actor to 'reviewer'.
+  context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'tab 2 resolve');
+  const tab2Id = context.AgentBrowserTabs.getActiveTab().id;
+  assert.notEqual(tab2Id, tab1Id);
+  // The new tab inherits the host default actor ('worker').
+  assert.equal(context.state.actorId, 'worker');
+  await context.selectUsingIdentity('reviewer');
+  assert.equal(context.state.actorId, 'reviewer');
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Using: Reviewer Bot/);
+
+  // Switch back to Tab 1: its actor is still 'worker' (chip + state restored).
+  context.AgentBrowserTabs.switchTab(tab1Id);
+  assert.equal(context.state.actorId, 'worker');
+  assert.match(elements['[data-browser-using-selector]'].innerHTML, /Using: Worker Bot/);
+  const tab1 = context.state.tabs.find((t) => t.id === tab1Id);
+  const tab2 = context.state.tabs.find((t) => t.id === tab2Id);
+  assert.equal(tab1.actorId, 'worker');
+  assert.equal(tab2.actorId, 'reviewer');
+
+  // A navigation in Tab 1 must carry Tab 1's actor ('worker'), not Tab 2's.
+  const fetchesBefore = fetchCalls.length;
+  await context.navigateTo('metaid://idq1carol');
+  await waitFor(() => fetchCalls.length === fetchesBefore + 1, 'tab 1 re-resolve');
+  assert.equal(
+    fetchCalls[fetchCalls.length - 1],
+    '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1carol&actorId=worker',
+    'tab 1 resolve must carry tab 1 actor, not tab 2 actor'
+  );
+
+  // Switch to Tab 2 and navigate: it must carry Tab 2's actor ('reviewer').
+  context.AgentBrowserTabs.switchTab(tab2Id);
+  const tab2FetchesBefore = fetchCalls.length;
+  await context.navigateTo('metaid://idq1dave');
+  await waitFor(() => fetchCalls.length === tab2FetchesBefore + 1, 'tab 2 re-resolve');
+  const tab2Fetch = fetchCalls[fetchCalls.length - 1];
+  assert.ok(
+    tab2Fetch.indexOf('actorId=reviewer') !== -1,
+    `tab 2 resolve must carry tab 2 actor; got ${tab2Fetch}`
+  );
+});
+
+// A host may open a tab with a specific actor via the optional actorId arg.
+test('per-tab actor: openTab(uri, actorId) seeds the new tab with the requested actor', async () => {
+  const { context, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+    runtimeResponse: runtimePayload({ actors: [defaultActor, reviewerActorTabs] }),
+  });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+
+  const newId = context.AgentBrowserTabs.openTab('metaid://idq1bob', 'reviewer');
+  await waitFor(() => fetchCalls.length === 3, 'new tab resolve');
+  const active = context.AgentBrowserTabs.getActiveTab();
+  assert.equal(active.id, newId);
+  assert.equal(active.actorId, 'reviewer');
+  assert.equal(context.state.actorId, 'reviewer');
+  // The resolve call for the new tab carries the requested actor.
+  assert.ok(
+    fetchCalls[2].indexOf('actorId=reviewer') !== -1,
+    `new-tab resolve must carry requested actorId; got ${fetchCalls[2]}`
+  );
+  // An unknown actorId falls back to the host default actor.
+  const fallbackId = context.AgentBrowserTabs.openTab('metaid://idq1erin', 'does-not-exist');
+  await waitFor(() => fetchCalls.length === 4, 'fallback tab resolve');
+  const fallbackTab = context.state.tabs.find((t) => t.id === fallbackId);
+  assert.equal(fallbackTab.actorId, 'worker', 'unknown actorId falls back to host default');
+});
+
 test('closeTab on the last tab auto-creates a fresh empty tab', async () => {
   const { context, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
   await waitFor(() => fetchCalls.length === 2, 'initial resolve');

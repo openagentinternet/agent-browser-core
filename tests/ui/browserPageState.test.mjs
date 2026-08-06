@@ -879,8 +879,14 @@ test('Browser using identity selector switches identity without navigating or to
 
   await context.selectUsingIdentity('reviewer');
 
-  assert.equal(context.state.runtime.defaultActor.id, 'reviewer');
+  // The Using Actor is owned per tab: selectUsingIdentity writes the selection
+  // onto the active tab's actorId (mirrored to state.actorId) for resolve,
+  // trusted actions, and signing — without mutating the host-supplied
+  // runtime.defaultActor (which stays the stable host default for new tabs).
+  assert.equal(context.state.runtime.defaultActor.id, 'worker');
   assert.equal(context.state.actorId, 'reviewer');
+  var activeTab = context.state.tabs.find((t) => t.id === context.state.activeTabId);
+  assert.equal(activeTab.actorId, 'reviewer');
   assert.match(elements['[data-browser-using-selector]'].innerHTML, /Using: Reviewer Bot/);
   assert.equal(elements['[data-browser-modal-root]'].hidden, true);
   assert.equal(elements['[data-browser-using-selector]'].getAttribute('aria-expanded'), 'false');
