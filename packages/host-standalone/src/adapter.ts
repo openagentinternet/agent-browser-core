@@ -186,7 +186,7 @@ const ZIP_CONTENT_TYPES = new Set([
   'application/zip',
   'application/x-zip-compressed',
 ]);
-const DEFAULT_MAX_ZIP_ARCHIVE_BYTES = 25 * 1024 * 1024;
+const DEFAULT_MAX_ZIP_ARCHIVE_BYTES = 64 * 1024 * 1024;
 
 function normalizeText(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
