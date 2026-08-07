@@ -60,9 +60,12 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
             <button type="button" class="browser-icon-button" data-browser-forward aria-label="Forward" title="Forward">
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M9 6l6 6-6 6"></path></svg>
             </button>
-            <button type="button" class="browser-icon-button" data-browser-reload aria-label="Reload" title="Reload">
-              <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 5v6h-6"></path></svg>
-            </button>
+            <span class="browser-reload-wrap" data-browser-reload-wrap>
+              <button type="button" class="browser-icon-button" data-browser-reload aria-label="Reload" title="Reload (hold or right-click for Force Reload)">
+                <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 5v6h-6"></path></svg>
+              </button>
+              <div class="browser-reload-popover" data-browser-reload-popover role="menu" hidden></div>
+            </span>
             <button type="button" class="browser-icon-button" data-browser-drawer-toggle aria-label="Bookmarks and history" title="Bookmarks and history" aria-expanded="false">
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="M9 5v14M13 9h4M13 13h4"></path></svg>
             </button>
@@ -200,6 +203,9 @@ var state = {
   // Cache Management two-step confirmation: pending scope ('' | 'pin' | 'all')
   // while awaiting the confirming click.
   pendingCacheClearScope: '',
+  // Reload popover: true while a long-press on Reload is pending; the firing
+  // click must be suppressed so a long-press does not also trigger a reload.
+  reloadLongPressFired: false,
   pendingAppShareBuzzPinId: '',
   pendingPinWriteConfirmation: null,
   settingsTab: 'baseUrls',
@@ -2623,6 +2629,8 @@ function bindElements() {
     back: document.querySelector('[data-browser-back]'),
     forward: document.querySelector('[data-browser-forward]'),
     reload: document.querySelector('[data-browser-reload]'),
+    reloadWrap: document.querySelector('[data-browser-reload-wrap]'),
+    reloadPopover: document.querySelector('[data-browser-reload-popover]'),
     drawerToggle: document.querySelector('[data-browser-drawer-toggle]'),
     resourceChip: document.querySelector('[data-browser-resource-chip]'),
     ownerPanel: document.querySelector('[data-browser-owner-panel]'),
@@ -3551,6 +3559,10 @@ async function handleBrowserMenuAction(itemId) {
     goForward();
   } else if (item.action === 'reload') {
     reloadCurrent();
+  } else if (item.action === 'force-reload') {
+    forceReloadCurrent().catch(function (error) {
+      setStatus('error', error && error.message ? error.message : 'Force reload failed.');
+    });
   } else if (item.action === 'toggle-bookmark') {
     toggleBookmark();
   } else if (item.action === 'toggle-drawer') {
@@ -7362,10 +7374,62 @@ function navigateTo(uri) {
   return resolveUri(uri, { record: true });
 }
 
+// Reload popover: hold or right-click the Reload button to open it. Pointer
+// events are iframe-internal, so this works even when a host swallows
+// contextmenu (e.g. IDBots) — right-click there falls back to long-press.
+var RELOAD_LONG_PRESS_MS = 500;
+var longPressTimer = null;
+
+function clearLongPressTimer() {
+  if (longPressTimer !== null) {
+    window.clearTimeout(longPressTimer);
+    longPressTimer = null;
+  }
+}
+
+function openReloadPopover() {
+  if (!elements.reloadPopover) return;
+  // Rendered on open (like the chrome menu) so the shell stays icon-only.
+  elements.reloadPopover.innerHTML =
+    '<button type="button" role="menuitem" data-browser-reload-normal>Reload</button>' +
+    '<button type="button" role="menuitem" data-browser-reload-force>Force Reload</button>';
+  elements.reloadPopover.hidden = false;
+}
+
+function closeReloadPopover() {
+  if (!elements.reloadPopover) return;
+  elements.reloadPopover.hidden = true;
+}
+
 function reloadCurrent() {
   var tab = activeTab();
   var uri = (tab && tab.history[tab.historyIndex]) || (elements.input && elements.input.value) || '';
   return resolveUri(uri, { record: false });
+}
+
+// Force reload: clear the current MetaApp's cached artifact (the downloaded and
+// extracted ZIP) and re-resolve so the host re-downloads it. Ordinary Reload
+// keeps serving the cached artifact, which cannot recover from a bad cache
+// entry (e.g. a truncated ZIP cached before the truncation guard shipped).
+// The artifact cacheKey comes from the host's own cache listing (authoritative),
+// so the UI never re-implements the key algorithm.
+async function forceReloadCurrent() {
+  var pinId = currentMetaAppPinId();
+  var cacheData = pinId ? await api(endpointWithActor(browserEndpoints.cache)) : null;
+  var artifacts = cacheData && Array.isArray(cacheData.artifacts) ? cacheData.artifacts : [];
+  var matched = artifacts.filter(function (item) {
+    return textValue(item && item.metaAppPinId) === pinId;
+  });
+  for (var index = 0; index < matched.length; index += 1) {
+    var cacheKey = textValue(matched[index] && matched[index].cacheKey);
+    if (!cacheKey) continue;
+    await api(endpointWithActor(browserEndpoints.cache), {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scope: 'artifact', cacheKey: cacheKey })
+    });
+  }
+  return reloadCurrent();
 }
 
 function goBack() {
@@ -7770,7 +7834,53 @@ async function initialize() {
   }
   if (elements.back) elements.back.addEventListener('click', goBack);
   if (elements.forward) elements.forward.addEventListener('click', goForward);
-  if (elements.reload) elements.reload.addEventListener('click', reloadCurrent);
+  if (elements.reload) {
+    elements.reload.addEventListener('click', function () {
+      // A long-press fires this click when the pointer is released; the
+      // long-press already opened the popover, so do not also reload.
+      if (state.reloadLongPressFired) return;
+      reloadCurrent();
+    });
+    elements.reload.addEventListener('pointerdown', function (event) {
+      state.reloadLongPressFired = false;
+      longPressTimer = window.setTimeout(function () {
+        state.reloadLongPressFired = true;
+        openReloadPopover();
+      }, RELOAD_LONG_PRESS_MS);
+    });
+    elements.reload.addEventListener('pointerup', function () {
+      clearLongPressTimer();
+    });
+    elements.reload.addEventListener('pointerleave', function () {
+      clearLongPressTimer();
+    });
+    elements.reload.addEventListener('pointercancel', function () {
+      clearLongPressTimer();
+    });
+    if (elements.reloadWrap) {
+      elements.reloadWrap.addEventListener('contextmenu', function (event) {
+        if (event && typeof event.preventDefault === 'function') event.preventDefault();
+        if (state.reloadLongPressFired) return;
+        openReloadPopover();
+      });
+    }
+    if (elements.reloadPopover) {
+      elements.reloadPopover.addEventListener('click', function (event) {
+        var target = closestWithAttribute(event && event.target, 'data-browser-reload-force')
+          || closestWithAttribute(event && event.target, 'data-browser-reload-normal');
+        if (!target) return;
+        if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+        closeReloadPopover();
+        if (target.hasAttribute('data-browser-reload-force')) {
+          forceReloadCurrent().catch(function (error) {
+            setStatus('error', error && error.message ? error.message : 'Force reload failed.');
+          });
+        } else {
+          reloadCurrent();
+        }
+      });
+    }
+  }
   if (elements.drawerToggle) elements.drawerToggle.addEventListener('click', toggleDrawer);
   if (elements.bookmarkStar) elements.bookmarkStar.addEventListener('click', toggleBookmark);
   if (elements.usingChip) elements.usingChip.addEventListener('click', handleUsingIdentityClick);
@@ -7827,6 +7937,7 @@ async function initialize() {
     if (state.ownerPanelOpen) closeOwnerPanel();
     if (state.actorPanelOpen) closeStandaloneActorPanel();
     if (state.appPanelOpen) closeAppPanel();
+    closeReloadPopover();
   });
   if (elements.statusTxid) elements.statusTxid.addEventListener('click', openInspector);
 
@@ -7946,6 +8057,7 @@ globalThis.currentBrowserHtmlFrameWindow = currentBrowserHtmlFrameWindow;
 globalThis.handleBrowserBridgeMessage = handleBrowserBridgeMessage;
 globalThis.handleBrowserMessage = handleBrowserMessage;
 globalThis.reloadCurrent = reloadCurrent;
+globalThis.forceReloadCurrent = forceReloadCurrent;
 globalThis.goBack = goBack;
 globalThis.goForward = goForward;
 globalThis.initialize = initialize;

@@ -7,7 +7,7 @@ export interface BrowserMenuItemDefinition {
   id: string;
   label: string;
   icon: string;
-  action: 'open-settings' | 'go-forward' | 'reload' | 'toggle-bookmark' | 'toggle-drawer' | 'identity';
+  action: 'open-settings' | 'go-forward' | 'reload' | 'force-reload' | 'toggle-bookmark' | 'toggle-drawer' | 'identity';
   settingsTab?: 'baseUrls' | 'templates' | 'nameResolution' | 'cache';
   /** Items shown only on narrow (mobile) layouts; hidden on desktop via CSS. */
   mobileOnly?: boolean;
@@ -102,6 +102,12 @@ export const BROWSER_MENU_SECTIONS: BrowserMenuSectionDefinition[] = [
         icon: 'database',
         action: 'open-settings',
         settingsTab: 'cache',
+      },
+      {
+        id: 'force-reload',
+        label: 'Force Reload',
+        icon: 'reload',
+        action: 'force-reload',
       },
     ],
   },
