@@ -197,6 +197,9 @@ var state = {
   appPanelOpen: false,
   pendingAppShare: null,
   appShareSending: false,
+  // Cache Management two-step confirmation: pending scope ('' | 'pin' | 'all')
+  // while awaiting the confirming click.
+  pendingCacheClearScope: '',
   pendingAppShareBuzzPinId: '',
   pendingPinWriteConfirmation: null,
   settingsTab: 'baseUrls',
@@ -3476,6 +3479,13 @@ function renderCacheSettings() {
       '<button type="button" data-browser-cache-clear="pin"' + (currentPinId ? '' : ' disabled') + '>' + iconHtml('trash') + '<span>Clear Current MetaAPP</span></button>' +
       '<button type="button" data-browser-cache-clear="all">' + iconHtml('trash') + '<span>Clear All MetaAPP Cache</span></button>' +
     '</div>' +
+    (pendingCacheClearScope() ? (
+      '<div class="browser-cache-confirm">' +
+        '<span>' + escapeHtml(pendingCacheClearScope() === 'pin' ? 'Clear the cached artifact for the current MetaAPP?' : 'Clear all MetaAPP artifact cache?') + '</span>' +
+        '<div><button type="button" data-browser-cache-confirm="' + escapeHtml(pendingCacheClearScope()) + '">Clear</button>' +
+        '<button type="button" data-browser-cache-cancel>Cancel</button></div>' +
+      '</div>'
+    ) : '') +
   '</section>';
 }
 
@@ -3665,14 +3675,25 @@ async function toggleCustomBotPages() {
   return result;
 }
 
+function pendingCacheClearScope() {
+  return textValue(state.pendingCacheClearScope) || '';
+}
+
 async function clearBrowserCache(scope) {
   var clearScope = textValue(scope) || 'all';
   var currentPinId = currentMetaAppPinId();
   if (clearScope === 'pin' && !currentPinId) return null;
-  var prompt = clearScope === 'pin'
-    ? 'Clear the cached artifact for the current MetaAPP?'
-    : 'Clear all MetaAPP artifact cache?';
-  if (window.confirm && !window.confirm(prompt)) return null;
+  // Two-step in-panel confirmation. window.confirm() is silently ignored
+  // (returns false, no dialog) when the Browser is embedded in a sandboxed
+  // iframe without the allow-modals flag, which made Cache Management appear
+  // dead in hosts like OAC/IDBots. The pending scope renders a confirm row
+  // that performs the clear on the second click.
+  if (pendingCacheClearScope() !== clearScope) {
+    state.pendingCacheClearScope = clearScope;
+    renderBrowserSettingsModal();
+    return null;
+  }
+  state.pendingCacheClearScope = '';
   var body = clearScope === 'pin'
     ? { scope: 'pin', pinId: currentPinId }
     : { scope: 'all' };
@@ -7515,6 +7536,18 @@ async function initialize() {
         selectBotHomepageTemplate(templateSelect.getAttribute('data-browser-template-select')).catch(function (error) {
           setStatus('error', error && error.message ? error.message : 'Template save failed.');
         });
+        return;
+      }
+      var cacheConfirm = closestWithAttribute(event && event.target, 'data-browser-cache-confirm');
+      if (cacheConfirm) {
+        clearBrowserCache(cacheConfirm.getAttribute('data-browser-cache-confirm')).catch(function (error) {
+          setStatus('error', error && error.message ? error.message : 'Cache clear failed.');
+        });
+        return;
+      }
+      if (closestWithAttribute(event && event.target, 'data-browser-cache-cancel')) {
+        state.pendingCacheClearScope = '';
+        renderBrowserSettingsModal();
         return;
       }
       var cacheClear = closestWithAttribute(event && event.target, 'data-browser-cache-clear');
