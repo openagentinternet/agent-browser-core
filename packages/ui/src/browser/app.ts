@@ -3698,7 +3698,7 @@ async function clearBrowserCache(scope) {
   // Two-step in-panel confirmation. window.confirm() is silently ignored
   // (returns false, no dialog) when the Browser is embedded in a sandboxed
   // iframe without the allow-modals flag, which made Cache Management appear
-  // dead in hosts like OAC/IDBots. The pending scope renders a confirm row
+  // dead in such hosts. The pending scope renders a confirm row
   // that performs the clear on the second click.
   if (pendingCacheClearScope() !== clearScope) {
     state.pendingCacheClearScope = clearScope;
@@ -7376,7 +7376,7 @@ function navigateTo(uri) {
 
 // Reload popover: hold or right-click the Reload button to open it. Pointer
 // events are iframe-internal, so this works even when a host swallows
-// contextmenu (e.g. IDBots) — right-click there falls back to long-press.
+// contextmenu — right-click there falls back to long-press.
 var RELOAD_LONG_PRESS_MS = 500;
 var longPressTimer = null;
 
