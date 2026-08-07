@@ -68,6 +68,7 @@ const LLM_COMPLETE_RATE_LIMIT_PER_MINUTE = 6;
 const GRANTED_WRITE_RATE_LIMIT_PER_MINUTE = 12;
 const GRANTED_WRITE_MAX_PAYLOAD_BYTES = 16 * 1024;
 const PERMISSION_CONFIRMATION_TTL_MS = 5 * 60 * 1000;
+const APP_SESSION_CONFIRMATION_TTL_MS = 5 * 60 * 1000;
 // Host policy whitelist: only these exact protocol paths may appear in a
 // session grant. Sensitive protocols (metaapp, simplemsg, payment...) never
 // qualify.
@@ -108,6 +109,23 @@ export type StandaloneLlmCompleteHandler = (
   input: StandaloneLlmCompleteInput,
 ) => Promise<BrowserLlmCompleteResult>;
 
+// Optional host-resident App Session runtime. ABC forwards the six
+// browser.app.session.* trusted actions to this handler; the standalone host
+// itself never parses session payloads, executes adapters, or persists
+// authorization. When absent, the session bridge answers with a host-capability
+// error so hosts without a session runtime fail predictably.
+export type StandaloneAppSessionHandler = (
+  input: StandaloneAppSessionHandlerInput,
+) => Promise<BrowserCommandResult<BrowserTrustedActionResult>>;
+
+export interface StandaloneAppSessionHandlerInput {
+  action: 'start' | 'list' | 'status' | 'pause' | 'resume' | 'stop';
+  resourceUri: string;
+  actorId: string;
+  sessionId?: string;
+  payload: Record<string, unknown>;
+}
+
 export interface CreateStandaloneBrowserHostAdapterInput {
   fetch?: typeof fetch;
   env?: Record<string, string | undefined>;
@@ -123,6 +141,10 @@ export interface CreateStandaloneBrowserHostAdapterInput {
   // Optional local LLM stack. When absent, browser.llm.complete answers
   // llm_unavailable. The handler must return display-safe data only.
   llmComplete?: StandaloneLlmCompleteHandler;
+  // Optional App Session runtime for browser.app.session.*. When absent, the
+  // bridge answers session_not_found (list/status/control) or an explicit
+  // capability error (start), so the host can still boot without a runner.
+  appSession?: StandaloneAppSessionHandler;
 }
 
 interface PreviewSession {
@@ -146,6 +168,17 @@ interface StandalonePendingPermissionConfirmation {
   actorId: string;
   resourceUri: string;
   grants: BrowserPermissionGrant[];
+  expiresAt: number;
+}
+
+interface StandalonePendingAppSessionConfirmation {
+  token: string;
+  actorId: string;
+  resourceUri: string;
+  // Exact start tuple to re-bind phase 2; mirrors the idempotency key the
+  // handler will apply when creating/reusing the session.
+  startKey: string;
+  payload: Record<string, unknown>;
   expiresAt: number;
 }
 
@@ -510,6 +543,11 @@ export function createStandaloneBrowserHostAdapter(
   const llmTimestamps = new Map<string, number[]>();
   const llmInFlight = new Set<string>();
   const grantedWriteTimestamps = new Map<string, number[]>();
+  // Pending App Session start confirmations, keyed by host-issued confirmation
+  // id. The phase-1 manual-action result carries the id+token; phase-2 resubmits
+  // them. The handler is authoritative for real session state — this map only
+  // guards the two-phase authorization card.
+  const pendingAppSessionConfirmations = new Map<string, StandalonePendingAppSessionConfirmation>();
   const artifactCache = createStandaloneMetaAppArtifactCacheStore({
     cacheRoot: input.cacheRoot ?? resolveStandaloneMetaAppCacheRoot({ env }),
     env,
@@ -947,6 +985,154 @@ export function createStandaloneBrowserHostAdapter(
     );
   }
 
+  // browser.app.session.*: ABC forwards these as trusted actions; the host
+  // (via the injected appSession handler) owns all session state, idempotency,
+  // and authorization. The adapter only guards the two-phase start card and
+  // routes the other five actions straight through.
+  function appSessionStartKey(payload: Record<string, unknown>): string {
+    return [
+      normalizeText(payload.groupId),
+      normalizeText(payload.seat),
+      normalizeText(payload.agentId),
+      normalizeText(payload.rulesHash),
+    ].join('|');
+  }
+
+  function buildStandaloneAppSessionManualAction(input: {
+    confirmationId: string;
+    token: string;
+    actorId: string;
+    resourceUri: string;
+    payload: Record<string, unknown>;
+    expiresAt: number;
+  }) {
+    const protocolPaths = Array.isArray(input.payload.protocolPaths)
+      ? input.payload.protocolPaths.filter((p): p is string => typeof p === 'string')
+      : [];
+    const ttlMs = typeof input.payload.ttlMs === 'number' ? input.payload.ttlMs : 0;
+    const budget = isPlainObject(input.payload.budget) ? input.payload.budget : {};
+    const llmBudget = typeof budget.llmCalls === 'number' ? budget.llmCalls : undefined;
+    const writeBudget = typeof budget.writes === 'number' ? budget.writes : undefined;
+    const adapterHash = normalizeText(input.payload.adapterHash) || normalizeText(input.payload.rulesHash);
+    const actor = buildStandaloneActor();
+    const bridgeActor = {
+      uri: input.resourceUri,
+      globalMetaId: input.actorId,
+      name: actor.label,
+      ...(actor.avatar ? { avatarPinId: undefined as string | undefined } : {}),
+    };
+    return {
+      confirmation: {
+        actor: bridgeActor,
+        resourceUri: input.resourceUri,
+        appId: normalizeText(input.payload.appId),
+        sessionType: normalizeText(input.payload.sessionType),
+        groupId: normalizeText(input.payload.groupId),
+        gameId: normalizeText(input.payload.gameId),
+        manifestUri: normalizeText(input.payload.manifestUri),
+        rulesHash: normalizeText(input.payload.rulesHash),
+        adapterHash,
+        seat: normalizeText(input.payload.seat),
+        protocolPaths,
+        ttlMs,
+        ...(typeof llmBudget === 'number' ? { llmBudget } : {}),
+        ...(typeof writeBudget === 'number' ? { writeBudget } : {}),
+        expiresAt: input.expiresAt,
+      },
+      confirmRequest: {
+        resourceUri: input.resourceUri,
+        kind: 'app-session-start' as const,
+        payload: {
+          ...input.payload,
+          confirmed: true,
+          hostConfirmation: { id: input.confirmationId, token: input.token },
+        },
+      },
+    };
+  }
+
+  async function handleStandaloneAppSession(
+    actionInput: BrowserTrustedActionInput,
+  ): Promise<BrowserCommandResult<BrowserTrustedActionResult>> {
+    const payload = isPlainObject(actionInput.payload) ? actionInput.payload : {};
+    const resourceUri = normalizeText(actionInput.resourceUri);
+    const actorId = normalizeText(actionInput.actorId) || STANDALONE_ACTOR_ID;
+    const kind = actionInput.kind;
+
+    // list / status / pause / resume / stop: straight pass-through. The host
+    // owns visibility scoping, idempotency, and error codes; the adapter never
+    // invents session state.
+    if (kind === 'app-session-list' || kind === 'app-session-status' ||
+        kind === 'app-session-pause' || kind === 'app-session-resume' || kind === 'app-session-stop') {
+      const action = kind.replace('app-session-', '') as 'list' | 'status' | 'pause' | 'resume' | 'stop';
+      if (!input.appSession) {
+        return browserFailure('session_not_found', 'This host has no App Session runtime configured.');
+      }
+      return input.appSession({ action, resourceUri, actorId, payload });
+    }
+
+    // start: two-phase authorization card.
+    const requiredFields = ['appId', 'sessionType', 'groupId', 'gameId', 'manifestUri', 'rulesHash', 'seat', 'agentId'] as const;
+    for (const field of requiredFields) {
+      if (!normalizeText(payload[field])) {
+        return browserFailure('invalid_params', `App session start requires a non-empty ${field}.`);
+      }
+    }
+    if (typeof payload.ttlMs !== 'number' || !Number.isFinite(payload.ttlMs) || payload.ttlMs <= 0) {
+      return browserFailure('invalid_params', 'App session start requires a positive numeric ttlMs.');
+    }
+    const hostConfirmation = isPlainObject(payload.hostConfirmation) ? payload.hostConfirmation : null;
+    if (payload.confirmed === true && hostConfirmation) {
+      const confirmationId = normalizeText(hostConfirmation.id);
+      const token = normalizeText(hostConfirmation.token);
+      const pending = pendingAppSessionConfirmations.get(confirmationId);
+      if (!pending || pending.token !== token) {
+        return browserFailure('consent_denied', 'The app session confirmation is invalid or expired.');
+      }
+      pendingAppSessionConfirmations.delete(confirmationId);
+      if (pending.expiresAt < now()) {
+        return browserFailure('consent_denied', 'The app session confirmation has expired.');
+      }
+      if (pending.resourceUri !== resourceUri || pending.actorId !== actorId) {
+        return browserFailure('consent_denied', 'The app session confirmation does not match this resource or actor.');
+      }
+      if (!input.appSession) {
+        return browserFailure('internal_error', 'This host has no App Session runtime configured.');
+      }
+      return input.appSession({ action: 'start', resourceUri, actorId, payload });
+    }
+
+    // phase 1: if the host has no runtime at all, we cannot even start; surface
+    // an explicit capability error rather than a misleading card.
+    if (!input.appSession) {
+      return browserFailure('unsupported_method', 'This host has no App Session runtime configured.');
+    }
+    const confirmationId = `appsession-${randomUUID()}`;
+    const token = randomUUID();
+    const expiresAt = now() + APP_SESSION_CONFIRMATION_TTL_MS;
+    pendingAppSessionConfirmations.set(confirmationId, {
+      token,
+      actorId,
+      resourceUri,
+      startKey: appSessionStartKey(payload),
+      payload,
+      expiresAt,
+    });
+    const manualData = buildStandaloneAppSessionManualAction({
+      confirmationId,
+      token,
+      actorId,
+      resourceUri,
+      payload,
+      expiresAt,
+    });
+    return browserManualActionRequired(
+      'app_session_required',
+      'Confirm the App Session authorization before the host starts it.',
+      { data: manualData },
+    );
+  }
+
   async function runTrustedAction(
     actionInput: BrowserTrustedActionInput,
   ): Promise<BrowserCommandResult<BrowserTrustedActionResult>> {
@@ -974,6 +1160,11 @@ export function createStandaloneBrowserHostAdapter(
     }
     if (actionInput.kind === 'permissions-request') {
       return handleStandalonePermissionsRequest(actionInput);
+    }
+    if (actionInput.kind === 'app-session-start' || actionInput.kind === 'app-session-list' ||
+        actionInput.kind === 'app-session-status' || actionInput.kind === 'app-session-pause' ||
+        actionInput.kind === 'app-session-resume' || actionInput.kind === 'app-session-stop') {
+      return handleStandaloneAppSession(actionInput);
     }
     if (actionInput.kind === 'metaid-pin-write') {
       const operation = normalizeText(actionInput.payload?.operation);

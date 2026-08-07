@@ -85,6 +85,9 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
           <button type="button" class="browser-icon-button browser-auto-write-indicator" data-browser-auto-write aria-label="This app can write automatically" title="This app can write to approved protocols automatically. Click to revoke." hidden>
             <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 1 1 6 0v3H9z"></path></svg>
           </button>
+          <button type="button" class="browser-icon-button browser-app-session-indicator" data-browser-app-session aria-label="An App Session is running" title="An App Session is running for the current actor. Click to view or stop." hidden>
+            <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z"></path></svg>
+          </button>
           <div class="browser-owner-chip-wrap">
             <button type="button" class="browser-resource-chip browser-owner-avatar" data-browser-resource-chip aria-haspopup="menu" aria-expanded="false" title="Owner">
               <span class="browser-chip-avatar browser-avatar-fallback" aria-hidden="true">R</span>
@@ -210,6 +213,11 @@ var state = {
   activePermissions: {},
   pendingPermissionsConfirmation: null,
   autoWriteResourceUri: '',
+  // UI-only mirror of running App Sessions for the current actor, used to drive
+  // the chrome session indicator + revoke entry. Authorization and real session
+  // state live on the host; this resets on page reload.
+  activeAppSessions: [],
+  pendingAppSessionConfirmation: null,
   pendingBookmarkRemoval: '',
   bookmarks: [],
   visits: [],
@@ -1469,6 +1477,376 @@ async function revokeCurrentPermissions() {
   syncAutoWriteIndicator();
 }
 
+// --- App Session bridge (browser.app.session.*) -----------------------------
+//
+// Host-resident application sessions. ABC forwards the six methods to the host
+// trusted-action endpoint, renders the start authorization card, and mirrors
+// running sessions for the chrome indicator + revoke entry. It never parses
+// session payloads or persists authorization — the host owns all of that.
+// Mirrors the permissions-request two-phase manual-action flow.
+var APP_SESSION_METHOD_KINDS = {
+  'browser.app.session.start': 'app-session-start',
+  'browser.app.session.list': 'app-session-list',
+  'browser.app.session.status': 'app-session-status',
+  'browser.app.session.pause': 'app-session-pause',
+  'browser.app.session.resume': 'app-session-resume',
+  'browser.app.session.stop': 'app-session-stop'
+};
+
+function validateAppSessionStartParams(params) {
+  var input = isPlainObject(params) ? params : {};
+  var required = ['appId', 'sessionType', 'groupId', 'gameId', 'manifestUri', 'rulesHash', 'seat', 'agentId'];
+  for (var i = 0; i < required.length; i += 1) {
+    if (!textValue(input[required[i]])) {
+      return { ok: false, error: { code: 'invalid_params', message: 'App session start requires a non-empty ' + required[i] + '.' } };
+    }
+  }
+  if (typeof input.ttlMs !== 'number' || !Number.isFinite(input.ttlMs) || input.ttlMs <= 0) {
+    return { ok: false, error: { code: 'invalid_params', message: 'App session start requires a positive numeric ttlMs.' } };
+  }
+  var value = {
+    appId: textValue(input.appId),
+    sessionType: textValue(input.sessionType),
+    groupId: textValue(input.groupId),
+    gameId: textValue(input.gameId),
+    manifestUri: textValue(input.manifestUri),
+    rulesHash: textValue(input.rulesHash),
+    seat: textValue(input.seat),
+    agentId: textValue(input.agentId),
+    ttlMs: input.ttlMs
+  };
+  if (textValue(input.adapterHash)) value.adapterHash = textValue(input.adapterHash);
+  if (Array.isArray(input.protocolPaths)) {
+    value.protocolPaths = input.protocolPaths.filter(function (p) { return typeof p === 'string' && p; });
+  }
+  if (isPlainObject(input.budget)) {
+    var budget = {};
+    if (typeof input.budget.llmCalls === 'number') budget.llmCalls = input.budget.llmCalls;
+    if (typeof input.budget.writes === 'number') budget.writes = input.budget.writes;
+    if (Object.keys(budget).length) value.budget = budget;
+  }
+  return { ok: true, value: value };
+}
+
+function structuredAppSessionConfirmation(result) {
+  if (!result || result.ok !== false || result.state !== 'manual_action_required') return null;
+  var data = isPlainObject(result.data) ? result.data : null;
+  var confirmation = data && isPlainObject(data.confirmation) ? data.confirmation : null;
+  var confirmRequest = data && isPlainObject(data.confirmRequest) ? data.confirmRequest : null;
+  if (!confirmation || !confirmRequest) return null;
+  if (textValue(confirmRequest.kind) !== 'app-session-start') return null;
+  if (!textValue(confirmRequest.resourceUri) || !isPlainObject(confirmRequest.payload)) return null;
+  return { confirmation: confirmation, confirmRequest: confirmRequest };
+}
+
+function appSessionConfirmationHtml(confirmation) {
+  var actor = isPlainObject(confirmation.actor) ? confirmation.actor : {};
+  var actorName = textValue(actor.name) || 'Current actor';
+  var actorGlobalMetaId = textValue(actor.globalMetaId);
+  var rows = [
+    ['App', textValue(confirmation.appId)],
+    ['Session type', textValue(confirmation.sessionType)],
+    ['Group', textValue(confirmation.groupId)],
+    ['Game', textValue(confirmation.gameId)],
+    ['Seat', textValue(confirmation.seat)],
+    ['Rules hash', textValue(confirmation.rulesHash)],
+    ['Adapter hash', textValue(confirmation.adapterHash)]
+  ];
+  var rowsHtml = '';
+  for (var i = 0; i < rows.length; i += 1) {
+    if (!rows[i][1]) continue;
+    rowsHtml += '<div class="browser-app-session-row"><span class="browser-app-session-label">' + escapeHtml(rows[i][0]) +
+      '</span><code class="browser-app-session-value">' + escapeHtml(rows[i][1]) + '</code></div>';
+  }
+  var protocolPaths = Array.isArray(confirmation.protocolPaths) ? confirmation.protocolPaths : [];
+  var pathsHtml = '';
+  for (var j = 0; j < protocolPaths.length; j += 1) {
+    pathsHtml += '<li class="browser-permissions-grant"><code>' + escapeHtml(textValue(protocolPaths[j])) + '</code></li>';
+  }
+  var budgetParts = [];
+  if (typeof confirmation.llmBudget === 'number') budgetParts.push(confirmation.llmBudget + ' LLM calls');
+  if (typeof confirmation.writeBudget === 'number') budgetParts.push(confirmation.writeBudget + ' writes');
+  var ttlMs = typeof confirmation.ttlMs === 'number' ? confirmation.ttlMs : 0;
+  var ttlLabel = ttlMs >= 86400000 ? Math.round(ttlMs / 86400000) + ' day(s)' : Math.round(ttlMs / 3600000) + ' hour(s)';
+  return '<div class="browser-pin-write-confirmation browser-app-session-confirmation">' +
+    '<div class="browser-pin-write-intro">' +
+      '<span class="browser-pin-write-mark">' + iconHtml('shield') + '</span>' +
+      '<div><span class="browser-pin-write-eyebrow">' + escapeHtml(browserText('appSession.eyebrow', 'APP SESSION REQUEST')) + '</span>' +
+      '<p>' + escapeHtml(browserText('appSession.intro', 'This app wants to start a long-running session as your current identity. The session keeps running after you close or refresh this page.')) + '</p></div>' +
+    '</div>' +
+    '<div class="browser-pin-write-actor">' +
+      avatarHtml('', actorName, 'browser-pin-write-actor-avatar') +
+      '<div class="browser-pin-write-actor-copy"><strong>' + escapeHtml(actorName) + '</strong>' +
+        (actorGlobalMetaId ? '<code>' + escapeHtml(actorGlobalMetaId) + '</code>' : '') +
+      '</div>' +
+    '</div>' +
+    '<div class="browser-app-session-rows">' + rowsHtml + '</div>' +
+    (pathsHtml ? '<ul class="browser-permissions-grants">' + pathsHtml + '</ul>' : '') +
+    '<p class="browser-pin-write-content"><span class="browser-app-session-meta">' +
+      escapeHtml(browserText('appSession.validFor', 'Valid for') + ' ' + ttlLabel) +
+      (budgetParts.length ? ' · ' + escapeHtml(budgetParts.join(' · ')) : '') +
+    '</span></p>' +
+    '<p class="browser-pin-write-note">' + escapeHtml(browserText('appSession.note', 'After approval the session runs on the host with the listed budgets. You can pause or stop it at any time from the session indicator.')) + '</p>' +
+    '<p class="browser-pin-write-status" data-browser-app-session-status role="status" aria-live="polite"></p>' +
+  '</div>';
+}
+
+function promptAppSessionConfirmation(confirmation) {
+  return new Promise(function (resolve) {
+    state.pendingAppSessionConfirmation = { resolve: resolve };
+    renderModal(
+      browserText('appSession.title', 'Start App Session'),
+      appSessionConfirmationHtml(confirmation),
+      browserText('appSession.approve', 'Start session'),
+      'app-session-approve',
+      {
+        cancelLabel: browserText('modal.cancel', 'Cancel'),
+        panelClass: 'browser-pin-write-modal'
+      }
+    );
+  });
+}
+
+function settleAppSessionConfirmation(approved) {
+  var pending = state.pendingAppSessionConfirmation;
+  if (!pending) return false;
+  state.pendingAppSessionConfirmation = null;
+  pending.resolve(approved === true);
+  return true;
+}
+
+async function postAppSessionAction(actionInput) {
+  return commandApi(endpointWithActor(browserEndpoints.actions), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(Object.assign({}, actionInput, { sessionId: browserSessionId }))
+  });
+}
+
+// commandApi unwraps ok responses to the {kind, handled, data} trusted-action
+// result and re-throws failures with the host code on error.payload.code.
+function appSessionErrorCode(error) {
+  return textValue(error && error.code) || textValue(error && error.payload && error.payload.code) || 'internal_error';
+}
+
+// commandApi returns the trusted-action result ({kind, handled, data}); the
+// actual session/list payload lives under its nested data field.
+function appSessionResultData(result) {
+  if (!isPlainObject(result)) return {};
+  return isPlainObject(result.data) ? result.data : {};
+}
+
+function recordActiveAppSession(session) {
+  if (!isPlainObject(session) || !textValue(session.sessionId)) return;
+  var sessionId = textValue(session.sessionId);
+  var next = [];
+  var kept = false;
+  for (var i = 0; i < state.activeAppSessions.length; i += 1) {
+    var existing = state.activeAppSessions[i];
+    if (isPlainObject(existing) && textValue(existing.sessionId) === sessionId) {
+      next.push(session);
+      kept = true;
+    } else {
+      next.push(existing);
+    }
+  }
+  if (!kept) next.push(session);
+  state.activeAppSessions = next.filter(function (s) {
+    var status = textValue(s && s.status);
+    return status !== 'stopped' && status !== 'finished';
+  });
+  syncAppSessionIndicator();
+}
+
+function syncAppSessionIndicator() {
+  if (!elements.appSessionIndicator) return;
+  var running = [];
+  for (var i = 0; i < state.activeAppSessions.length; i += 1) {
+    var session = state.activeAppSessions[i];
+    if (isPlainObject(session) && textValue(session.status) === 'running') running.push(session);
+  }
+  elements.appSessionIndicator.hidden = running.length === 0;
+}
+
+function openAppSessionRevokeModal() {
+  var running = state.activeAppSessions.filter(function (s) {
+    return isPlainObject(s) && textValue(s.status) === 'running';
+  });
+  var listHtml = '';
+  for (var i = 0; i < running.length; i += 1) {
+    var session = running[i];
+    var label = textValue(session.gameId) || textValue(session.sessionId);
+    listHtml += '<li class="browser-permissions-grant">' +
+      '<code>' + escapeHtml(label) + '</code>' +
+      ' <button type="button" data-browser-app-session-stop="' + escapeHtml(textValue(session.sessionId)) + '">' +
+        escapeHtml(browserText('appSession.stop', 'Stop')) + '</button>' +
+    '</li>';
+  }
+  renderModal(
+    browserText('appSession.manageTitle', 'Active App Sessions'),
+    '<p>' + escapeHtml(browserText('appSession.manageBody', 'The following sessions are running for the current actor. Stop a session to halt its loops and releases its lease.')) + '</p>' +
+      '<ul class="browser-permissions-grants">' + listHtml + '</ul>',
+    browserText('modal.close', 'Close'),
+    'app-session-close',
+    {
+      cancelLabel: browserText('modal.cancel', 'Cancel'),
+      panelClass: 'browser-pin-write-modal',
+      hideConfirm: true
+    }
+  );
+}
+
+async function stopAppSessionFromModal(sessionId) {
+  var resourceUri = currentResourceUri();
+  if (!resourceUri || !sessionId) {
+    closeModal();
+    return;
+  }
+  try {
+    await postAppSessionAction({
+      resourceUri: resourceUri,
+      kind: 'app-session-stop',
+      payload: { sessionId: sessionId }
+    });
+  } catch (error) {
+    // Host-side stop is best-effort from the revoke entry; mirror local state
+    // regardless so the indicator stays in sync with the user's intent.
+  }
+  state.activeAppSessions = state.activeAppSessions.filter(function (s) {
+    return textValue(s && s.sessionId) !== sessionId;
+  });
+  syncAppSessionIndicator();
+  closeModal();
+  if (state.activeAppSessions.some(function (s) { return textValue(s && s.status) === 'running'; })) {
+    openAppSessionRevokeModal();
+  }
+}
+
+async function handleBridgeAppSessionStart(sourceWindow, id, params) {
+  var validation = validateAppSessionStartParams(params);
+  if (!validation.ok) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, validation.error));
+    return;
+  }
+  var resourceUri = currentResourceUri();
+  if (!resourceUri) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: 'invalid_request',
+      message: 'App session start requires an active Browser resource.'
+    }));
+    return;
+  }
+  if (state.pendingAppSessionConfirmation || state.pendingPermissionsConfirmation ||
+      state.pendingActorConsent || state.pendingLlmConsent) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: 'consent_pending',
+      message: 'A consent prompt is already open.'
+    }));
+    return;
+  }
+  try {
+    var phaseOne = await postAppSessionAction({
+      resourceUri: resourceUri,
+      kind: 'app-session-start',
+      payload: validation.value
+    });
+    var structured = structuredAppSessionConfirmation(phaseOne);
+    if (!structured) {
+      // Host approved inline (no card). commandApi returned the trusted-action
+      // result; the session object lives under its nested data field.
+      var sessionData = appSessionResultData(phaseOne);
+      recordActiveAppSession(sessionData);
+      bridgePostMessage(sourceWindow, bridgeResponse(id, true, sessionData));
+      return;
+    }
+    if (textValue(structured.confirmRequest.resourceUri) !== resourceUri) {
+      bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+        code: 'consent_denied',
+        message: 'The app session confirmation did not match this resource.'
+      }));
+      return;
+    }
+    var approved = await promptAppSessionConfirmation(structured.confirmation);
+    if (!approved) {
+      bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+        code: 'consent_denied',
+        message: 'The app session request was cancelled.'
+      }));
+      return;
+    }
+    var phaseTwo = await postAppSessionAction(structured.confirmRequest);
+    if (structuredAppSessionConfirmation(phaseTwo)) {
+      bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+        code: 'consent_denied',
+        message: 'The app session could not be started.'
+      }));
+      closeModal();
+      return;
+    }
+    closeModal();
+    var startedSession = appSessionResultData(phaseTwo);
+    recordActiveAppSession(startedSession);
+    bridgePostMessage(sourceWindow, bridgeResponse(id, true, startedSession));
+  } catch (error) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: appSessionErrorCode(error),
+      message: textValue(error && error.message) || 'App session start failed.'
+    }));
+    closeModal();
+  }
+}
+
+async function handleBridgeAppSessionForward(sourceWindow, id, bridgeMethod, params) {
+  var kind = APP_SESSION_METHOD_KINDS[bridgeMethod];
+  var requiresSessionId = bridgeMethod !== 'browser.app.session.list';
+  if (requiresSessionId) {
+    var sid = isPlainObject(params) ? textValue(params.sessionId) : '';
+    if (!sid) {
+      bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+        code: 'invalid_params',
+        message: bridgeMethod + ' requires a sessionId.'
+      }));
+      return;
+    }
+  }
+  var resourceUri = currentResourceUri();
+  if (!resourceUri) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: 'invalid_request',
+      message: 'App session methods require an active Browser resource.'
+    }));
+    return;
+  }
+  var payload = isPlainObject(params) ? params : {};
+  try {
+    var result = await postAppSessionAction({ resourceUri: resourceUri, kind: kind, payload: payload });
+    var data = appSessionResultData(result);
+    // Mirror list / status / control outcomes so the chrome indicator
+    // reflects host state. list -> array; single object -> record.
+    if (bridgeMethod === 'browser.app.session.list') {
+      var sessions = Array.isArray(data.sessions) ? data.sessions : [];
+      state.activeAppSessions = sessions.filter(function (s) {
+        var status = textValue(s && s.status);
+        return status !== 'stopped' && status !== 'finished';
+      });
+      syncAppSessionIndicator();
+    } else if (bridgeMethod === 'browser.app.session.stop') {
+      state.activeAppSessions = state.activeAppSessions.filter(function (s) {
+        return textValue(s && s.sessionId) !== textValue(payload.sessionId);
+      });
+      syncAppSessionIndicator();
+    } else if (data && data.sessionId) {
+      recordActiveAppSession(data);
+    }
+    bridgePostMessage(sourceWindow, bridgeResponse(id, true, data));
+  } catch (error) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: appSessionErrorCode(error),
+      message: textValue(error && error.message) || 'App session request failed.'
+    }));
+  }
+}
+
 function isPlainObject(value) {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -1977,6 +2355,18 @@ function handleBrowserBridgeMessage(event) {
     handleBridgePermissionsRequest(sourceWindow, id, data.params);
     return;
   }
+  if (textValue(data.method) === 'browser.app.session.start') {
+    handleBridgeAppSessionStart(sourceWindow, id, data.params);
+    return;
+  }
+  if (textValue(data.method) === 'browser.app.session.list' ||
+      textValue(data.method) === 'browser.app.session.status' ||
+      textValue(data.method) === 'browser.app.session.pause' ||
+      textValue(data.method) === 'browser.app.session.resume' ||
+      textValue(data.method) === 'browser.app.session.stop') {
+    handleBridgeAppSessionForward(sourceWindow, id, textValue(data.method), data.params);
+    return;
+  }
   bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
     code: 'unsupported_method',
     message: 'Unsupported AgentBrowser bridge method.'
@@ -2248,6 +2638,7 @@ function bindElements() {
     modalRoot: document.querySelector('[data-browser-modal-root]'),
     bookmarkStar: document.querySelector('[data-browser-bookmark-star]'),
     autoWriteIndicator: document.querySelector('[data-browser-auto-write]'),
+    appSessionIndicator: document.querySelector('[data-browser-app-session]'),
     toast: document.querySelector('[data-browser-toast]'),
     tabstrip: document.querySelector('[data-browser-tabstrip]'),
     tabsContainer: document.querySelector('[data-browser-tabs-container]'),
@@ -5011,6 +5402,7 @@ function closeModal() {
   flushPendingActorConsent('dismiss');
   settlePermissionsConfirmation(false);
   flushPendingLlmConsent('dismiss');
+  settleAppSessionConfirmation(false);
   state.pendingPrivateChat = null;
   state.privateChatSending = false;
   state.pendingConversationHref = '';
@@ -7146,6 +7538,14 @@ async function initialize() {
         openActorHomepage(openActorHome.getAttribute('data-browser-actor-open'));
         return;
       }
+      var appSessionStopTarget = closestWithAttribute(event && event.target, 'data-browser-app-session-stop');
+      if (appSessionStopTarget) {
+        var stopSessionId = appSessionStopTarget.getAttribute('data-browser-app-session-stop');
+        if (stopSessionId) {
+          stopAppSessionFromModal(stopSessionId);
+        }
+        return;
+      }
       var target = closestWithAttribute(event && event.target, 'data-browser-modal-action') ||
         closestWithAttribute(event && event.target, 'data-browser-actor-id');
       if (!target) return;
@@ -7231,6 +7631,14 @@ async function initialize() {
         closeModal();
         return;
       }
+      if (action === 'app-session-approve') {
+        settleAppSessionConfirmation(true);
+        return;
+      }
+      if (action === 'app-session-close') {
+        closeModal();
+        return;
+      }
       if (action === 'standalone-unsupported') {
         closeModal();
       }
@@ -7274,6 +7682,11 @@ async function initialize() {
   if (elements.autoWriteIndicator) {
     elements.autoWriteIndicator.addEventListener('click', function () {
       openPermissionsRevokeModal();
+    });
+  }
+  if (elements.appSessionIndicator) {
+    elements.appSessionIndicator.addEventListener('click', function () {
+      openAppSessionRevokeModal();
     });
   }
   if (elements.menu) {

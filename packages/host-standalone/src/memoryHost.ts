@@ -239,6 +239,18 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
       if (input.kind === 'llm-complete') {
         return browserFailure('llm_unavailable', 'The memory development host has no local LLM configured.');
       }
+      // browser.app.session.*: the memory host has no session runtime, so it
+      // answers the same capability errors the standalone adapter returns when
+      // no appSession handler is injected. start -> unsupported_method (no card
+      // is produced without a runner); the rest -> session_not_found.
+      if (input.kind === 'app-session-start') {
+        return browserFailure('unsupported_method', 'The memory development host has no App Session runtime configured.');
+      }
+      if (input.kind === 'app-session-list' || input.kind === 'app-session-status' ||
+          input.kind === 'app-session-pause' || input.kind === 'app-session-resume' ||
+          input.kind === 'app-session-stop') {
+        return browserFailure('session_not_found', 'The memory development host has no App Session runtime configured.');
+      }
       if (input.kind === 'permissions-request') {
         const sessionKey = normalizeText(input.sessionId) || 'default-session';
         const resourceUri = normalizeText(input.resourceUri);
