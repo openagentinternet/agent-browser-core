@@ -563,6 +563,70 @@ test('standalone Browser server downloads ZIP MetaApp content from the default f
   );
 });
 
+test('standalone Browser server forwards MetaApp deep-link launch parameters to the app entry URL', async (t) => {
+  const cacheDir = await mkdtemp(join(tmpdir(), 'abc-standalone-launch-context-cache-'));
+  t.after(() => rm(cacheDir, { recursive: true, force: true }));
+
+  const pinId = 'a4'.repeat(32) + 'i0';
+  const contentPinId = 'b5'.repeat(32) + 'i0';
+  const buzzPinId = 'c6'.repeat(32) + 'i0';
+  const archive = makeMetaAppZipArchive({
+    'index.html': '<!doctype html><title>Launch Context MetaApp</title>',
+  });
+  const fetchUrls = [];
+
+  const adapter = createStandaloneBrowserHostAdapter({
+    env: {
+      AGENT_BROWSER_CACHE_DIR: cacheDir,
+      METABOT_BROWSER_MANAPI_BASE_URL: 'https://man.example.test',
+    },
+    fetch: async (url) => {
+      const textUrl = String(url);
+      fetchUrls.push(textUrl);
+      if (textUrl === `https://man.example.test/pin/${pinId}`) {
+        return new Response(JSON.stringify({
+          data: {
+            id: pinId,
+            path: '/protocols/metaapp',
+            address: '1LaunchContextPublisher',
+            timestamp: 1781450015,
+            contentSummary: JSON.stringify({
+              title: 'Launch Context MetaApp',
+              appName: 'launch-context-metaapp',
+              version: '1.0.0',
+              runtime: 'browser',
+              content: `metafile://${contentPinId}.zip`,
+              contentType: 'application/zip',
+              codeType: 'application/zip',
+              indexFile: 'index.html',
+            }),
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
+      }
+      if (textUrl === `https://file.metaid.io/metafile-indexer/api/v1/files/accelerate/content/${contentPinId}`) {
+        return new Response(archive, { status: 200, headers: { 'content-type': 'application/zip' } });
+      }
+      return new Response('not found', { status: 404 });
+    },
+  });
+  const server = createStandaloneBrowserServer({ adapter });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const deepLinkUri = `metaapp://${pinId}?view=buzz&pin=${buzzPinId}`;
+  const response = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=${encodeURIComponent(deepLinkUri)}`);
+  const resolved = await readJson(response);
+  assert.equal(response.status, 200);
+  assert.equal(resolved.ok, true);
+  assert.equal(resolved.data.renderer.type, 'html-iframe');
+  // The appPinId used for package resolution stays pure (no query leakage).
+  assert.equal(fetchUrls[0], `https://man.example.test/pin/${pinId}`);
+  assert.match(
+    resolved.data.renderer.url,
+    new RegExp(`^/api/browser/preview-assets/standalone-[0-9a-f-]+/index\\.html\\?view=buzz&pin=${buzzPinId}$`),
+  );
+});
+
 test('standalone Browser server rejects untrusted file MetaApp content references', async (t) => {
   const projectDir = await mkdtemp(path.join(os.tmpdir(), 'abc-standalone-metaapp-project-'));
   t.after(() => rm(projectDir, { recursive: true, force: true }));

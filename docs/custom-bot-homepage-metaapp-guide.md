@@ -38,6 +38,38 @@ Write normal anchors:
 <a href="metaapp://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0">Open MetaApp</a>
 ```
 
+## MetaApp Deep Links (Launch Parameters)
+
+MetaApp deep links can carry a launch query that the host forwards to the app entry URL:
+
+```text
+metaapp://{metaAppPinId}?view=buzz&pin={buzzPinId}
+```
+
+The host:
+
+1. extracts a pure `{metaAppPinId}` from the URI (query/path/hash fragments are never
+   included) and resolves the MetaApp package with it exactly as for a bare `metaapp://` link;
+2. parses the query with standard URL decoding (`+` is a space, `%XX` sequences decode);
+3. serializes the declared launch parameters (`view`, `pin`) with
+   `encodeURIComponent` and appends them to the app entry URL that the sandboxed
+   iframe loads, e.g. `index.html?view=buzz&pin=<buzzPinId>`. The iframe stays
+   `sandbox="allow-scripts"`; no top-level navigation is performed.
+
+Forwarding rules (host-side degradation, app contract lives in the app's own docs):
+
+- no `view` (or an unparseable query): nothing is appended, the app opens its default view;
+- `view=buzz` without `pin`: nothing is appended, the app opens its default view;
+- `view` is not a declared value: it is forwarded verbatim so the app can render its
+  "unsupported view" state;
+- `pin` is forwarded as-is (format validation belongs to the app);
+- `appPinId` that is not a valid 64-hex `i0` pin goes through the normal MetaApp
+  resolution error path and never degrades to a default page.
+
+Bare `metaapp://{metaAppPinId}` links keep their existing behavior. Path-style deep links
+(`metaapp://{pin}/buzz/{pin}`) and hash-style links are not host-parsed; the app may use
+its own hash routing as a fallback. `preview-metaapp://` local previews are unaffected.
+
 Inside a custom homepage iframe, include the helper below so those links navigate inside ABC.
 
 ## Navigation Helper

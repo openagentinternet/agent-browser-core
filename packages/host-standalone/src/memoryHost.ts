@@ -127,7 +127,7 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
     return null;
   }
 
-  function resolveMetaapp(uri: string, normalizedUri: string): BrowserResourceEnvelope {
+  function resolveMetaapp(uri: string, normalizedUri: string, pinId: string): BrowserResourceEnvelope {
     return {
       uri,
       normalizedUri,
@@ -154,7 +154,7 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
         message: '',
       },
       proof: {
-        pinId: normalizedUri.slice('metaapp://'.length),
+        pinId,
         verificationState: 'partial',
       },
       source: {
@@ -175,7 +175,7 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
       try {
         const parsed = parseBrowserUri(resolveInput.uri);
         if (parsed.scheme === 'metaapp') {
-          return browserSuccess(resolveMetaapp(parsed.originalUri, parsed.normalizedUri));
+          return browserSuccess(resolveMetaapp(parsed.originalUri, parsed.normalizedUri, parsed.id));
         }
         return browserFailure('unsupported_browser_uri', `Memory host cannot resolve ${parsed.scheme} URIs.`);
       } catch (error) {
