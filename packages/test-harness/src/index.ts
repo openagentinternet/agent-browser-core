@@ -37,6 +37,12 @@ const TRUSTED_ACTION_KINDS = [
   'metafile-upload',
   'llm-complete',
   'permissions-request',
+  'app-session-start',
+  'app-session-list',
+  'app-session-status',
+  'app-session-pause',
+  'app-session-resume',
+  'app-session-stop',
 ];
 
 function assertAllowedString(value: unknown, allowed: readonly string[], label: string): asserts value is string {

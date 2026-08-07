@@ -99,7 +99,13 @@ export type BrowserTrustedActionKind =
   | 'metaid-pin-write'
   | 'metafile-upload'
   | 'llm-complete'
-  | 'permissions-request';
+  | 'permissions-request'
+  | 'app-session-start'
+  | 'app-session-list'
+  | 'app-session-status'
+  | 'app-session-pause'
+  | 'app-session-resume'
+  | 'app-session-stop';
 
 export interface BrowserOpenConversationPayload {
   conversationUri: string;
@@ -256,6 +262,118 @@ export interface BrowserPermissionsConfirmRequest {
 export interface BrowserPermissionsManualActionData {
   confirmation: BrowserPermissionsConfirmation;
   confirmRequest: BrowserPermissionsConfirmRequest;
+}
+
+// --- App Session bridge (browser.app.session.*) -----------------------------
+//
+// Host-resident application sessions. The first consumer is the Agent-Game-v2
+// LLM online game, where a MetaApp page starts a long-running session that
+// survives page close/refresh. ABC only forwards requests, renders the start
+// authorization card, and surfaces a chrome indicator + revoke entry. It never
+// parses the session payload, executes adapters, or persists authorization
+// state — the host owns all of that. See docs/09-abc-app-session-requirements.
+
+export type BrowserAppSessionStatus = 'running' | 'paused' | 'stopped' | 'finished' | 'error';
+
+export interface BrowserAppSessionBudget {
+  llmCalls?: number;
+  llmCallsUsed?: number;
+  writes?: number;
+  writesUsed?: number;
+}
+
+export interface BrowserAppSessionObject {
+  sessionId: string;
+  appId: string;
+  sessionType: string;
+  groupId: string;
+  gameId: string;
+  manifestUri: string;
+  adapterHash: string;
+  rulesHash: string;
+  seat: string;
+  agentId: string;
+  status: BrowserAppSessionStatus;
+  lastIndex?: number;
+  lastActionSeq?: number;
+  lastError?: string | null;
+  createdAt: number;
+  updatedAt: number;
+  expiresAt: number;
+  budget?: BrowserAppSessionBudget;
+}
+
+export interface BrowserAppSessionStartPayload {
+  appId: string;
+  sessionType: string;
+  groupId: string;
+  gameId: string;
+  manifestUri: string;
+  rulesHash: string;
+  seat: string;
+  agentId: string;
+  ttlMs: number;
+  budget?: BrowserAppSessionBudget;
+  // Host-issued confirmation fields; opaque to ABC and resubmitted unchanged
+  // on phase 2 of the authorization card flow.
+  confirmed?: boolean;
+  hostConfirmation?: {
+    id: string;
+    token: string;
+  };
+}
+
+export interface BrowserAppSessionListPayload {
+  appId?: string;
+  status?: BrowserAppSessionStatus;
+  groupId?: string;
+}
+
+export interface BrowserAppSessionStatusPayload {
+  sessionId: string;
+}
+
+// pause / resume / stop share this payload. `releaseSeat` only applies to stop.
+export interface BrowserAppSessionControlPayload {
+  sessionId: string;
+  releaseSeat?: boolean;
+}
+
+export interface BrowserAppSessionStartResult extends BrowserAppSessionObject {}
+
+export interface BrowserAppSessionListResult {
+  sessions: BrowserAppSessionObject[];
+}
+
+export interface BrowserAppSessionConfirmation {
+  actor: BrowserMetaAppBridgeActor;
+  resourceUri: string;
+  appId: string;
+  sessionType: string;
+  groupId: string;
+  gameId: string;
+  manifestUri: string;
+  rulesHash: string;
+  adapterHash: string;
+  seat: string;
+  protocolPaths: string[];
+  ttlMs: number;
+  llmBudget?: number;
+  writeBudget?: number;
+  expiresAt: number;
+}
+
+export interface BrowserAppSessionConfirmRequest {
+  resourceUri: string;
+  kind: 'app-session-start';
+  // Host-issued authorization fields stay opaque to ABC and are resubmitted
+  // unchanged.
+  payload: Record<string, unknown>;
+}
+
+export interface BrowserAppSessionManualActionData {
+  confirmation: BrowserAppSessionConfirmation;
+  confirmRequest: BrowserAppSessionConfirmRequest;
 }
 
 export interface BrowserTrustedActionDescriptor {
