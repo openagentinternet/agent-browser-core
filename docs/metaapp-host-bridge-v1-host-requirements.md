@@ -369,6 +369,14 @@ Hosts should preserve stable bridge-level error codes whenever possible:
 - `consent_pending`
 - `upload_failed`
 - `pin_write_failed`
+- `session_not_found`
+- `session_conflict`
+- `adapter_invalid`
+- `rules_hash_mismatch`
+- `group_not_found`
+- `seat_unavailable`
+- `adapter_error`
+- `bridge_timeout`
 
 Host-specific lower-level errors should be mapped to one of these bridge-level codes before they are
 returned to the MetaApp. The user-facing message may be host-specific, but it must not include
@@ -593,3 +601,144 @@ Flow and host responsibilities:
   automatic revoke when the active resource changes.
 - Grant and write events should be recorded in the host's local audit log (trace) for later
   review.
+
+## MetaApp Host Bridge V1.2
+
+The App Session bridge lets a MetaApp start a **host-resident application session** that keeps
+running independently of the MetaApp page (surviving close/refresh). The first consumer is the
+Agent-Game-v2 LLM online game. ABC only forwards the six methods, renders the `start`
+authorization card, and surfaces a chrome indicator + revoke entry. It never parses session
+payloads, executes adapters, or persists authorization — the host owns all of that.
+
+Authoritative requirements: `docs/09-abc-app-session-requirements.md` in the
+`llm-play-chinese-chess` repo. The section below is the ABC host contract summary.
+
+### Trusted action kinds
+
+| Bridge method | Trusted action kind |
+| --- | --- |
+| `browser.app.session.start` | `app-session-start` |
+| `browser.app.session.list` | `app-session-list` |
+| `browser.app.session.status` | `app-session-status` |
+| `browser.app.session.pause` | `app-session-pause` |
+| `browser.app.session.resume` | `app-session-resume` |
+| `browser.app.session.stop` | `app-session-stop` |
+
+### V1.2: `browser.app.session.start`
+
+Request (phase 1, no confirmation):
+
+```json
+{
+  "appId": "llmchess.v2",
+  "sessionType": "agent-game",
+  "groupId": "<groupId>",
+  "gameId": "xiangqi",
+  "manifestUri": "metafile://...",
+  "rulesHash": "sha256:...",
+  "adapterHash": "sha256:...",
+  "seat": "black",
+  "agentId": "<current actor>",
+  "ttlMs": 86400000,
+  "protocolPaths": ["/protocols/simplegroupjoin", "/protocols/simplegroupchat"],
+  "budget": { "llmCalls": 500, "writes": 500 }
+}
+```
+
+- ABC validates all string fields are non-empty and `ttlMs` is a positive number, returning
+  `invalid_params` otherwise. `agentId` must equal the current Browser actor.
+- This is a **two-phase manual action**: the host returns `manual_action_required` (code
+  `app_session_required`) with `data.confirmation` (the authorization summary) and
+  `data.confirmRequest` (an opaque payload ABC resubmits unchanged on approval). Mirrors the
+  `permissions-request` and PIN-write two-phase flow.
+- ABC renders an authorization card showing the current actor, MetaApp resource, groupId,
+  gameId, rules hash, adapter hash, requested protocol paths, validity period, and LLM/write
+  budgets. User rejection returns `consent_denied`.
+- On approval, ABC POSTs the exact `confirmRequest` back as phase 2; the host validates the
+  confirmation token/resource/actor, then creates or reuses the session.
+- **Idempotency:** an existing running/paused session matching
+  `(groupId, seat, agentId, rulesHash)` must be returned as-is — no duplicate task is created.
+- Host validations before the card: group existence + actor read access, manifest/adapter
+  presence + hash, rules-hash consistency with the match, seat availability, lease conflict.
+  Each maps to its error code (see below).
+
+### V1.2: `browser.app.session.list`
+
+Request (all filters optional): `{ "appId"?, "status"?, "groupId"? }`. Returns only sessions
+visible to the current actor. Response: `{ "sessions": [Session, ...] }`.
+
+### V1.2: `browser.app.session.status`
+
+Request: `{ "sessionId" }`. Returns the Session object. Throws `session_not_found` if the
+session is missing or the actor lacks access.
+
+### V1.2: `browser.app.session.pause` / `resume`
+
+Request: `{ "sessionId" }`. **Idempotent.** `pause` halts LLM calls and writes but preserves the
+message cursor and lease; pausing an already paused/stopped session returns the current status
+safely. `resume` syncs the cursor to the latest state and reacquires the lease; on a lease
+conflict it stays paused and throws `session_conflict`. Finished games are not restarted.
+
+### V1.2: `browser.app.session.stop`
+
+Request: `{ "sessionId", "releaseSeat"? }`. **Idempotent.** Releases the lease, halts loops, and
+persists `stopped`. `releaseSeat: true` asks the host to release the seat; the host must not
+bypass protocol rules to force a seat release.
+
+### Session object
+
+All methods except `list` return this shape; `list` returns `{ sessions: [Session] }`:
+
+```json
+{
+  "sessionId": "uuid",
+  "appId": "llmchess.v2",
+  "sessionType": "agent-game",
+  "groupId": "<groupId>",
+  "gameId": "xiangqi",
+  "manifestUri": "metafile://...",
+  "adapterHash": "sha256:...",
+  "rulesHash": "sha256:...",
+  "seat": "black",
+  "agentId": "idq1...",
+  "status": "running",
+  "lastIndex": 0,
+  "lastActionSeq": 0,
+  "lastError": null,
+  "createdAt": 1735800000123,
+  "updatedAt": 1735800123456,
+  "expiresAt": 1735886400123,
+  "budget": { "llmCalls": 500, "llmCallsUsed": 0, "writes": 500, "writesUsed": 0 }
+}
+```
+
+`status` is one of `running | paused | stopped | finished | error`. `expiresAt` is the
+authorization expiry; on expiry the host auto-pauses the session.
+
+### Error codes
+
+`invalid_params`, `unsupported_method`, `consent_denied`, `session_not_found`,
+`session_conflict`, `adapter_invalid`, `rules_hash_mismatch`, `group_not_found`,
+`seat_unavailable`, `adapter_error`, `llm_unavailable`, `llm_timeout`, `rate_limited`,
+`bridge_timeout`, `internal_error`. ABC passes host error codes through unchanged and never
+invents session state.
+
+### ABC vs host responsibilities
+
+- **ABC** forwards the six methods over the trusted-action channel, renders the `start`
+  authorization card, keeps a UI-only mirror of running sessions to drive the chrome indicator
+  + revoke entry, and surfaces host errors unchanged. It does not parse the `agent-game/1`
+  payload, load/execute `game-adapter.js`, implement game rules, or persist task-level
+  authorization.
+- **Host** runs the persistent App Runtime (independent of MetaApp UI presence), executes the
+  action loop (pull history → adapter → LLM → write), manages lease/fencing to prevent dual
+  runners, persists sessions locally, and enforces strict adapter sandboxing (no network/wallet
+  access). It reuses existing host LLM, group-chat socket, and `metaid.pin.write` paths without
+  routing through web iframes.
+
+### Chrome indicator and revocation
+
+While the current actor has a running session, ABC shows a persistent session indicator in the
+Browser chrome. Clicking it opens a management modal listing running sessions with a per-session
+**Stop** entry, which forwards `app-session-stop` to the host and updates the mirror. The
+authorization state itself is host-owned; the ABC mirror is UI-only and resets on reload.
