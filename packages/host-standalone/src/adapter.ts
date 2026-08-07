@@ -370,6 +370,7 @@ async function readBoundedResponseBody(input: {
   response: Response;
   maxBytes: number;
 }): Promise<Buffer> {
+  let declaredBytes = 0;
   const contentLength = normalizeText(input.response.headers.get('content-length'));
   if (contentLength) {
     const parsedLength = Number(contentLength);
@@ -379,6 +380,7 @@ async function readBoundedResponseBody(input: {
     if (parsedLength > input.maxBytes) {
       throw new Error('MetaApp ZIP archive is too large.');
     }
+    declaredBytes = parsedLength;
   }
 
   const reader = input.response.body?.getReader?.();
@@ -403,7 +405,15 @@ async function readBoundedResponseBody(input: {
     }
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks, totalBytes);
+  const body = Buffer.concat(chunks, totalBytes);
+  // Truncation guard: a response that declares its size must deliver it.
+  // Streams can end early (proxy timeouts, interrupted CDN downloads) and a
+  // truncated ZIP would otherwise be cached, making every later resolve fail
+  // with a confusing extraction error instead of a clear download error.
+  if (declaredBytes > 0 && totalBytes !== declaredBytes) {
+    throw new Error(`MetaApp ZIP download was truncated (received ${totalBytes} of ${declaredBytes} bytes).`);
+  }
+  return body;
 }
 
 async function downloadMetaAppZipArchive(input: {
