@@ -158,6 +158,35 @@ MetaApp authors should separately read
 for the `window.AgentBrowser` API available inside their content. That guide is
 not a substitute for the host requirements.
 
+### Served MetaApp HTML URI support
+
+MetaApp HTML may reference Agent Internet resources directly: `src`, `srcset`,
+and `poster` attributes can hold `metafile://` URIs, and anchors can use
+`metaid://`, `metaapp://`, `metafile://`, `map://`, and `pin://` hrefs. Browsers
+cannot load these schemes, so HTML served from a MetaApp asset route must be
+prepared first:
+
+- `metafile://` subresource references are rewritten to accelerated Metafile
+  content web URLs derived from `metafileContentBaseUrl`;
+- a navigation bridge script is injected so internal-URI anchor clicks are
+  forwarded to ABC through the `agent-browser:navigate` channel, and
+  `window.AgentBrowser.navigate(uri)` becomes available to the app;
+- a `localStorage`/`sessionStorage` memory fallback is injected because the
+  sandboxed preview iframe runs in an opaque origin.
+
+`href` values are deliberately left as Agent Internet URIs: navigation stays
+inside the Browser instead of opening a raw content URL.
+
+Hosts that route MetaApp asset serving through the standalone adapter's
+`resolvePreviewAsset` get this automatically. A host that serves MetaApp assets
+from its own route must apply `preparePreviewHtml({ body, contentType,
+metafileContentBaseUrl })`, exported from
+`@openagentinternet/agent-browser-host-standalone`, before returning HTML.
+HTML Metafiles and MetaApps rendered directly against their content URL are not
+served by the host and are not prepared; their authors must embed the manual
+navigation helper documented in the
+[Custom Bot Homepage and MetaApp Guide](./custom-bot-homepage-metaapp-guide.md).
+
 ### Local MetaApp preview
 
 ABC can resolve local preview URIs for development. This capability can read
