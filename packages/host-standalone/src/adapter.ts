@@ -48,6 +48,7 @@ import {
   resolveStandaloneMetaAppCacheRoot,
   type MetaAppArtifactCacheEntry,
 } from './metaapp/artifactCache.js';
+import { preparePreviewHtml } from './metaapp/previewHtml.js';
 import {
   SECONDARY_WALLET_PROVIDER_ICON_PATH,
   WALLET_PROVIDER_ICON_PATH,
@@ -248,88 +249,6 @@ function contentTypeForPath(filePath: string): string {
   if (extension === '.jpg' || extension === '.jpeg') return 'image/jpeg';
   if (extension === '.webp') return 'image/webp';
   return 'application/octet-stream';
-}
-
-const METAAPP_PREVIEW_STORAGE_SHIM = `<script>
-(function __agentBrowserPreviewStorageShim() {
-  function storageIsAvailable(name) {
-    try {
-      var storage = window[name];
-      var key = '__agent_browser_preview_storage_probe__';
-      storage.setItem(key, key);
-      storage.removeItem(key);
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  function createMemoryStorage() {
-    var values = Object.create(null);
-    return {
-      get length() {
-        return Object.keys(values).length;
-      },
-      key: function key(index) {
-        var keys = Object.keys(values);
-        return keys[index] || null;
-      },
-      getItem: function getItem(key) {
-        key = String(key);
-        return Object.prototype.hasOwnProperty.call(values, key) ? values[key] : null;
-      },
-      setItem: function setItem(key, value) {
-        values[String(key)] = String(value);
-      },
-      removeItem: function removeItem(key) {
-        delete values[String(key)];
-      },
-      clear: function clear() {
-        values = Object.create(null);
-      }
-    };
-  }
-
-  function installFallback(name) {
-    if (storageIsAvailable(name)) return;
-    try {
-      Object.defineProperty(window, name, {
-        value: createMemoryStorage(),
-        configurable: true
-      });
-    } catch (_) {}
-  }
-
-  installFallback('localStorage');
-  installFallback('sessionStorage');
-}());
-</script>`;
-
-function injectMetaAppPreviewStorageShim(input: {
-  body: Buffer;
-  contentType: string;
-}): Buffer | string {
-  if (!/^text\/html\b/iu.test(input.contentType)) {
-    return input.body;
-  }
-
-  const html = input.body.toString('utf8');
-  if (html.includes('__agentBrowserPreviewStorageShim')) {
-    return html;
-  }
-
-  const headMatch = html.match(/<head\b[^>]*>/iu);
-  if (headMatch?.index !== undefined) {
-    const insertAt = headMatch.index + headMatch[0].length;
-    return `${html.slice(0, insertAt)}${METAAPP_PREVIEW_STORAGE_SHIM}${html.slice(insertAt)}`;
-  }
-
-  const firstScriptIndex = html.search(/<script\b/iu);
-  if (firstScriptIndex >= 0) {
-    return `${html.slice(0, firstScriptIndex)}${METAAPP_PREVIEW_STORAGE_SHIM}${html.slice(firstScriptIndex)}`;
-  }
-
-  return `${METAAPP_PREVIEW_STORAGE_SHIM}${html}`;
 }
 
 function normalizePreviewAssetPath(value: unknown): string | null {
@@ -1236,8 +1155,9 @@ export function createStandaloneBrowserHostAdapter(
     try {
       const body = await fs.readFile(filePath);
       const contentType = contentTypeForPath(filePath);
+      const browserConfig = resolveBrowserConfig(config, env);
       return browserSuccess({
-        body: injectMetaAppPreviewStorageShim({ body, contentType }),
+        body: preparePreviewHtml({ body, contentType, metafileContentBaseUrl: browserConfig.metafileContentBaseUrl }),
         contentType,
       });
     } catch {
