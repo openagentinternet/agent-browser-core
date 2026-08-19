@@ -18,3 +18,4 @@ export {
   sendHtml,
   sendJson,
 } from './http.js';
+export { preparePreviewHtml } from './metaapp/previewHtml.js';

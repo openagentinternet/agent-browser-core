@@ -38,6 +38,23 @@ Write normal anchors:
 <a href="metaapp://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0">Open MetaApp</a>
 ```
 
+## Host-Side URI Support
+
+HTML served through the standalone host's preview-assets route (ZIP-backed MetaApps and local
+previews) is prepared automatically before serving:
+
+- `src`, `srcset`, and `poster` attributes holding `metafile://` references are rewritten to the
+  accelerated Metafile content web URL, so `<img>`, `<video>`, `<audio>`, and `<source>` load
+  on-chain media directly;
+- a navigation bridge is injected that forwards clicks on `metaid://`, `metaapp://`,
+  `metafile://`, `map://`, and `pin://` anchors to the Browser, and exposes
+  `window.AgentBrowser.navigate(uri)`.
+
+Apps served through that route do not need to embed the navigation helper below for link clicks.
+HTML Metafiles and MetaApps rendered directly against their content URL (not through
+preview-assets) still require the manual helper, and metafile-based `src` references outside the
+supported attributes are not rewritten.
+
 ## MetaApp Deep Links (Launch Parameters)
 
 MetaApp deep links can carry a launch query that the host forwards to the app entry URL:

@@ -84,6 +84,10 @@ Host compatibility requirements:
 
 - Serve the bridge-capable ABC Browser shell and client script.
 - Do not remove or replace ABC's parent-page `agent-browser:navigate` message listener.
+- HTML served through a MetaApp asset route carries an injected click interceptor that forwards
+  internal-URI anchor clicks to this same channel. If the host post-processes served MetaApp HTML,
+  keep that injected script intact. See "Served MetaApp HTML URI support" in the
+  [Browser Host Integration Guide](./browser-host-integration-guide.md).
 - If the host wraps or post-processes rendered Browser HTML, keep the custom MetaApp iframe compatible
   with ABC's active-frame `postMessage` check.
 - Do not convert Agent Internet URIs into host-specific routes before they reach ABC navigation.
