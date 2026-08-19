@@ -665,7 +665,7 @@ test('standalone Browser server rejects untrusted file MetaApp content reference
   const resolved = await readJson(resolveResponse);
   assert.equal(resolveResponse.status, 400);
   assert.equal(resolved.ok, false);
-  assert.match(resolved.message, /only supports ZIP content references/i);
+  assert.match(resolved.message, /only supports ZIP or HTML content references/i);
   assert.doesNotMatch(JSON.stringify(resolved), /LOCAL_SECRET_SHOULD_NOT_LEAK/);
 
   const previewResponse = await fetch(`${baseUrl}/api/browser/preview-assets/standalone-probe/secret.txt`);
@@ -891,6 +891,94 @@ test('standalone Browser server downloads ZIP MetaApp content into artifact cach
   assert.equal(afterClearResponse.status, 404);
   assert.equal(afterClear.ok, false);
   assert.equal(afterClear.code, 'browser_resource_not_found');
+});
+
+test('standalone Browser server proxies single-HTML MetaApp content with Agent Internet URI support', async (t) => {
+  const cacheDir = await mkdtemp(join(tmpdir(), 'abc-standalone-html-cache-'));
+  t.after(() => rm(cacheDir, { recursive: true, force: true }));
+
+  const pinId = 'd6'.repeat(32) + 'i0';
+  const contentPinId = 'e5'.repeat(32) + 'i0';
+  const imagePinId = 'f4'.repeat(32) + 'i0';
+  const appHtml = [
+    '<!doctype html><html><head><title>Single HTML Preview</title></head><body>',
+    `<a href="metaapp://${pinId}">self</a>`,
+    `<img src="metafile://${imagePinId}">`,
+    '</body></html>',
+  ].join('');
+  let htmlFetchCount = 0;
+  const adapter = createStandaloneBrowserHostAdapter({
+    env: {
+      AGENT_BROWSER_CACHE_DIR: cacheDir,
+      METABOT_BROWSER_MANAPI_BASE_URL: 'https://man.example.test',
+      METABOT_BROWSER_METAFILE_CONTENT_BASE_URL: 'https://content.example.test/files',
+    },
+    now: () => 1781450015615,
+    fetch: async (url) => {
+      const textUrl = String(url);
+      if (textUrl === `https://man.example.test/pin/${pinId}`) {
+        return new Response(JSON.stringify({
+          data: {
+            id: pinId,
+            path: '/protocols/metaapp',
+            address: '1HtmlPublisher',
+            ownerGlobalMetaId: 'idq1htmlpublisher',
+            timestamp: 1781450015,
+            contentSummary: JSON.stringify({
+              title: 'Single HTML MetaApp',
+              appName: 'single-html-metaapp',
+              version: '1.0.0',
+              runtime: 'browser',
+              content: `metafile://${contentPinId}`,
+              contentType: 'text/html',
+              codeType: 'text/html',
+              indexFile: 'index.html',
+            }),
+          },
+        }), { status: 200, headers: { 'content-type': 'application/json; charset=utf-8' } });
+      }
+      if (textUrl === `https://content.example.test/files/${contentPinId}`) {
+        htmlFetchCount += 1;
+        return new Response(appHtml, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+      }
+      throw new Error(`Unexpected fetch URL: ${textUrl}`);
+    },
+  });
+  const server = createStandaloneBrowserServer({ adapter });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const firstResponse = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaapp%3A%2F%2F${pinId}`);
+  const first = await readJson(firstResponse);
+  assert.equal(firstResponse.status, 200);
+  assert.equal(first.ok, true);
+  assert.equal(first.data.renderer.type, 'html-iframe');
+  assert.equal(first.data.renderer.contentType, 'text/html');
+  assert.match(first.data.renderer.url, /^\/api\/browser\/preview-assets\/standalone-/);
+  assert.match(first.data.renderer.url, /index\.html$/);
+
+  const htmlResponse = await fetch(`${baseUrl}${first.data.renderer.url}`);
+  assert.equal(htmlResponse.status, 200);
+  assert.match(htmlResponse.headers.get('content-type'), /text\/html/);
+  const html = await htmlResponse.text();
+  assert.match(html, /Single HTML Preview/);
+  assert.ok(html.includes(`href="metaapp://${pinId}"`), 'internal href should stay a Browser URI');
+  assert.ok(html.includes(`src="https://content.example.test/files/${imagePinId}"`), 'metafile img src should be rewritten against the configured content base');
+  assert.match(html, /__agentBrowserPreviewBridge/);
+  assert.match(html, /__agentBrowserPreviewStorageShim/);
+
+  const cache = await readJson(await fetch(`${baseUrl}/api/browser/cache?actorId=standalone-wallet`));
+  assert.equal(cache.ok, true);
+  assert.equal(cache.data.artifactCount, 1);
+  assert.equal(cache.data.pinRecordCount, 1);
+  assert.equal(cache.data.activePreviewSessionCount, 1);
+
+  const secondResponse = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=metaapp%3A%2F%2F${pinId}`);
+  const second = await readJson(secondResponse);
+  assert.equal(secondResponse.status, 200);
+  assert.equal(second.ok, true);
+  assert.equal(second.data.renderer.type, 'html-iframe');
+  assert.equal(htmlFetchCount, 1, 'second resolve should reuse the cached single-HTML artifact');
 });
 
 test('standalone Browser server rejects arbitrary HTTPS ZIP MetaApp content references', async (t) => {

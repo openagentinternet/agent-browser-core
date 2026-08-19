@@ -63,6 +63,7 @@ export interface MetaAppArtifactCacheStore {
   pinsRoot: string;
   getArtifact(input: MetaAppArtifactDescriptor): Promise<MetaAppArtifactCacheEntry | null>;
   writeArtifact(input: MetaAppArtifactDescriptor & { archive: Buffer }): Promise<MetaAppArtifactCacheEntry>;
+  writeSingleFileArtifact(input: MetaAppArtifactDescriptor & { body: Buffer }): Promise<MetaAppArtifactCacheEntry>;
   getStats(): Promise<MetaAppArtifactCacheStats>;
   clear(input?: MetaAppArtifactCacheClearInput): Promise<MetaAppArtifactCacheClearResult>;
 }
@@ -366,6 +367,38 @@ export function createStandaloneMetaAppArtifactCacheStore(
     });
   }
 
+  async function commitArtifact(input: {
+    stagingRoot: string;
+    artifactDir: string;
+    descriptor: MetaAppArtifactDescriptor;
+    cacheKey: string;
+  }): Promise<MetaAppArtifactCacheEntry> {
+    const descriptor = normalizeDescriptor(input.descriptor);
+    const artifactRoot = path.join(artifactsRoot, input.cacheKey);
+    const createdAt = now();
+    const artifactPath = relativeArtifactPath(input.stagingRoot, input.artifactDir);
+    const manifest: MetaAppArtifactManifest = {
+      version: MANIFEST_VERSION,
+      cacheKey: input.cacheKey,
+      metaAppPinId: descriptor.metaAppPinId,
+      contentReference: descriptor.contentReference,
+      contentType: descriptor.contentType,
+      indexFile: descriptor.indexFile,
+      modifyHistory: descriptor.modifyHistory ?? null,
+      latestModifyPinId: latestModifyPinId(descriptor.modifyHistory),
+      artifactPath,
+      createdAt,
+      updatedAt: createdAt,
+      lastUsedAt: createdAt,
+    };
+    await writeJsonFile(path.join(input.stagingRoot, 'manifest.json'), manifest);
+    await fs.rm(artifactRoot, { recursive: true, force: true });
+    await fs.rename(input.stagingRoot, artifactRoot);
+    const entry = toEntry({ artifactsRoot, cacheKey: input.cacheKey, manifest });
+    await writePinRecord({ ...descriptor, cacheKey: input.cacheKey, artifactDir: entry.artifactDir });
+    return entry;
+  }
+
   return {
     cacheRoot,
     artifactsRoot,
@@ -407,10 +440,8 @@ export function createStandaloneMetaAppArtifactCacheStore(
     async writeArtifact(input) {
       const descriptor = normalizeDescriptor(input);
       const cacheKey = buildMetaAppArtifactCacheKey(descriptor);
-      const artifactRoot = path.join(artifactsRoot, cacheKey);
       const stagingRoot = path.join(artifactsRoot, `.staging-${cacheKey}-${randomUUID()}`);
       const payloadRoot = path.join(stagingRoot, 'payload');
-      const createdAt = now();
 
       await fs.mkdir(artifactsRoot, { recursive: true });
       try {
@@ -419,27 +450,31 @@ export function createStandaloneMetaAppArtifactCacheStore(
         if (!await assertFileExists(path.join(artifactDir, descriptor.indexFile))) {
           throw new Error('MetaApp artifact indexFile was not found after extraction.');
         }
-        const artifactPath = relativeArtifactPath(stagingRoot, artifactDir);
-        const manifest: MetaAppArtifactManifest = {
-          version: MANIFEST_VERSION,
-          cacheKey,
-          metaAppPinId: descriptor.metaAppPinId,
-          contentReference: descriptor.contentReference,
-          contentType: descriptor.contentType,
-          indexFile: descriptor.indexFile,
-          modifyHistory: descriptor.modifyHistory ?? null,
-          latestModifyPinId: latestModifyPinId(descriptor.modifyHistory),
-          artifactPath,
-          createdAt,
-          updatedAt: createdAt,
-          lastUsedAt: createdAt,
-        };
-        await writeJsonFile(path.join(stagingRoot, 'manifest.json'), manifest);
-        await fs.rm(artifactRoot, { recursive: true, force: true });
-        await fs.rename(stagingRoot, artifactRoot);
-        const entry = toEntry({ artifactsRoot, cacheKey, manifest });
-        await writePinRecord({ ...descriptor, cacheKey, artifactDir: entry.artifactDir });
-        return entry;
+        return await commitArtifact({ stagingRoot, artifactDir, descriptor, cacheKey });
+      } catch (error) {
+        await fs.rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
+        throw error;
+      }
+    },
+
+    // Single-HTML MetaApps cache one document: the descriptor's indexFile
+    // names the stored file, so getArtifact/stats/clear treat the entry
+    // exactly like an extracted ZIP artifact.
+    async writeSingleFileArtifact(input) {
+      const descriptor = normalizeDescriptor(input);
+      if (!isSafeRelativeArtifactPath(descriptor.indexFile)) {
+        throw new Error('MetaApp single-file artifact indexFile must be a safe relative path.');
+      }
+      const cacheKey = buildMetaAppArtifactCacheKey(descriptor);
+      const stagingRoot = path.join(artifactsRoot, `.staging-${cacheKey}-${randomUUID()}`);
+      const payloadRoot = path.join(stagingRoot, 'payload');
+
+      await fs.mkdir(artifactsRoot, { recursive: true });
+      try {
+        const filePath = path.join(payloadRoot, ...descriptor.indexFile.split('/'));
+        await fs.mkdir(path.dirname(filePath), { recursive: true });
+        await fs.writeFile(filePath, input.body);
+        return await commitArtifact({ stagingRoot, artifactDir: payloadRoot, descriptor, cacheKey });
       } catch (error) {
         await fs.rm(stagingRoot, { recursive: true, force: true }).catch(() => undefined);
         throw error;

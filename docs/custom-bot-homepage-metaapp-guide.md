@@ -40,8 +40,8 @@ Write normal anchors:
 
 ## Host-Side URI Support
 
-HTML served through the standalone host's preview-assets route (ZIP-backed MetaApps and local
-previews) is prepared automatically before serving:
+HTML served through the standalone host's preview-assets route (ZIP-backed MetaApps, single-file
+HTML MetaApps, and local previews) is prepared automatically before serving:
 
 - `src`, `srcset`, and `poster` attributes holding `metafile://` references are rewritten to the
   accelerated Metafile content web URL, so `<img>`, `<video>`, `<audio>`, and `<source>` load
@@ -51,9 +51,10 @@ previews) is prepared automatically before serving:
   `window.AgentBrowser.navigate(uri)`.
 
 Apps served through that route do not need to embed the navigation helper below for link clicks.
-HTML Metafiles and MetaApps rendered directly against their content URL (not through
-preview-assets) still require the manual helper, and metafile-based `src` references outside the
-supported attributes are not rewritten.
+Single-file HTML MetaApp content is downloaded and cached by the host, so it goes through the same
+preparation as ZIP packages. HTML Metafiles opened directly by URI (not as MetaApp content) still
+require the manual helper, and metafile-based `src` references outside the supported attributes are
+not rewritten.
 
 ## MetaApp Deep Links (Launch Parameters)
 

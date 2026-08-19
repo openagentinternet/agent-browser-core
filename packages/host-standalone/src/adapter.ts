@@ -237,6 +237,7 @@ function encodeAssetPath(assetPath: string): string {
 function contentTypeForPath(filePath: string): string {
   const extension = path.extname(filePath).toLowerCase();
   if (extension === '.html' || extension === '.htm') return 'text/html; charset=utf-8';
+  if (extension === '.xhtml') return 'application/xhtml+xml; charset=utf-8';
   if (extension === '.css') return 'text/css; charset=utf-8';
   if (extension === '.js' || extension === '.mjs') return 'text/javascript; charset=utf-8';
   if (extension === '.json') return 'application/json; charset=utf-8';
@@ -273,6 +274,19 @@ function isZipMetaAppContent(contentType: string, contentReference: string): boo
     || /^metafile:\/\/.+\.zip$/iu.test(contentReference);
 }
 
+const HTML_METAAPP_CONTENT_TYPES = new Set([
+  'text/html',
+  'application/xhtml+xml',
+]);
+
+function isHtmlMetaAppContent(contentType: string, contentReference: string): boolean {
+  const normalizedType = normalizeText(contentType).toLowerCase().split(';', 1)[0]?.trim() ?? '';
+  const normalizedReference = normalizeText(contentReference).toLowerCase().split(/[?#]/, 1)[0];
+  return HTML_METAAPP_CONTENT_TYPES.has(normalizedType)
+    || normalizedReference.endsWith('.html')
+    || normalizedReference.endsWith('.htm');
+}
+
 function resolveMetaAppContentUrl(contentReference: string, metafileContentBaseUrl: string): string | null {
   const reference = normalizeText(contentReference);
   if (!/^metafile:\/\//iu.test(reference)) {
@@ -288,23 +302,24 @@ function resolveMetaAppContentUrl(contentReference: string, metafileContentBaseU
 async function readBoundedResponseBody(input: {
   response: Response;
   maxBytes: number;
+  label: string;
 }): Promise<Buffer> {
   let declaredBytes = 0;
   const contentLength = normalizeText(input.response.headers.get('content-length'));
   if (contentLength) {
     const parsedLength = Number(contentLength);
     if (!Number.isFinite(parsedLength) || parsedLength < 0) {
-      throw new Error('MetaApp ZIP download content-length is invalid.');
+      throw new Error(`${input.label} download content-length is invalid.`);
     }
     if (parsedLength > input.maxBytes) {
-      throw new Error('MetaApp ZIP archive is too large.');
+      throw new Error(`${input.label} is too large.`);
     }
     declaredBytes = parsedLength;
   }
 
   const reader = input.response.body?.getReader?.();
   if (!reader) {
-    throw new Error('MetaApp ZIP download response body is not streamable.');
+    throw new Error(`${input.label} download response body is not streamable.`);
   }
 
   const chunks: Buffer[] = [];
@@ -320,17 +335,17 @@ async function readBoundedResponseBody(input: {
     const chunk = Buffer.from(value);
     totalBytes += chunk.byteLength;
     if (totalBytes > input.maxBytes) {
-      throw new Error('MetaApp ZIP archive exceeds the download size limit.');
+      throw new Error(`${input.label} exceeds the download size limit.`);
     }
     chunks.push(chunk);
   }
   const body = Buffer.concat(chunks, totalBytes);
   // Truncation guard: a response that declares its size must deliver it.
   // Streams can end early (proxy timeouts, interrupted CDN downloads) and a
-  // truncated ZIP would otherwise be cached, making every later resolve fail
+  // truncated payload would otherwise be cached, making every later resolve fail
   // with a confusing extraction error instead of a clear download error.
   if (declaredBytes > 0 && totalBytes !== declaredBytes) {
-    throw new Error(`MetaApp ZIP download was truncated (received ${totalBytes} of ${declaredBytes} bytes).`);
+    throw new Error(`${input.label} download was truncated (received ${totalBytes} of ${declaredBytes} bytes).`);
   }
   return body;
 }
@@ -352,6 +367,28 @@ async function downloadMetaAppZipArchive(input: {
   return readBoundedResponseBody({
     response,
     maxBytes: input.maxBytes ?? DEFAULT_MAX_ZIP_ARCHIVE_BYTES,
+    label: 'MetaApp ZIP archive',
+  });
+}
+
+async function downloadMetaAppHtmlDocument(input: {
+  fetch: typeof fetch;
+  contentReference: string;
+  metafileContentBaseUrl: string;
+  maxBytes?: number;
+}): Promise<Buffer> {
+  const contentUrl = resolveMetaAppContentUrl(input.contentReference, input.metafileContentBaseUrl);
+  if (!contentUrl) {
+    throw new Error('MetaApp HTML content reference is not downloadable.');
+  }
+  const response = await input.fetch(contentUrl);
+  if (!response.ok) {
+    throw new Error(`MetaApp HTML document download failed with HTTP ${response.status}.`);
+  }
+  return readBoundedResponseBody({
+    response,
+    maxBytes: input.maxBytes ?? DEFAULT_MAX_ZIP_ARCHIVE_BYTES,
+    label: 'MetaApp HTML document',
   });
 }
 
@@ -575,6 +612,39 @@ export function createStandaloneBrowserHostAdapter(
     return artifactCache.writeArtifact({ ...descriptor, archive });
   }
 
+  // Single-HTML MetaApps: download the document once, cache it as a
+  // one-file artifact, and serve it through the same preview-assets route as
+  // ZIP apps so metafile:// rewriting and the navigation bridge apply.
+  async function resolveHtmlPreviewArtifact(input: {
+    pinId: string;
+    contentReference: string;
+    contentType: string;
+    indexFile: string;
+    pinRecord: Record<string, unknown>;
+    metafileContentBaseUrl: string;
+    resolveFetch: typeof fetch;
+    maxBytes?: number;
+  }): Promise<MetaAppArtifactCacheEntry> {
+    const descriptor = {
+      metaAppPinId: input.pinId,
+      contentReference: input.contentReference,
+      contentType: input.contentType,
+      indexFile: input.indexFile,
+      modifyHistory: normalizeMetaAppModifyHistory(input.pinRecord.modify_history ?? input.pinRecord.modifyHistory),
+    };
+    const cached = await artifactCache.getArtifact(descriptor);
+    if (cached) {
+      return cached;
+    }
+    const body = await downloadMetaAppHtmlDocument({
+      fetch: input.resolveFetch,
+      contentReference: input.contentReference,
+      metafileContentBaseUrl: input.metafileContentBaseUrl,
+      maxBytes: input.maxBytes,
+    });
+    return artifactCache.writeSingleFileArtifact({ ...descriptor, body });
+  }
+
   async function resolveResourceWithFetch(
     resolveInput: BrowserResolveInput,
     resolveFetch: typeof fetch,
@@ -598,25 +668,43 @@ export function createStandaloneBrowserHostAdapter(
         metafileContentBaseUrl: browserConfig.metafileContentBaseUrl,
         now,
         createPreviewSession: async ({ pinId, contentReference, contentType, indexFile, pinRecord }) => {
-          if (!isZipMetaAppContent(contentType, contentReference)) {
-            throw new Error('Standalone MetaApp preview only supports ZIP content references.');
+          if (isZipMetaAppContent(contentType, contentReference)) {
+            const artifact = await resolveZipPreviewArtifact({
+              pinId,
+              contentReference,
+              contentType,
+              indexFile,
+              pinRecord,
+              metafileContentBaseUrl: browserConfig.metafileContentBaseUrl,
+              resolveFetch,
+              maxBytes: input.maxZipArchiveBytes,
+            });
+            return createPreviewSessionForArtifact({
+              artifactDir: artifact.artifactDir,
+              indexFile: artifact.indexFile,
+              source: 'cache',
+              cacheKey: artifact.cacheKey,
+            });
           }
-          const artifact = await resolveZipPreviewArtifact({
-            pinId,
-            contentReference,
-            contentType,
-            indexFile,
-            pinRecord,
-            metafileContentBaseUrl: browserConfig.metafileContentBaseUrl,
-            resolveFetch,
-            maxBytes: input.maxZipArchiveBytes,
-          });
-          return createPreviewSessionForArtifact({
-            artifactDir: artifact.artifactDir,
-            indexFile: artifact.indexFile,
-            source: 'cache',
-            cacheKey: artifact.cacheKey,
-          });
+          if (isHtmlMetaAppContent(contentType, contentReference)) {
+            const artifact = await resolveHtmlPreviewArtifact({
+              pinId,
+              contentReference,
+              contentType,
+              indexFile,
+              pinRecord,
+              metafileContentBaseUrl: browserConfig.metafileContentBaseUrl,
+              resolveFetch,
+              maxBytes: input.maxZipArchiveBytes,
+            });
+            return createPreviewSessionForArtifact({
+              artifactDir: artifact.artifactDir,
+              indexFile: artifact.indexFile,
+              source: 'cache',
+              cacheKey: artifact.cacheKey,
+            });
+          }
+          throw new Error('Standalone MetaApp preview only supports ZIP or HTML content references.');
         },
       }),
     });
