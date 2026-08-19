@@ -9,8 +9,14 @@ const require = createRequire(import.meta.url);
 const {
   preparePreviewHtml,
   rewritePreviewHtmlMetafileReferences,
-} = require('../../packages/host-standalone/dist/metaapp/previewHtml.js');
+} = require('../../packages/core/dist/browser/previewHtml.js');
 const { createStandaloneBrowserHostAdapter } = require('../../packages/host-standalone/dist/index.js');
+
+test('core and host-standalone expose the same preview HTML preparation API', () => {
+  const hostStandalone = require('../../packages/host-standalone/dist/index.js');
+  assert.equal(hostStandalone.preparePreviewHtml, preparePreviewHtml);
+  assert.equal(hostStandalone.rewritePreviewHtmlMetafileReferences, rewritePreviewHtmlMetafileReferences);
+});
 
 const PIN = '765570486edfc94bb0b393bfb8c48d100fb84be9fcf2b9b0b39df68e997135c1i0';
 const PIN_B = '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0';
