@@ -178,13 +178,16 @@ prepared first:
 inside the Browser instead of opening a raw content URL.
 
 Hosts that route MetaApp asset serving through the standalone adapter's
-`resolvePreviewAsset` get this automatically. A host that serves MetaApp assets
-from its own route must apply `preparePreviewHtml({ body, contentType,
-metafileContentBaseUrl })`, exported from
-`@openagentinternet/agent-browser-host-standalone`, before returning HTML.
-HTML Metafiles and MetaApps rendered directly against their content URL are not
-served by the host and are not prepared; their authors must embed the manual
-navigation helper documented in the
+`resolvePreviewAsset` get this automatically. The standalone adapter proxies both
+MetaApp content shapes through its preview-assets route: ZIP archives are
+downloaded and extracted, and single-file HTML content references are downloaded
+and cached as one-file artifacts — both then go through `preparePreviewHtml`. A
+host that serves MetaApp assets from its own route must apply
+`preparePreviewHtml({ body, contentType, metafileContentBaseUrl })`, exported
+from `@openagentinternet/agent-browser-host-standalone`, before returning HTML.
+HTML Metafiles opened directly by URI (not as MetaApp content) are not served by
+the host and are not prepared; their authors must embed the manual navigation
+helper documented in the
 [Custom Bot Homepage and MetaApp Guide](./custom-bot-homepage-metaapp-guide.md).
 
 ### Local MetaApp preview
