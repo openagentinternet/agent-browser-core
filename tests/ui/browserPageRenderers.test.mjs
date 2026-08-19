@@ -778,6 +778,53 @@ test('bot-page renderer keeps MetaApp intro scoped to each card and uses Run dee
   assert.match(html, /aria-label="Download MetaApp code zip"/);
 });
 
+test('bot-page renderer shows a non-clickable Disabled action for disabled MetaApps', async () => {
+  const homepage = {
+    schemaVersion: 'botHomepage.v3',
+    identity: { globalMetaId: 'idq1metaappbot' },
+    profile: { name: 'MetaApp Bot', bio: 'Publishes Browser MetaApps.' },
+    sections: [
+      {
+        id: 'metaapps',
+        protocolPath: '/protocols/metaapp',
+        items: [
+          {
+            pinId: metaAppPinId,
+            protocolPath: '/protocols/metaapp',
+            timestamp: 1780760004,
+            data: {
+              payload: {
+                appName: 'eric-homepage',
+                title: 'eric-homepage',
+                version: '1.0.0',
+                disabled: true,
+              },
+            },
+          },
+        ],
+      },
+    ],
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'bot-page',
+    contentType: 'application/vnd.oac.bot-homepage+json',
+    data: homepage,
+  }, {
+    resourceType: 'bot',
+    title: 'MetaApp Bot',
+    owner: { kind: 'bot', globalMetaId: 'idq1metaappbot', name: 'MetaApp Bot', verificationState: 'partial' },
+    actions: [],
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('MetaApps'), 'metaapp render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /class="browser-metaapp-run is-disabled" aria-disabled="true"/);
+  assert.match(html, /<span>Disabled<\/span>/);
+  assert.doesNotMatch(html, new RegExp(`href="metaapp://${metaAppPinId}"`));
+  assert.doesNotMatch(html, /<span>Run<\/span>/);
+  assert.match(html, new RegExp(`<a href="pin://${metaAppPinId}" data-browser-map-link class="browser-metaapp-title browser-bot-inline-link">eric-homepage</a>`));
+});
+
 test('bot-page document renders service and MetaApp cards from v3 payload fields', async () => {
   const homepage = {
     schemaVersion: 'botHomepage.v3',
@@ -2687,6 +2734,61 @@ test('pin-inspector adds Run and download actions for MetaApp protocol pins', as
     html.indexOf('browser-metaapp-run') < html.indexOf('data-browser-open-raw-record'),
     'MetaApp actions render before View Raw Record',
   );
+});
+
+test('pin-inspector renders a Disabled action instead of Run for disabled MetaApp protocol pins', async () => {
+  const { nodes } = runWithResolve(result({
+    type: 'pin-inspector',
+    contentType: 'application/vnd.metaid+json; charset=utf-8',
+    data: {
+      rendererId: 'generic.pin-inspector',
+      version: {
+        requestedPinId: metaAppPinId,
+        resolvedPinId: metaAppPinId,
+        versionSelector: 'latest',
+      },
+      pin: {
+        pinId: metaAppPinId,
+        path: '/protocols/metaapp',
+        contentType: 'application/vnd.metaid+json; charset=utf-8',
+        operation: 'create',
+        chainName: 'mvc',
+        encryption: 'public',
+        version: '1',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+      payload: {
+        title: 'Fixture MetaApp',
+        appName: 'fixture-app',
+        version: '1.0.0',
+      },
+      rawPinRecord: {
+        path: '/protocols/metaapp',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+        contentSummary: JSON.stringify({
+          title: 'Fixture MetaApp',
+          content: `metafile://${metaAppCodePinId}.zip`,
+          disabled: true,
+        }),
+      },
+    },
+  }, {
+    uri: `pin://${metaAppPinId}`,
+    normalizedUri: `pin://${metaAppPinId}`,
+    resourceType: 'pin',
+    title: 'Fixture MetaApp',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-pin-page'), 'pin page render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /class="browser-metaapp-run is-disabled" aria-disabled="true"/);
+  assert.match(html, /<span>Disabled<\/span>/);
+  assert.doesNotMatch(html, new RegExp(`<a class="browser-metaapp-run" href="metaapp://${metaAppPinId}"`));
+  assert.doesNotMatch(html, /<span>Run<\/span>/);
+  assert.match(html, new RegExp(`<a class="browser-metaapp-download" href="https://file\\.metaid\\.io/metafile-indexer/api/v1/files/accelerate/content/${metaAppCodePinId}"`));
 });
 
 test('pin-inspector renderer treats extensionless metafile references as image previews', async () => {
