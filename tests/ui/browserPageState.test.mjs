@@ -504,17 +504,19 @@ test('Browser displays disabled MetaApp resolver failures in the centered failur
   });
 
   await waitFor(
-    () => context.state.lastResolveError && elements['[data-browser-viewport]'].innerHTML.includes('MetaApp disabled by owner'),
+    () => context.state.lastResolveError && elements['[data-browser-viewport]'].innerHTML.includes('App unavailable'),
     'disabled MetaApp failure state',
   );
 
   assert.equal(context.state.current, null);
   assert.equal(context.state.lastResolveError.code, 'browser_resource_disabled');
   assert.equal(fetchCalls[1], `/api/browser/resolve?uri=metaapp%3A%2F%2F${pinId}&actorId=worker`);
-  assert.equal(elements['[data-browser-page-title]'].textContent, 'Resolve failed');
-  assert.equal(context.document.title, 'Resolve failed - Bot Browser');
-  assert.match(elements['[data-browser-viewport]'].innerHTML, /<h2>Resolve failed<\/h2>/);
-  assert.match(elements['[data-browser-viewport]'].innerHTML, /MetaApp disabled by owner/);
+  assert.equal(elements['[data-browser-page-title]'].textContent, 'App unavailable');
+  assert.equal(context.document.title, 'App unavailable - Bot Browser');
+  assert.match(elements['[data-browser-viewport]'].innerHTML, /<h2>App unavailable<\/h2>/);
+  assert.match(elements['[data-browser-viewport]'].innerHTML, /This MetaApp has been disabled and cannot be opened\./);
+  assert.doesNotMatch(elements['[data-browser-viewport]'].innerHTML, /<h2>Resolve failed<\/h2>/);
+  assert.doesNotMatch(elements['[data-browser-viewport]'].innerHTML, /MetaApp disabled by owner/);
 });
 
 test('Browser pin deep link path is decoded into the address bar and preserves version query', async () => {
