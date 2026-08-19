@@ -184,7 +184,8 @@ downloaded and extracted, and single-file HTML content references are downloaded
 and cached as one-file artifacts — both then go through `preparePreviewHtml`. A
 host that serves MetaApp assets from its own route must apply
 `preparePreviewHtml({ body, contentType, metafileContentBaseUrl })`, exported
-from `@openagentinternet/agent-browser-host-standalone`, before returning HTML.
+from `@openagentinternet/agent-browser-core` (and re-exported by
+`@openagentinternet/agent-browser-host-standalone`), before returning HTML.
 HTML Metafiles opened directly by URI (not as MetaApp content) are not served by
 the host and are not prepared; their authors must embed the manual navigation
 helper documented in the

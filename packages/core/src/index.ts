@@ -41,4 +41,5 @@ export * from './browser/metafileResolver.js';
 export * from './browser/metaAppResolver.js';
 export * from './browser/metaAppPinResolver.js';
 export * from './browser/previewMetaAppResolver.js';
+export * from './browser/previewHtml.js';
 export * from './browser/nameAlias.js';

@@ -18,4 +18,7 @@ export {
   sendHtml,
   sendJson,
 } from './http.js';
-export { preparePreviewHtml } from './metaapp/previewHtml.js';
+export {
+  preparePreviewHtml,
+  rewritePreviewHtmlMetafileReferences,
+} from './metaapp/previewHtml.js';
