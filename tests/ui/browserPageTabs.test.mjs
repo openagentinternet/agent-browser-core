@@ -615,3 +615,49 @@ test('host request messages from a non-parent source are ignored', async () => {
   assert.equal(hostMessages.some((message) => message.type === 'agent-browser:get-content:response'), false,
     'no response is posted for a non-parent source');
 });
+
+// --- Back/Forward toolbar sync after in-tab navigation ----------------------
+
+// Regression: an empty new tab disables Back/Forward, and only tab-lifecycle
+// events used to re-sync the toolbar — navigating inside the tab never
+// re-enabled the buttons, leaving Back stuck disabled forever.
+test('empty new tab then two navigations re-enable the Back button', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+  });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+
+  context.AgentBrowserTabs.openTab();
+  assert.equal(elements['[data-browser-back]'].disabled, true, 'fresh empty tab: Back disabled');
+  assert.equal(elements['[data-browser-forward]'].disabled, true, 'fresh empty tab: Forward disabled');
+
+  await context.navigateTo('metaid://idq1bob');
+  await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1bob', 'first navigation');
+  await context.navigateTo('metaid://idq1carol');
+  await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1carol', 'second navigation');
+
+  assert.equal(elements['[data-browser-back]'].disabled, false, 'Back re-enabled after in-tab navigation');
+  assert.equal(elements['[data-browser-forward]'].disabled, true, 'Forward stays disabled at the newest entry');
+});
+
+test('goBack and goForward keep the Back/Forward buttons in sync with historyIndex', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+  });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  await context.navigateTo('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'second navigation');
+
+  assert.equal(elements['[data-browser-back]'].disabled, false, 'historyIndex 1: Back enabled');
+  assert.equal(elements['[data-browser-forward]'].disabled, true, 'historyIndex 1: Forward disabled');
+
+  await context.goBack();
+  await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1alice', 'back navigation');
+  assert.equal(elements['[data-browser-back]'].disabled, true, 'historyIndex 0: Back disabled');
+  assert.equal(elements['[data-browser-forward]'].disabled, false, 'historyIndex 0: Forward enabled');
+
+  await context.goForward();
+  await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1bob', 'forward navigation');
+  assert.equal(elements['[data-browser-back]'].disabled, false, 'back at newest entry: Back enabled');
+  assert.equal(elements['[data-browser-forward]'].disabled, true, 'back at newest entry: Forward disabled');
+});
