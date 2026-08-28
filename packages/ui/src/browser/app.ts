@@ -271,6 +271,12 @@ function applyActiveTabState() {
   state.actorId = tab.actorId || '';
   syncAutoWriteContext();
   renderUsingIdentity();
+  // Re-sync the shared toolbar (back/forward, address bar, bookmark star) so
+  // in-tab navigation (pushHistory/goBack/goForward) updates button states —
+  // tab-lifecycle events alone left the buttons stuck disabled after navigating
+  // a fresh empty tab. All DOM writes inside are guarded by elements.* checks,
+  // and syncToolbarForActiveTab() never calls back into applyActiveTabState().
+  syncToolbarForActiveTab();
 }
 
 // Create a fresh tab (empty welcome by default) and return it. Does NOT activate it.

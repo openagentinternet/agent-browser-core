@@ -683,8 +683,14 @@ test('Browser preserves metaid address when resolver returns custom target resou
   assert.equal(elements['[data-browser-uri-input]'].value, aliasUri);
   assert.equal(fetchCalls[1], '/api/browser/resolve?uri=metaid%3A%2F%2Fidq1custombot&actorId=worker');
   assert.equal(fetchCalls.some((call) => call.includes('metaapp%3A%2F%2F')), false);
-  assert.deepEqual(elements['[data-browser-uri-input]'].valueHistory, [aliasUri, aliasUri, aliasUri]);
-  assert.equal(elements['[data-browser-uri-input]'].valueHistory.includes(customHomepageUri), false);
+  // The exact write count tracks toolbar re-syncs (history mutations also sync
+  // the address bar now); what matters is that only the alias is ever shown.
+  const addressWrites = elements['[data-browser-uri-input]'].valueHistory;
+  assert.ok(
+    addressWrites.length > 0 && addressWrites.every((value) => value === aliasUri || value === ''),
+    'address bar only ever shows the alias URI (or the boot-time empty value)',
+  );
+  assert.equal(addressWrites.includes(customHomepageUri), false);
   assert.equal(elements['[data-browser-page-title]'].textContent, 'Custom MetaApp');
   assert.equal(context.document.title, 'Custom MetaApp - Bot Browser');
 });
