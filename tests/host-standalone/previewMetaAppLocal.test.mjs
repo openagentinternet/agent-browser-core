@@ -29,6 +29,33 @@ test('localhost preview of a directory resolves index.html via the preview-asset
   });
 });
 
+test('preview URLs are absolute on a configured dedicated preview origin', async () => {
+  await withTempDir(async (dir) => {
+    await writeFile(path.join(dir, 'index.html'), '<h1>hi</h1>');
+    const host = createStandaloneBrowserHostAdapter({ previewContentBaseUrl: 'http://127.0.0.1:9911' });
+    const result = await host.resolveResource({ uri: `preview-metaapp://localhost${dir}` });
+    assert.equal(result.ok, true);
+    assert.match(result.data.renderer.url, /^http:\/\/127\.0\.0\.1:9911\/api\/browser\/preview-assets\//);
+    assert.match(result.data.renderer.url, /index\.html$/);
+  });
+});
+
+test('preview origin getter is evaluated per session and empty falls back to relative URLs', async () => {
+  await withTempDir(async (dir) => {
+    await writeFile(path.join(dir, 'index.html'), '<h1>hi</h1>');
+    let currentBase = '';
+    const host = createStandaloneBrowserHostAdapter({ previewContentBaseUrl: () => currentBase });
+    const relative = await host.resolveResource({ uri: `preview-metaapp://localhost${dir}` });
+    assert.equal(relative.ok, true);
+    assert.match(relative.data.renderer.url, /^\/api\/browser\/preview-assets\//);
+
+    currentBase = 'http://127.0.0.1:9912/';
+    const absolute = await host.resolveResource({ uri: `preview-metaapp://localhost${dir}` });
+    assert.equal(absolute.ok, true);
+    assert.match(absolute.data.renderer.url, /^http:\/\/127\.0\.0\.1:9912\/api\/browser\/preview-assets\//);
+  });
+});
+
 test('localhost preview of a single file uses its parent dir as artifactDir', async () => {
   await withTempDir(async (dir) => {
     await writeFile(path.join(dir, 'report.pdf'), '%PDF-1.4');

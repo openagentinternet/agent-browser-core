@@ -603,8 +603,10 @@ test('sandboxed iframe renderer does not expose side-effect helpers to content',
     actions: [],
   });
 
-  assert.match(html, /<iframe class="browser-html-frame" sandbox="allow-scripts" src=/);
-  assert.doesNotMatch(html, /allow-same-origin/);
+  // Cross-origin app frame (metaweb.example vs the page origin 127.0.0.1:3000)
+  // keeps its own real origin plus downloads; it still gets no top navigation
+  // and no side-effect helper endpoints are exposed to it.
+  assert.match(html, /<iframe class="browser-html-frame" sandbox="allow-scripts allow-same-origin allow-downloads" src=/);
   assert.doesNotMatch(html, /allow-top-navigation/);
   assert.doesNotMatch(html, /api\/chat\/private/);
   assert.doesNotMatch(html, /api\/services\/call/);

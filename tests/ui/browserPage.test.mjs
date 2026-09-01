@@ -101,7 +101,9 @@ test('Browser client script includes mature renderer, modal, and chat flows', ()
   assert.match(definition.script, /state\.pendingServiceCall = \{/);
   assert.match(definition.script, /browser-drawer/);
   assert.match(definition.script, /browser-inspector/);
-  assert.match(definition.script, /browser-html-frame" sandbox="allow-scripts"/);
+  assert.match(definition.script, /function htmlFrameSandbox/);
+  assert.match(definition.script, /'allow-scripts allow-downloads'/);
+  assert.match(definition.script, /'allow-scripts allow-same-origin allow-downloads'/);
 });
 
 test('Browser page HTML preserves inline script text containing dollar signs', async () => {

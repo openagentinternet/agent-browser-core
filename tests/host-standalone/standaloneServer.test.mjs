@@ -433,10 +433,15 @@ test('standalone Browser serves a preview-metaapp localhost directory over HTTP 
 
   const previewUrl = resolved.data?.renderer?.url;
   assert.ok(previewUrl, 'expected a renderer url');
-  assert.match(previewUrl, /^\/api\/browser\/preview-assets\//, 'renderer url should target the preview-assets route');
+  // Preview content is served from a dedicated loopback origin on its own
+  // port, deliberately different from the Browser page origin: the sandboxed
+  // app frame then keeps a real cross-origin (canvas export + downloads work)
+  // without ever being able to script the Browser page.
+  assert.match(previewUrl, /^http:\/\/127\.0\.0\.1:\d+\/api\/browser\/preview-assets\//, 'renderer url should target the dedicated preview origin');
+  assert.ok(!previewUrl.startsWith(baseUrl), 'preview origin must differ from the Browser page origin');
 
-  // End-to-end: HTTP-GET the served preview asset through the same standalone server.
-  const asset = await fetch(`${baseUrl}${previewUrl}`);
+  // End-to-end: HTTP-GET the served preview asset from the preview origin.
+  const asset = await fetch(previewUrl);
   assert.equal(asset.status, 200, `asset status for ${previewUrl}`);
   assert.match(asset.headers.get('content-type'), /text\/html/);
   const body = await asset.text();

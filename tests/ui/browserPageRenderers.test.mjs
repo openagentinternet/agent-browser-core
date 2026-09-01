@@ -154,7 +154,7 @@ function runWithResolve(resolvePayload, options = {}) {
     clearTimeout,
     crypto: { randomUUID: () => 'test-session' },
     window: {
-      location: { search: '?uri=metaid%3A%2F%2Fidq1fixturebot' },
+      location: options.pageLocation || { search: '?uri=metaid%3A%2F%2Fidq1fixturebot' },
       history: { replaceState() {} },
       addEventListener(eventName, handler) { windowListeners.set(eventName, handler); },
     },
@@ -1163,10 +1163,41 @@ test('html-iframe renderer is sandboxed without privileged permissions', async (
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'iframe render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
-  assert.match(html, /<iframe class="browser-html-frame" sandbox="allow-scripts" src="https:\/\/metaweb\.example\/app"/);
+  assert.match(html, /<iframe class="browser-html-frame" sandbox="allow-scripts allow-downloads" src="https:\/\/metaweb\.example\/app"/);
   assert.doesNotMatch(html, /allow-same-origin/);
   assert.doesNotMatch(html, /allow-top-navigation/);
   assert.doesNotMatch(html, /wallet|payment|signing/i);
+});
+
+test('html-iframe sandbox keeps the frame own origin only for cross-origin preview URLs', async () => {
+  const pageLocation = {
+    origin: 'http://browser.test',
+    href: 'http://browser.test/browser',
+    search: '?uri=metaid%3A%2F%2Fidq1fixturebot',
+  };
+
+  const cross = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'http://127.0.0.1:9311/api/browser/preview-assets/standalone-x/index.html',
+  }), { pageLocation });
+  await waitFor(() => cross.nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'cross-origin iframe render');
+  const crossHtml = cross.nodes['[data-browser-viewport]'].innerHTML;
+  // Cross-origin preview frames keep their own real origin (canvas export and
+  // downloads work) but never the Browser page origin.
+  assert.match(crossHtml, /<iframe class="browser-html-frame" sandbox="allow-scripts allow-same-origin allow-downloads" src="http:\/\/127\.0\.0\.1:9311\//);
+  assert.doesNotMatch(crossHtml, /allow-top-navigation/);
+
+  const same = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'http://browser.test/api/browser/preview-assets/standalone-x/index.html',
+  }), { pageLocation });
+  await waitFor(() => same.nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'same-origin iframe render');
+  const sameHtml = same.nodes['[data-browser-viewport]'].innerHTML;
+  // Frames served same-origin with the page stay fully opaque.
+  assert.match(sameHtml, /<iframe class="browser-html-frame" sandbox="allow-scripts allow-downloads" src="http:\/\/browser\.test\//);
+  assert.doesNotMatch(sameHtml, /allow-same-origin/);
 });
 
 test('html-iframe navigation bridge accepts only active iframe internal URI messages', async () => {
@@ -2569,7 +2600,7 @@ test('custom Bot Page alias renders target renderer while preserving source deta
 
   await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'custom alias iframe render');
   const html = nodes['[data-browser-viewport]'].innerHTML;
-  assert.match(html, /<iframe class="browser-html-frame" sandbox="allow-scripts" src="\/api\/metaapp\/preview-assets\/custom\/index\.html"/);
+  assert.match(html, /<iframe class="browser-html-frame" sandbox="allow-scripts allow-downloads" src="\/api\/metaapp\/preview-assets\/custom\/index\.html"/);
   assert.equal(context.state.current.normalizedUri, aliasUri);
   assert.equal(context.state.current.source.raw.aliasUri, aliasUri);
   assert.equal(context.state.current.source.raw.customHomepageUri, customHomepageUri);
