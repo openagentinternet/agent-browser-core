@@ -146,6 +146,13 @@ export interface CreateStandaloneBrowserHostAdapterInput {
   // bridge answers session_not_found (list/status/control) or an explicit
   // capability error (start), so the host can still boot without a runner.
   appSession?: StandaloneAppSessionHandler;
+  // Base URL of the dedicated preview-content origin (e.g. an ephemeral
+  // loopback port). When set, MetaApp preview URLs are emitted as absolute
+  // URLs on that origin so the sandboxed app frame keeps its own real,
+  // cross-origin origin (required for canvas export and downloads while the
+  // Browser page stays unreachable from the app). A getter is accepted so the
+  // server can fill in the port after the preview listener is bound.
+  previewContentBaseUrl?: string | (() => string);
 }
 
 interface PreviewSession {
@@ -495,6 +502,7 @@ function buildStandalonePermissionManualAction(input: {
 export function createStandaloneBrowserHostAdapter(
   input: CreateStandaloneBrowserHostAdapterInput = {},
 ): StandaloneBrowserHostAdapter {
+  const hostInput = input;
   const env = input.env ?? process.env;
   const fetchImpl = input.fetch ?? globalThis.fetch;
   const now = input.now ?? Date.now;
@@ -534,9 +542,15 @@ export function createStandaloneBrowserHostAdapter(
       source: input.source,
       ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
     });
+    const previewPath = `/api/browser/preview-assets/${encodeURIComponent(previewId)}/${encodeAssetPath(input.indexFile)}`;
+    const previewBase = normalizeText(
+      typeof hostInput.previewContentBaseUrl === 'function'
+        ? hostInput.previewContentBaseUrl()
+        : hostInput.previewContentBaseUrl,
+    );
     return {
       previewId,
-      localPreviewUrl: `/api/browser/preview-assets/${encodeURIComponent(previewId)}/${encodeAssetPath(input.indexFile)}`,
+      localPreviewUrl: previewBase ? `${previewBase.replace(/\/+$/, '')}${previewPath}` : previewPath,
     };
   }
 

@@ -151,9 +151,10 @@ test('the client script applies a theme without reloading the page', async () =>
 
 test('the MetaApp iframe sandbox contract is unchanged by theme logic', async () => {
   const definition = ui.buildBrowserPageDefinition();
-  // The MetaApp html-frame still uses its original sandbox; theme code never
-  // touches it.
-  assert.match(definition.script, /browser-html-frame" sandbox="allow-scripts"/);
+  // The MetaApp html-frame sandbox is computed by htmlFrameSandbox; theme code
+  // never touches it.
+  assert.match(definition.script, /function htmlFrameSandbox/);
+  assert.match(definition.script, /'allow-scripts allow-same-origin allow-downloads'/);
   // No CSS filter inversion is applied to media iframes/images anywhere.
   const dark = await ui.renderBrowserPageHtml(undefined, undefined, { theme: 'dark' });
   assert.doesNotMatch(dark, /browser-html-frame[^}]*filter:\s*(invert|hue-rotate)/);

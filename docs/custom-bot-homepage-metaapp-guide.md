@@ -71,8 +71,11 @@ The host:
 2. parses the query with standard URL decoding (`+` is a space, `%XX` sequences decode);
 3. serializes the declared launch parameters (`view`, `pin`) with
    `encodeURIComponent` and appends them to the app entry URL that the sandboxed
-   iframe loads, e.g. `index.html?view=buzz&pin=<buzzPinId>`. The iframe stays
-   `sandbox="allow-scripts"`; no top-level navigation is performed.
+   iframe loads, e.g. `index.html?view=buzz&pin=<buzzPinId>`. The iframe sandbox
+   is `allow-scripts allow-downloads`, plus `allow-same-origin` only when the app
+   is served from a preview origin different from the Browser page (canvas
+   exports and in-app downloads work, while the app can never script the page);
+   no top-level navigation is performed.
 
 Forwarding rules (host-side degradation, app contract lives in the app's own docs):
 

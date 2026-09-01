@@ -134,11 +134,52 @@ async function serveStandaloneAsset(
   }
 }
 
+// Serves one preview-asset request (shared by the main server and the preview
+// origin server). Returns false when the path is not a preview asset path.
+async function servePreviewAssetRequest(
+  adapter: StandaloneBrowserHostAdapter,
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  url: URL,
+): Promise<boolean> {
+  const previewAsset = parsePreviewAssetPath(url.pathname);
+  if (!previewAsset) {
+    return false;
+  }
+  if ((req.method ?? 'GET') !== 'GET') {
+    sendJson(res, 405, browserFailure('method_not_allowed', 'Expected GET.'));
+    return true;
+  }
+  const result = await adapter.resolvePreviewAsset(previewAsset);
+  if (!result.ok) {
+    sendJson(res, statusForBrowserResult(result), result);
+    return true;
+  }
+  sendText(res, 200, result.data.body, result.data.contentType, {
+    'access-control-allow-origin': '*',
+  });
+  return true;
+}
+
 export function createStandaloneBrowserServer(input: CreateStandaloneBrowserServerInput = {}): http.Server {
-  const adapter = input.adapter ?? createStandaloneBrowserHostAdapter(input);
+  // MetaApp preview content is served from a dedicated ephemeral loopback
+  // origin so the sandboxed app frame keeps a real origin that is deliberately
+  // DIFFERENT from the Browser page origin. The UI can then grant
+  // allow-same-origin (image-export canvases stop being tainted, downloads
+  // work) while the app still cannot script the Browser page or pass the
+  // same-origin API guard. Without a preview origin (custom adapter, or an
+  // explicit previewContentBaseUrl fronted by the caller's own proxy) preview
+  // URLs stay relative to the main origin and frames render opaque — safe,
+  // but image-export apps degrade.
+  const previewOrigin = { baseUrl: '' };
+  const usesPreviewOriginServer = !input.adapter && !input.previewContentBaseUrl;
+  const adapter = input.adapter ?? createStandaloneBrowserHostAdapter({
+    ...input,
+    previewContentBaseUrl: input.previewContentBaseUrl ?? (() => previewOrigin.baseUrl),
+  });
   const assetsRoot = input.assetsRoot ?? resolveStandaloneAssetsRoot();
 
-  return http.createServer(async (req, res) => {
+  const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     try {
       if (url.pathname === '/healthz') {
@@ -179,20 +220,7 @@ export function createStandaloneBrowserServer(input: CreateStandaloneBrowserServ
         sendJson(res, 404, browserFailure('not_found', `No route matched ${url.pathname}.`));
         return;
       }
-      const previewAsset = parsePreviewAssetPath(url.pathname);
-      if (previewAsset) {
-        if ((req.method ?? 'GET') !== 'GET') {
-          sendJson(res, 405, browserFailure('method_not_allowed', 'Expected GET.'));
-          return;
-        }
-        const result = await adapter.resolvePreviewAsset(previewAsset);
-        if (!result.ok) {
-          sendJson(res, statusForBrowserResult(result), result);
-          return;
-        }
-        sendText(res, 200, result.data.body, result.data.contentType, {
-          'access-control-allow-origin': '*',
-        });
+      if (await servePreviewAssetRequest(adapter, req, res, url)) {
         return;
       }
       if (await handleStandaloneBrowserApiRoute(req, res, url, adapter)) {
@@ -203,4 +231,43 @@ export function createStandaloneBrowserServer(input: CreateStandaloneBrowserServ
       sendJson(res, 500, browserFailure('internal_error', error instanceof Error ? error.message : String(error)));
     }
   });
+
+  if (usesPreviewOriginServer) {
+    const previewServer = http.createServer(async (req, res) => {
+      const url = new URL(req.url ?? '/', 'http://127.0.0.1');
+      try {
+        if (await servePreviewAssetRequest(adapter, req, res, url)) {
+          return;
+        }
+        sendJson(res, 404, browserFailure('not_found', `No route matched ${url.pathname}.`));
+      } catch (error) {
+        sendJson(res, 500, browserFailure('internal_error', error instanceof Error ? error.message : String(error)));
+      }
+    });
+    // On listen failure fall back to relative preview URLs (opaque frames).
+    previewServer.on('error', () => {
+      previewOrigin.baseUrl = '';
+    });
+    // Bind only while the main server is listening, so a server that is
+    // created but never listens (e.g. a CLI run whose port is taken) never
+    // holds a port.
+    server.on('listening', () => {
+      previewServer.listen(0, '127.0.0.1', () => {
+        const address = previewServer.address();
+        const port = typeof address === 'object' && address ? address.port : 0;
+        if (port) {
+          previewOrigin.baseUrl = `http://127.0.0.1:${port}`;
+        }
+      });
+    });
+    server.on('close', () => {
+      // close() alone leaves idle keep-alive connections holding the event
+      // loop (tests would hang at exit); drop them explicitly.
+      previewServer.closeIdleConnections();
+      previewServer.closeAllConnections();
+      previewServer.close();
+    });
+  }
+
+  return server;
 }

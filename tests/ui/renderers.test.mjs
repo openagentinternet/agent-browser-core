@@ -121,7 +121,7 @@ test('html iframe renderer is sandboxed and rejects unsafe URLs', () => {
     actions: [],
     sections: [],
   });
-  assert.match(safe, /<iframe class="browser-html-frame" sandbox="allow-scripts" src="https:\/\/metaweb\.example\/app"/);
+  assert.match(safe, /<iframe class="browser-html-frame" sandbox="allow-scripts allow-downloads" src="https:\/\/metaweb\.example\/app"/);
   assert.doesNotMatch(safe, /allow-same-origin/);
   assert.doesNotMatch(safe, /allow-top-navigation/);
 
