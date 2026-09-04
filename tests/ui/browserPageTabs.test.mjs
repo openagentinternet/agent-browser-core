@@ -231,6 +231,65 @@ test('openTab with no uri creates an empty welcome tab without fetching', async 
   assert.equal(fetchCalls.length, fetchesBefore, 'no fetch for empty tab');
 });
 
+test('openTab with an already-open uri switches to that tab instead of duplicating', async () => {
+  const { context, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const existingId = context.AgentBrowserTabs.getActiveTab().id;
+  const fetchesBefore = fetchCalls.length;
+  const reusedId = context.AgentBrowserTabs.openTab('metaid://idq1alice');
+  assert.equal(reusedId, existingId, 'returns the existing tab id');
+  assert.equal(context.AgentBrowserTabs.getTabs().length, 1, 'no tab was created');
+  assert.equal(context.AgentBrowserTabs.getActiveTab().id, existingId);
+  assert.equal(fetchCalls.length, fetchesBefore, 'no new resolve fetch for a reused tab');
+});
+
+test('openTab uri matching is trimmed and case-insensitive', async () => {
+  const { context, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const existingId = context.AgentBrowserTabs.getActiveTab().id;
+  const reusedId = context.AgentBrowserTabs.openTab('  METAID://IDQ1ALICE ');
+  assert.equal(reusedId, existingId);
+  assert.equal(context.AgentBrowserTabs.getTabs().length, 1);
+  assert.equal(fetchCalls.length, 2, 'no new resolve fetch for a case-variant uri');
+});
+
+test('openTab dedupe matches a tab that is still loading the requested uri', async () => {
+  let releaseBobResolve;
+  const bobGate = new Promise((resolve) => { releaseBobResolve = resolve; });
+  const { context, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+    resolveResponse: (uri) => (String(uri).includes('idq1bob') ? bobGate : resolvedBot(uri)),
+  });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  // First open starts the (still pending) resolve on a second tab.
+  context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'bob resolve started');
+  const loadingTabId = context.AgentBrowserTabs.getActiveTab().id;
+  assert.equal(context.state.tabs.find((t) => t.id === loadingTabId).status, 'loading');
+  // A second open request for the same uri must reuse the in-flight tab.
+  const reusedId = context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  assert.equal(reusedId, loadingTabId, 'switches to the loading tab');
+  assert.equal(context.AgentBrowserTabs.getTabs().length, 2, 'no duplicate tab');
+  assert.equal(fetchCalls.filter((call) => call.includes('idq1bob')).length, 1, 'no second bob resolve');
+  releaseBobResolve(resolvedBot('metaid://idq1bob'));
+  await waitFor(() => {
+    const tab = context.state.tabs.find((t) => t.id === loadingTabId);
+    return tab && tab.status === 'resolved';
+  }, 'bob resolve settled');
+  assert.equal(context.AgentBrowserTabs.getActiveTab().id, loadingTabId);
+});
+
+test('openTab with dedupe disabled always creates a new tab (explicit open-in-new-tab gesture)', async () => {
+  const { context, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const existingId = context.AgentBrowserTabs.getActiveTab().id;
+  const newId = context.AgentBrowserTabs.openTab('metaid://idq1alice', undefined, { dedupe: false });
+  await waitFor(() => fetchCalls.length === 3, 'second resolve');
+  assert.notEqual(newId, existingId);
+  assert.equal(context.AgentBrowserTabs.getTabs().length, 2);
+  assert.equal(context.AgentBrowserTabs.getActiveTab().id, newId);
+});
+
 const reviewerActorTabs = {
   id: 'reviewer', label: 'Reviewer Bot', kind: 'oac-bot', globalMetaId: 'idq1reviewer',
   isDefault: false, capabilities: ['private-chat', 'service-call', 'template-settings'],
