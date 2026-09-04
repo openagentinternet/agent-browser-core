@@ -230,6 +230,10 @@ var state = {
   pendingBookmarkRemoval: '',
   bookmarks: [],
   visits: [],
+  // Persisted MetaApp identity grants (localStorage mirror of the on-disk
+  // store; see loadIdentityGrants). Each record ties one MetaApp to one
+  // identity the user allowed it to see.
+  identityGrants: [],
   status: 'loading',
   error: '',
   lastResolveError: null,
@@ -970,11 +974,30 @@ function sanitizedActorSnapshot(actor) {
 // Identity consent: browser.actor.current and browser.actor.changed disclose
 // the connected identity (MetaID + display name) to the rendered MetaApp.
 // MetaApps are untrusted content, so disclosure requires an explicit
-// per-resource user approval. Decisions are kept in memory only and reset on
-// page reload; both 'allow' and 'deny' are remembered for the page session, so
-// a dismissed prompt is not re-shown for the same resource.
+// per-resource, per-identity user approval. 'deny' is kept in memory only and
+// resets on page reload; 'allow' additionally writes a persisted grant
+// (loadIdentityGrants) so the same identity is not re-prompted on later visits
+// to the same MetaApp.
+function actorConsentIdentityId() {
+  var snapshot = sanitizedActorSnapshot(selectedActor());
+  return textValue(snapshot && snapshot.globalMetaId);
+}
+
+// Consent decisions are scoped to the (resource URI, identity) pair: an Allow
+// for one Using Bot never covers a different Bot on the same resource.
 function actorConsentKey() {
-  return currentResourceUri();
+  var resourceUri = currentResourceUri();
+  var identityId = actorConsentIdentityId();
+  return resourceUri && identityId ? resourceUri + '|' + identityId : '';
+}
+
+// True when the (resource, identity) pair already has consent: an in-session
+// allow decision or a persisted grant for this MetaApp. Callers must check a
+// session 'deny' before consulting this.
+function actorConsentAllowed(resourceUri, identityId) {
+  var key = resourceUri && identityId ? resourceUri + '|' + identityId : '';
+  if (key && state.actorConsent[key] === 'allow') return true;
+  return !!findIdentityGrant(identityGrantAppKey(resourceUri), identityId);
 }
 
 function respondActorCurrent(sourceWindow, id) {
@@ -1034,6 +1057,15 @@ function handleBridgeActorCurrent(sourceWindow, id) {
     denyActorConsent({ sourceWindow: sourceWindow, id: id });
     return;
   }
+  var resourceUri = currentResourceUri();
+  // Persisted grant: this identity already allowed this MetaApp once, so
+  // disclose without re-prompting (and refresh lastUsedAt).
+  if (findIdentityGrant(identityGrantAppKey(resourceUri), snapshot.globalMetaId)) {
+    state.actorConsent[key] = 'allow';
+    touchIdentityGrant(resourceUri, snapshot.globalMetaId);
+    respondActorCurrent(sourceWindow, id);
+    return;
+  }
   if (state.pendingActorConsent) {
     bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
       code: 'consent_pending',
@@ -1041,8 +1073,15 @@ function handleBridgeActorCurrent(sourceWindow, id) {
     }));
     return;
   }
-  state.pendingActorConsent = { sourceWindow: sourceWindow, id: id, key: key };
-  openActorConsentModal(key, snapshot);
+  state.pendingActorConsent = {
+    sourceWindow: sourceWindow,
+    id: id,
+    key: key,
+    appUri: identityGrantAppKey(resourceUri),
+    appTitle: textValue(state.current && state.current.title),
+    identity: snapshot
+  };
+  openActorConsentModal(resourceUri, snapshot);
 }
 
 // LLM consent: browser.llm.complete asks the host to run a text completion on
@@ -2332,7 +2371,8 @@ function handleBrowserMessage(event) {
         data.type === browserLibraryRequestTypes.bookmarks ||
         data.type === browserLibraryRequestTypes.history ||
         data.type === browserLibraryRequestTypes.recentBots ||
-        data.type === browserLibraryRequestTypes.recentUris) {
+        data.type === browserLibraryRequestTypes.recentUris ||
+        data.type === browserLibraryRequestTypes.identityGrants) {
       var libraryRequestId = data.requestId !== undefined && data.requestId !== null ? data.requestId : data.id;
       var libraryResult = data.type === browserLibraryRequestTypes.snapshot
         ? getLibrarySnapshot()
@@ -2342,7 +2382,9 @@ function handleBrowserMessage(event) {
             ? getLibraryHistory(data.limit)
             : (data.type === browserLibraryRequestTypes.recentBots
               ? getLibraryRecentBots(data.limit)
-              : getLibraryRecentUris(data.limit))));
+              : (data.type === browserLibraryRequestTypes.recentUris
+                ? getLibraryRecentUris(data.limit)
+                : getLibraryIdentityGrants(data.limit)))));
       postToHost(hostResponse(data.type + ':response', libraryRequestId, true, libraryResult));
       return;
     }
@@ -4366,6 +4408,148 @@ function saveHistory() {
   }
 }
 
+// --- Persisted MetaApp identity grants --------------------------------------
+// Storage shape (localStorage key 'agent-browser:identity-grants'):
+//   { "version": 1, "grants": [record, ...] }
+// where one record binds ONE MetaApp to ONE identity the user allowed:
+//   {
+//     "appUri": "metaapp://<appPinId>",   // stable app URI, launch query stripped
+//     "appTitle": "Buzz Board",           // display hint captured at grant time
+//     "identity": {
+//       "globalMetaId": "idq1worker",     // the Using Bot that was disclosed
+//       "name": "Worker Bot"
+//     },
+//     "grantedAt": 1756950000000,         // epoch ms of the first Allow
+//     "lastUsedAt": 1756950000000         // epoch ms of the latest disclosure
+//   }
+// One record per (appUri, identity.globalMetaId). Denials are never persisted.
+// A future permissions-management panel can list/revoke via
+// AgentBrowserLibrary.getIdentityGrants() or the
+// 'agent-browser:get-identity-grants' host message.
+var IDENTITY_GRANTS_STORAGE_KEY = 'agent-browser:identity-grants';
+var IDENTITY_GRANTS_VERSION = 1;
+
+// MetaApp deep links carry launch parameters (metaapp://<appPinId>?view=...).
+// A grant covers the whole app, so the key strips everything after the first '?'.
+// Other schemes have stable URIs and are stored as-is.
+function identityGrantAppKey(uri) {
+  var value = textValue(uri);
+  if (value.toLowerCase().indexOf('metaapp://') === 0) {
+    return value.split('?', 1)[0];
+  }
+  return value;
+}
+
+function findIdentityGrant(appUri, globalMetaId) {
+  var appKey = textValue(appUri);
+  var identityKey = textValue(globalMetaId);
+  if (!appKey || !identityKey) return null;
+  for (var index = 0; index < state.identityGrants.length; index += 1) {
+    var record = state.identityGrants[index];
+    if (textValue(record && record.appUri) === appKey &&
+        textValue(record && record.identity && record.identity.globalMetaId) === identityKey) {
+      return record;
+    }
+  }
+  return null;
+}
+
+function loadIdentityGrants() {
+  state.identityGrants = [];
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    var raw = window.localStorage.getItem(IDENTITY_GRANTS_STORAGE_KEY);
+    if (!raw) return;
+    var parsed = JSON.parse(raw);
+    var records = parsed && typeof parsed === 'object' && Array.isArray(parsed.grants) ? parsed.grants : [];
+    state.identityGrants = records.filter(function (record) {
+      return record && typeof record === 'object' && textValue(record.appUri) &&
+        record.identity && typeof record.identity === 'object' &&
+        textValue(record.identity.globalMetaId);
+    }).map(function (record) {
+      return {
+        appUri: identityGrantAppKey(record.appUri),
+        appTitle: textValue(record.appTitle),
+        identity: {
+          globalMetaId: textValue(record.identity.globalMetaId),
+          name: textValue(record.identity.name)
+        },
+        grantedAt: libraryTimestamp(record.grantedAt),
+        lastUsedAt: libraryTimestamp(record.lastUsedAt)
+      };
+    });
+  } catch (error) {
+    state.identityGrants = [];
+  }
+}
+
+function saveIdentityGrants() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.setItem(IDENTITY_GRANTS_STORAGE_KEY, JSON.stringify({
+      version: IDENTITY_GRANTS_VERSION,
+      grants: state.identityGrants
+    }));
+  } catch (error) {
+    /* ignore persistence errors */
+  }
+}
+
+// Upsert the grant behind an explicit Allow click.
+function recordIdentityGrant(appUri, appTitle, identitySnapshot) {
+  var appKey = identityGrantAppKey(appUri);
+  var identityId = textValue(identitySnapshot && identitySnapshot.globalMetaId);
+  if (!appKey || !identityId) return;
+  var record = findIdentityGrant(appKey, identityId);
+  var now = Date.now();
+  if (record) {
+    record.appTitle = textValue(appTitle) || record.appTitle;
+    record.identity.name = textValue(identitySnapshot && identitySnapshot.name) || record.identity.name;
+    record.lastUsedAt = now;
+  } else {
+    state.identityGrants.push({
+      appUri: appKey,
+      appTitle: textValue(appTitle),
+      identity: {
+        globalMetaId: identityId,
+        name: textValue(identitySnapshot && identitySnapshot.name)
+      },
+      grantedAt: now,
+      lastUsedAt: now
+    });
+  }
+  saveIdentityGrants();
+}
+
+// Refresh lastUsedAt when a persisted grant discloses the identity again.
+function touchIdentityGrant(resourceUri, globalMetaId) {
+  var record = findIdentityGrant(identityGrantAppKey(resourceUri), globalMetaId);
+  if (!record) return;
+  record.lastUsedAt = Date.now();
+  saveIdentityGrants();
+}
+
+function identityGrantToLibraryItem(record) {
+  return {
+    appUri: textValue(record && record.appUri),
+    scheme: libraryScheme(record && record.appUri),
+    appTitle: textValue(record && record.appTitle),
+    identity: {
+      globalMetaId: textValue(record && record.identity && record.identity.globalMetaId),
+      name: textValue(record && record.identity && record.identity.name)
+    },
+    grantedAt: libraryTimestamp(record && record.grantedAt),
+    lastUsedAt: libraryTimestamp(record && record.lastUsedAt)
+  };
+}
+
+// Most recently used first, for a future permissions-management panel.
+function getLibraryIdentityGrants(limit) {
+  var maximum = state.identityGrants.length;
+  var resolvedLimit = libraryLimit(limit, maximum, maximum);
+  return state.identityGrants.slice().reverse().slice(0, resolvedLimit).map(identityGrantToLibraryItem);
+}
+
 function libraryTimestamp(value) {
   var timestamp = Number(value);
   return timestamp > 0 && isFinite(timestamp) ? timestamp : null;
@@ -5699,7 +5883,12 @@ async function selectUsingIdentity(slug) {
   if (tab) tab.actorId = selectedId;
   state.actorId = selectedId;
   renderUsingIdentity();
-  if (state.actorConsent[actorConsentKey()] === 'allow') {
+  // Disclose the switched-to identity only when it already has consent for the
+  // current resource: an in-session allow, or a persisted grant for this app.
+  var consentResourceUri = currentResourceUri();
+  var consentIdentityId = actorConsentIdentityId();
+  if (consentResourceUri && consentIdentityId && actorConsentAllowed(consentResourceUri, consentIdentityId)) {
+    touchIdentityGrant(consentResourceUri, consentIdentityId);
     emitBridgeEvent('browser.actor.changed', { actor: sanitizedActorSnapshot(selectedActor()) });
   }
   closeModal();
@@ -7580,6 +7769,7 @@ async function initialize() {
   if (elements.toast) elements.toast.hidden = true;
   loadBookmarks();
   loadHistory();
+  loadIdentityGrants();
   renderBookmarkStar();
   if (elements.viewport) {
     elements.viewport.addEventListener('click', function (event) {
@@ -7767,6 +7957,7 @@ async function initialize() {
         state.pendingActorConsent = null;
         if (grantedConsent) {
           state.actorConsent[grantedConsent.key] = 'allow';
+          recordIdentityGrant(grantedConsent.appUri, grantedConsent.appTitle, grantedConsent.identity);
           respondActorCurrent(grantedConsent.sourceWindow, grantedConsent.id);
         }
         closeModal();
@@ -8140,7 +8331,8 @@ globalThis.AgentBrowserLibrary = {
   getBookmarks: getLibraryBookmarks,
   getHistory: getLibraryHistory,
   getRecentBots: getLibraryRecentBots,
-  getRecentUris: getLibraryRecentUris
+  getRecentUris: getLibraryRecentUris,
+  getIdentityGrants: getLibraryIdentityGrants
 };
 
 if (document.readyState === 'loading') {
