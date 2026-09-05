@@ -1706,7 +1706,13 @@ test('html-iframe bridge emits actor changed events after actor selection', asyn
   });
   activeFrameWindow.postMessageCalls.length = 0;
 
+  // Identity consent is per identity: switching to a Bot that never allowed
+  // this app discloses nothing.
   await context.selectUsingIdentity('second-actor');
+  assert.deepEqual(activeFrameWindow.postMessageCalls, []);
+
+  // Switching back to the identity that granted consent re-discloses it.
+  await context.selectUsingIdentity('first-actor');
 
   assert.deepEqual(JSON.parse(JSON.stringify(activeFrameWindow.postMessageCalls[0])), {
     type: 'agent-browser:event',
@@ -1714,9 +1720,9 @@ test('html-iframe bridge emits actor changed events after actor selection', asyn
     event: 'browser.actor.changed',
     payload: {
       actor: {
-        uri: 'metaid://idq1second',
-        globalMetaId: 'idq1second',
-        name: 'Second',
+        uri: 'metaid://idq1first',
+        globalMetaId: 'idq1first',
+        name: 'First',
       },
     },
   });

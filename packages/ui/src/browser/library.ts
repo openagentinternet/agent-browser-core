@@ -6,6 +6,7 @@ export const BROWSER_LIBRARY_REQUEST_TYPES = {
   history: 'agent-browser:get-history',
   recentBots: 'agent-browser:get-recent-bots',
   recentUris: 'agent-browser:get-recent-uris',
+  identityGrants: 'agent-browser:get-identity-grants',
 } as const;
 
 export type BrowserLibraryRequestType =
@@ -59,6 +60,30 @@ export interface BrowserLibraryBookmark extends BrowserLibraryVisit {
   createdAt: number | null;
 }
 
+/** The identity a MetaApp was allowed to see (see BrowserLibraryIdentityGrant). */
+export interface BrowserLibraryIdentityGrantIdentity {
+  globalMetaId: string;
+  name: string;
+}
+
+/**
+ * One persisted MetaApp identity grant: the user clicked Allow on the
+ * "Identity request" panel, so this identity is disclosed to this MetaApp
+ * without re-prompting. One record per (appUri, identity.globalMetaId).
+ */
+export interface BrowserLibraryIdentityGrant {
+  /** Stable app URI; MetaApp launch queries are stripped (metaapp://<appPinId>). */
+  appUri: string;
+  scheme: string;
+  /** App display title captured when the grant was made. */
+  appTitle: string;
+  identity: BrowserLibraryIdentityGrantIdentity;
+  /** Epoch ms of the first Allow. */
+  grantedAt: number | null;
+  /** Epoch ms of the latest disclosure under this grant. */
+  lastUsedAt: number | null;
+}
+
 export interface BrowserLibrarySnapshot {
   schemaVersion: 1;
   capturedAt: number;
@@ -84,6 +109,8 @@ export interface AgentBrowserLibraryApi {
   getHistory(limit?: number): BrowserLibraryVisit[];
   getRecentBots(limit?: number): BrowserLibraryVisit[];
   getRecentUris(limit?: number): BrowserLibraryVisit[];
+  /** Most recently used grants first; input for a permissions-management panel. */
+  getIdentityGrants(limit?: number): BrowserLibraryIdentityGrant[];
 }
 
 export type BrowserLibraryHostEvent =

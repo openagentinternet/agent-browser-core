@@ -17,6 +17,7 @@ for (const modulePath of [
       history: 'agent-browser:get-history',
       recentBots: 'agent-browser:get-recent-bots',
       recentUris: 'agent-browser:get-recent-uris',
+      identityGrants: 'agent-browser:get-identity-grants',
     });
   });
 }
