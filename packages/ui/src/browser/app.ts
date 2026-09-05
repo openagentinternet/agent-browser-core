@@ -405,6 +405,34 @@ function findTabById(id) {
   return null;
 }
 
+// Find an already-open tab that shows the requested URI. A tab "has" a URI when
+// its committed resource (current.uri / current.normalizedUri) matches, or when
+// it is still loading that URI (the history entry is recorded before the fetch
+// settles, so a second open request during a slow MetaApp download must not
+// duplicate the tab). Comparison is trimmed and case-insensitive: core
+// normalization lowercases every Browser scheme (metaid/metaapp/metafile/map/pin),
+// so case variants of the same URI are the same resource. A committed match wins
+// over a still-loading match; tabs whose last resolve errored never match, so a
+// retry request opens a fresh navigation instead of focusing the error pane.
+function findTabByUri(uri) {
+  var wanted = textValue(uri).toLowerCase();
+  if (!wanted) return null;
+  var loadingMatch = null;
+  for (var i = 0; i < state.tabs.length; i += 1) {
+    var tab = state.tabs[i];
+    if (tab.current) {
+      var committed = textValue(tab.current.uri).toLowerCase();
+      if (!committed) committed = textValue(tab.current.normalizedUri).toLowerCase();
+      if (committed === wanted) return tab;
+    }
+    if (!loadingMatch && tab.status === 'loading' && tab.historyIndex >= 0) {
+      var pending = textValue(tab.history[tab.historyIndex]).toLowerCase();
+      if (pending === wanted) loadingMatch = tab;
+    }
+  }
+  return loadingMatch;
+}
+
 // Resolve the optional tabId argument shared by getTabContent/getTabInfo:
 // undefined/null/'' means the active tab, anything else is coerced to a number.
 function resolveTabForRead(tabId) {
@@ -489,10 +517,22 @@ function getTabInfo(tabId) {
 }
 
 // Create + activate a new tab. If uri is provided, navigate the new tab to it;
-// otherwise show the welcome page. An optional actorId lets the host open the
-// tab with a specific Using Actor; it must exist in runtime.actors, otherwise
-// the new tab falls back to the host default actor. Returns the new tab id.
-function openTab(uri, actorId) {
+// otherwise show the welcome page. When a uri is provided and a tab already
+// shows that URI, switch to the existing tab instead of duplicating it (external
+// open requests — e.g. a host delivering an 'agent-browser:open-tab' message —
+// must focus the open resource, not stack copies); pass options.dedupe === false
+// to force a new tab for explicit in-app "open in new tab" gestures. An optional
+// actorId lets the host open the tab with a specific Using Actor; it must exist
+// in runtime.actors, otherwise the new tab falls back to the host default actor.
+// Returns the tab id now showing the uri (the reused tab when deduped).
+function openTab(uri, actorId, options) {
+  if (textValue(uri) && !(options && options.dedupe === false)) {
+    var existing = findTabByUri(uri);
+    if (existing) {
+      switchTab(existing.id);
+      return existing.id;
+    }
+  }
   var previousTabId = state.activeTabId;
   var tab = createTab();
   var requestedActorId = textValue(actorId);
@@ -7784,7 +7824,7 @@ async function initialize() {
         if (event && typeof event.preventDefault === 'function') event.preventDefault();
         var openInNewTab = (event && (event.ctrlKey || event.metaKey)) ||
           (mapLink && typeof mapLink.getAttribute === 'function' && mapLink.getAttribute('target') === '_blank');
-        if (openInNewTab) openTab(mapHref);
+        if (openInNewTab) openTab(mapHref, undefined, { dedupe: false });
         else navigateTo(mapHref);
         return;
       }
