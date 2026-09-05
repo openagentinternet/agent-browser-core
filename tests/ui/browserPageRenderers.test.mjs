@@ -1170,9 +1170,11 @@ test('html-iframe renderer is sandboxed without privileged permissions', async (
 });
 
 test('html-iframe sandbox keeps the frame own origin only for cross-origin preview URLs', async () => {
+  // Loopback-hosted page (local dev / embedded host topology): the dedicated
+  // loopback preview origin is reachable and stays cross-origin, keeping allow-same-origin.
   const pageLocation = {
-    origin: 'http://browser.test',
-    href: 'http://browser.test/browser',
+    origin: 'http://127.0.0.1:8787',
+    href: 'http://127.0.0.1:8787/browser',
     search: '?uri=metaid%3A%2F%2Fidq1fixturebot',
   };
 
@@ -1191,13 +1193,55 @@ test('html-iframe sandbox keeps the frame own origin only for cross-origin previ
   const same = runWithResolve(result({
     type: 'html-iframe',
     contentType: 'text/html',
-    url: 'http://browser.test/api/browser/preview-assets/standalone-x/index.html',
+    url: 'http://127.0.0.1:8787/api/browser/preview-assets/standalone-x/index.html',
   }), { pageLocation });
   await waitFor(() => same.nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'same-origin iframe render');
   const sameHtml = same.nodes['[data-browser-viewport]'].innerHTML;
   // Frames served same-origin with the page stay fully opaque.
-  assert.match(sameHtml, /<iframe class="browser-html-frame" sandbox="allow-scripts allow-downloads" src="http:\/\/browser\.test\//);
+  assert.match(sameHtml, /<iframe class="browser-html-frame" sandbox="allow-scripts allow-downloads" src="http:\/\/127\.0\.0\.1:8787\//);
   assert.doesNotMatch(sameHtml, /allow-same-origin/);
+});
+
+test('html-iframe renderer rewrites loopback preview URLs onto the public page origin', async () => {
+  // Publicly hosted page: the standalone preview origin (127.0.0.1:<port>) only
+  // exists on the server machine, so renderer URLs are rewritten onto the page
+  // origin, which serves the same preview-assets routes. The rewritten frame is
+  // same-origin and therefore stays opaque (no allow-same-origin).
+  const pageLocation = {
+    origin: 'https://openagentinternet.org',
+    href: 'https://openagentinternet.org/browser/metaapp/fixture',
+    search: '?uri=metaid%3A%2F%2Fidq1fixturebot',
+  };
+
+  const rewritten = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'http://127.0.0.1:39753/api/browser/preview-assets/standalone-x/index.html?v=2#top',
+  }), { pageLocation });
+  await waitFor(() => rewritten.nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'rewritten iframe render');
+  const rewrittenHtml = rewritten.nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(rewrittenHtml, /<iframe class="browser-html-frame" sandbox="allow-scripts allow-downloads" src="\/api\/browser\/preview-assets\/standalone-x\/index\.html\?v=2#top"/);
+  assert.doesNotMatch(rewrittenHtml, /src="http:\/\/127\.0\.0\.1/);
+  assert.doesNotMatch(rewrittenHtml, /allow-same-origin/);
+
+  // Loopback URLs outside the preview-assets routes are left untouched.
+  const untouched = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'http://127.0.0.1:39753/admin',
+  }), { pageLocation });
+  await waitFor(() => untouched.nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'untouched iframe render');
+  const untouchedHtml = untouched.nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(untouchedHtml, /<iframe class="browser-html-frame" sandbox="allow-scripts allow-same-origin allow-downloads" src="http:\/\/127\.0\.0\.1:39753\/admin"/);
+
+  // Non-loopback absolute URLs are never rewritten.
+  const external = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }), { pageLocation });
+  await waitFor(() => external.nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'external iframe render');
+  assert.match(external.nodes['[data-browser-viewport]'].innerHTML, /src="https:\/\/metaweb\.example\/app"/);
 });
 
 test('html-iframe navigation bridge accepts only active iframe internal URI messages', async () => {
