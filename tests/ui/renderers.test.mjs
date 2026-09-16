@@ -406,8 +406,9 @@ test('safeRendererUrl allows local http and https URLs only', () => {
 test('pdf image and video render with content-specific elements', () => {
   const pdf = ui.renderResourceHtml({ uri: 'metaapp://pdf', normalizedUri: 'metaapp://pdf', resourceType: 'pdf', title: 'PDF', renderer: { type: 'pdf', contentType: 'application/pdf', url: 'https://files.example/a.pdf' }, actions: [], sections: [] });
   assert.match(pdf, /class="browser-pdf"/);
-  assert.match(pdf, /sandbox=""/);
-  assert.doesNotMatch(pdf, /allow-same-origin/);
+  // Chrome's PDF viewer needs allow-scripts + allow-same-origin (+ allow-downloads
+  // for its toolbar); a stricter sandbox makes Chrome block the document.
+  assert.match(pdf, /sandbox="allow-scripts allow-same-origin allow-downloads"/);
   assert.match(ui.renderResourceHtml({ uri: 'metaapp://image', normalizedUri: 'metaapp://image', resourceType: 'image', title: 'Image', renderer: { type: 'image', contentType: 'image/png', url: 'https://files.example/a.png' }, actions: [], sections: [] }), /class="browser-image"/);
   // Video and audio metafiles render a centered media stage whose player slot
   // the client enhances (supporting the chunked-video manifest scheme).
