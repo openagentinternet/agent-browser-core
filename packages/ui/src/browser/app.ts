@@ -7575,7 +7575,13 @@ function renderRenderer(current) {
     return '<iframe class="browser-html-frame" sandbox="' + htmlFrameSandbox(url) + '" src="' + escapeHtml(url) + '"></iframe>';
   }
   if (type === 'pdf') {
-    return '<section class="browser-pdf-wrap"><iframe class="browser-pdf" sandbox="" src="' + escapeHtml(url) + '"></iframe><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Open PDF</a></section>';
+    // Chrome's built-in PDF viewer cannot run in an opaque-origin frame: it
+    // needs allow-scripts + allow-same-origin or Chrome blocks the document
+    // (sandbox="" renders as a gray box / "blocked by Chrome" page). The frame
+    // keeps the content CDN's own origin, which is cross-origin to the Browser
+    // page, so it still cannot script the UI. allow-downloads keeps the
+    // viewer toolbar download working.
+    return '<section class="browser-pdf-wrap"><iframe class="browser-pdf" sandbox="allow-scripts allow-same-origin allow-downloads" src="' + escapeHtml(url) + '"></iframe><a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Open PDF</a></section>';
   }
   if (type === 'image') {
     return '<img class="browser-image" src="' + escapeHtml(url) + '" alt="" />';
