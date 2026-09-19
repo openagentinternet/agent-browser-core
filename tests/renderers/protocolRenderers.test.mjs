@@ -456,16 +456,73 @@ test('Pin inspector sanitizes raw HTML and blocks unsafe markdown links', () => 
 });
 
 test('Pin inspector blocks unsafe markdown images and avoids auto-embedding external image syntax', () => {
-  const html = renderers.renderPinInspectorHtml(pinInspectorResource(
-    'text/markdown',
-    '![Bad](javascript:alert(1))\n\n![Preview](metafile://image-fixture)\n\n![External](https://files.example/image.png)',
-    { rawPayload: '![Bad](javascript:alert(1))\n\n![Preview](metafile://image-fixture)\n\n![External](https://files.example/image.png)' },
-  ));
+  const imagePinId = '320179c814f9a6048add5fb773b231ff79057f0b388dd1f6988d28fdb5b93c46i0';
+  const markdown = [
+    '![Bad](javascript:alert(1))',
+    `![Preview](metafile://${imagePinId})`,
+    '![NotAPinId](metafile://image-fixture)',
+    '![External](https://files.example/image.png)',
+  ].join('\n\n');
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource('text/markdown', markdown, {
+    rawPayload: markdown,
+  }));
 
   assert.doesNotMatch(html, /<img/);
   assert.doesNotMatch(html, /href="javascript:alert\(1\)"/);
+  // Valid metafile image references hydrate through the same media preview
+  // slots as Related Media; external images stay plain links.
+  assert.match(html, new RegExp(`data-browser-media-preview-ref="metafile://${imagePinId}"`));
+  assert.match(html, /data-browser-media-preview-slot/);
+  // Metafile references without a valid pin id degrade to plain links.
+  assert.doesNotMatch(html, /data-browser-media-preview-ref="metafile:\/\/image-fixture"/);
   assert.match(html, /href="metafile:\/\/image-fixture" data-browser-map-link/);
   assert.match(html, /href="https:\/\/files\.example\/image\.png" target="_blank" rel="noopener"/);
+});
+
+test('Pin inspector renders markdown documents wrapped in JSON payloads', () => {
+  const payload = {
+    title: 'Wrapped markdown',
+    contentType: 'text/markdown',
+    content: [
+      '# Wrapped Heading',
+      '',
+      '> quoted note with pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0 reference',
+      '',
+      '```',
+      'code block body',
+      '```',
+      '',
+      '![乐烧陶碗](metafile://320179c814f9a6048add5fb773b231ff79057f0b388dd1f6988d28fdb5b93c46i0)',
+    ].join('\n'),
+    tags: ['markdown'],
+  };
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource('application/json', payload, {
+    rawPayload: JSON.stringify(payload),
+  }));
+
+  assert.match(html, /JSON payload carries a text\/markdown content field/);
+  assert.match(html, /<div class="browser-pin-markdown">/);
+  assert.match(html, /<h1>Wrapped Heading<\/h1>/);
+  assert.match(html, /<blockquote>/);
+  assert.match(html, /<pre><code>code block body\n<\/code><\/pre>/);
+  assert.match(html, /data-browser-media-preview-ref="metafile:\/\/320179c814f9a6048add5fb773b231ff79057f0b388dd1f6988d28fdb5b93c46i0"/);
+  assert.match(html, /href="pin:\/\/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0" data-browser-map-link/);
+  assert.doesNotMatch(html, /class="browser-pin-json-doc"/);
+  // Raw Payload keeps showing the original JSON document.
+  assert.match(html, /<h3>Raw Payload<\/h3>/);
+  assert.match(html, /&quot;contentType&quot;: &quot;text\/markdown&quot;/);
+});
+
+test('Pin inspector honors content-type key variant for wrapped markdown payloads', () => {
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource('application/json', {
+    'content-type': 'text/markdown; charset=utf-8',
+    content: '# Variant Heading',
+  }, {
+    rawPayload: '{"content-type":"text/markdown; charset=utf-8","content":"# Variant Heading"}',
+  }));
+
+  assert.match(html, /<h1>Variant Heading<\/h1>/);
+  assert.match(html, /JSON payload carries a text\/markdown content field/);
 });
 
 test('Pin inspector renders plain text payload without markdown parsing', () => {
