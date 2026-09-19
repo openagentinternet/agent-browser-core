@@ -3150,6 +3150,69 @@ test('pin-inspector markdown payload renders structured lists in the mature shel
   assert.match(html, /href="metaid:\/\/idq1fixturebot" data-browser-map-link/);
 });
 
+test('pin-inspector renders markdown documents wrapped in JSON payloads', async () => {
+  const payload = {
+    title: 'Wrapped markdown',
+    contentType: 'text/markdown',
+    content: [
+      '# Wrapped Heading',
+      '',
+      '> quoted note with pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0 reference.',
+      '',
+      '```',
+      'code block body',
+      '```',
+      '',
+      '![乐烧陶碗](metafile://320179c814f9a6048add5fb773b231ff79057f0b388dd1f6988d28fdb5b93c46i0)',
+    ].join('\n'),
+  };
+  const { nodes } = runWithResolve(result({
+    type: 'pin-inspector',
+    contentType: 'application/json',
+    data: {
+      rendererId: 'generic.pin-inspector',
+      version: {
+        requestedPinId: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        resolvedPinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        versionSelector: 'latest',
+      },
+      pin: {
+        pinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        path: '/protocols/simplenote',
+        contentType: 'application/json',
+        operation: 'create',
+        chainName: 'btc',
+        encryption: 'public',
+        version: '1',
+      },
+      payload,
+      rawPayload: JSON.stringify(payload),
+      rawPinRecord: {
+        path: '/protocols/simplenote',
+        txid: 'b'.repeat(64),
+      },
+    },
+  }, {
+    uri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    normalizedUri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    resourceType: 'pin',
+    title: 'Pin Wrapped markdown',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-pin-markdown'), 'wrapped markdown pin render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(html, /JSON payload carries a text\/markdown content field/);
+  assert.match(html, /<h1>Wrapped Heading<\/h1>/);
+  assert.match(html, /<blockquote>/);
+  assert.match(html, /<pre><code>code block body<\/code><\/pre>/);
+  assert.match(html, /data-browser-media-preview-ref="metafile:\/\/320179c814f9a6048add5fb773b231ff79057f0b388dd1f6988d28fdb5b93c46i0"/);
+  assert.match(html, /href="pin:\/\/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0" data-browser-map-link/);
+  assert.doesNotMatch(html, /class="browser-pin-json-doc"/);
+  // Raw Payload keeps showing the original JSON document.
+  assert.match(html, /browser-protocol-raw">&lbrace;|\{\n  &quot;title&quot;/);
+});
+
 test('pdf, image, and video render with content-specific elements', async () => {
   const pdf = runWithResolve(result({ type: 'pdf', contentType: 'application/pdf', url: 'https://files.example/a.pdf' }));
   await waitFor(() => pdf.nodes['[data-browser-viewport]'].innerHTML.includes('browser-pdf'), 'pdf render');
