@@ -3056,6 +3056,64 @@ test('pin-inspector renders metaapp links and bare non-current pin IDs as relate
   assert.doesNotMatch(html, new RegExp(`href="pin://${resolvedPinId}"`));
 });
 
+test('pin-inspector stops MetaWeb URI recognition at CJK prose and links the full URI text', async () => {
+  const cjkPinId = 'b45e8f9828ae51fac5b36312d5c9eff6134b89efc879822c83b550e7a18cdec9i0';
+  const cjkMetafilePinId = 'caf609394e3d86ed8478ac5242336a3363209c387ca3aec8e3ffca3d9f6ff98bi0';
+  const markdown = [
+    `群任务验收包（pin://${cjkPinId}）记录：Bot Browser 沙箱`,
+    '',
+    `附件 metafile://${cjkMetafilePinId}。`,
+  ].join('\n');
+  const { nodes } = runWithResolve(result({
+    type: 'pin-inspector',
+    contentType: 'text/markdown',
+    data: {
+      rendererId: 'generic.pin-inspector',
+      version: {
+        requestedPinId: '6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        resolvedPinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        versionSelector: 'latest',
+      },
+      pin: {
+        pinId: '7ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+        path: '/protocols/simplebuzz',
+        contentType: 'text/markdown',
+        chainName: 'btc',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+      payload: markdown,
+      rawPayload: markdown,
+      rawPinRecord: {
+        path: '/protocols/simplebuzz',
+        contentType: 'text/markdown',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+    },
+  }, {
+    uri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    normalizedUri: 'pin://6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
+    resourceType: 'pin',
+    title: 'Pin CJK URI fixture',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-pin-markdown'), 'markdown pin render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+
+  // Markdown body autolinks stop at the full-width parenthesis/period and
+  // render the complete URI as the link text instead of a shortened label.
+  assert.match(html, new RegExp(`<a href="pin://${cjkPinId}" data-browser-map-link>pin://${cjkPinId}</a>）记录：Bot`));
+  assert.match(html, new RegExp(`<a href="metafile://${cjkMetafilePinId}" data-browser-map-link>metafile://${cjkMetafilePinId}</a>。`));
+  assert.doesNotMatch(html, /href="pin:\/\/[^"]*）/);
+  assert.doesNotMatch(html, /href="metafile:\/\/[^"]*。/);
+  // Related Links collects the same URIs without trailing CJK prose.
+  assert.match(html, new RegExp(`<a class="browser-pin-link-pill" href="pin://${cjkPinId}" data-browser-map-link>`));
+  assert.match(html, new RegExp(`<a class="browser-pin-link-pill" href="metafile://${cjkMetafilePinId}" data-browser-map-link>`));
+  assert.doesNotMatch(html, /browser-pin-link-pill" href="[^"]*[）记录。]/);
+});
+
 test('pin-inspector renders JSON strings from plain text payloads as structured documents', async () => {
   const rawPayload = '{"content":"7\\n#美食工厂","contentType":"application/json;utf-8","attachments":["metafile://50d939b24815df1afd4c37137eebe15f65dbd71ae2ea505b465558a3f170c342i0.jpg"]}';
   const { nodes } = runWithResolve(result({

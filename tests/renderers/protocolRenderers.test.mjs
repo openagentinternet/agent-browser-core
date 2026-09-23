@@ -289,6 +289,30 @@ test('Pin inspector renders metaapp links and bare non-current pin IDs as relate
   assert.doesNotMatch(html, new RegExp(`href="pin://${currentResolvedPinId}"`));
 });
 
+test('Pin inspector stops MetaWeb URI recognition at CJK prose and links the full URI text', () => {
+  const cjkPinId = 'b45e8f9828ae51fac5b36312d5c9eff6134b89efc879822c83b550e7a18cdec9i0';
+  const cjkMetafilePinId = 'caf609394e3d86ed8478ac5242336a3363209c387ca3aec8e3ffca3d9f6ff98bi0';
+  const markdown = [
+    `群任务验收包（pin://${cjkPinId}）记录：Bot Browser 沙箱`,
+    '',
+    `附件 metafile://${cjkMetafilePinId}。`,
+  ].join('\n');
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource('text/markdown', markdown, {
+    rawPayload: markdown,
+  }));
+
+  // Markdown body autolinks stop at the full-width parenthesis/period and
+  // render the complete URI as the link text instead of a shortened label.
+  assert.match(html, new RegExp(`<a href="pin://${cjkPinId}" data-browser-map-link>pin://${cjkPinId}</a>）记录：Bot`));
+  assert.match(html, new RegExp(`<a href="metafile://${cjkMetafilePinId}" data-browser-map-link>metafile://${cjkMetafilePinId}</a>。`));
+  assert.doesNotMatch(html, /href="pin:\/\/[^"]*）/);
+  assert.doesNotMatch(html, /href="metafile:\/\/[^"]*。/);
+  // Related Links collects the same URIs without trailing CJK prose.
+  assert.match(html, new RegExp(`<a class="browser-pin-link-pill" href="pin://${cjkPinId}" data-browser-map-link>`));
+  assert.match(html, new RegExp(`<a class="browser-pin-link-pill" href="metafile://${cjkMetafilePinId}" data-browser-map-link>`));
+  assert.doesNotMatch(html, /browser-pin-link-pill" href="[^"]*[）记录。]/);
+});
+
 test('Pin inspector shows the pin update timestamp instead of "latest effective version" when a timestamp is present', () => {
   const html = renderers.renderPinInspectorHtml(pinInspectorResource('application/json', { title: 'Timestamped pin' }, {
     rawPinRecord: {

@@ -319,7 +319,14 @@ function renderMarkdownReference(href: string, content: string, title?: string |
 }
 
 const METAWEB_URI_PREFIX_PATTERN = /(?:metaid|metaapp|metafile|map|pin):\/\//iu;
-const METAWEB_URI_PATTERN = /^(?:metaid|metaapp|metafile|map|pin):\/\/[^\s"'<>()[\]{}]+/iu;
+// MetaWeb and external link URIs are ASCII-only: the body match stops at
+// ASCII whitespace/control characters, quotes, brackets, and any non-ASCII
+// character, so trailing non-ASCII prose (CJK punctuation, full-width
+// parentheses) is never absorbed into the recognized URI.
+const URI_BODY_PATTERN_SOURCE = "[^\\x00-\\x20\"'<>()[\\]{}\\u007f-\\uffff]";
+const METAWEB_URI_PATTERN = new RegExp(`^(?:metaid|metaapp|metafile|map|pin):\\/\\/${URI_BODY_PATTERN_SOURCE}+`, 'iu');
+const METAWEB_URI_GLOBAL_PATTERN = new RegExp(`(?:metaid|metaapp|metafile|map|pin):\\/\\/${URI_BODY_PATTERN_SOURCE}+`, 'giu');
+const EXTERNAL_URI_GLOBAL_PATTERN = new RegExp(`https?:\\/\\/${URI_BODY_PATTERN_SOURCE}+`, 'giu');
 
 // Metafile image references inside markdown reuse the pin inspector media
 // hydration slots (data-browser-media-preview-ref/slot), so the client
@@ -327,7 +334,7 @@ const METAWEB_URI_PATTERN = /^(?:metaid|metaapp|metafile|map|pin):\/\/[^\s"'<>()
 function renderMarkdownMetafileImage(href: string, alt: string, title?: string | null): string {
   const normalizedHref = text(href);
   const titleAttribute = title ? ` title="${escapeHtml(title)}"` : '';
-  const label = text(alt) || shortReference(normalizedHref);
+  const label = text(alt) || normalizedHref;
   return `<span class="browser-pin-md-image" data-browser-media-preview-ref="${escapeHtml(normalizedHref)}"${titleAttribute}><span class="browser-pin-md-image-slot" data-browser-media-preview-slot>${linkHtml(normalizedHref, label)}</span></span>`;
 }
 
@@ -348,13 +355,12 @@ markdownRenderer.use({
         if (!match) return undefined;
         const raw = match[0].replace(/[),.;!?]+$/u, '');
         if (!raw.includes('://')) return undefined;
-        const label = shortReference(raw);
         return {
           type: 'link',
           raw,
           href: raw,
           title: null,
-          tokens: [{ type: 'text', raw: label, text: label }],
+          tokens: [{ type: 'text', raw, text: raw }],
         };
       },
     },
@@ -751,12 +757,12 @@ function collectBrowserUris(
   ignoredPinIds = new Set<string>()
 ): void {
   if (typeof value === 'string') {
-    const matches = value.match(/(?:metaid|metaapp|metafile|map|pin):\/\/[^\s"'<>()[\]{}]+/giu) || [];
+    const matches = value.match(METAWEB_URI_GLOBAL_PATTERN) || [];
     for (const uri of matches) {
       output.add(uri.replace(/[),.;!?]+$/u, ''));
     }
     if (includeExternal) {
-      const externalMatches = value.match(/https?:\/\/[^\s"'<>()[\]{}]+/giu) || [];
+      const externalMatches = value.match(EXTERNAL_URI_GLOBAL_PATTERN) || [];
       for (const uri of externalMatches) {
         output.add(uri.replace(/[),.;!?]+$/u, ''));
       }
