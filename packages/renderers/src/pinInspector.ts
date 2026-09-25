@@ -2,7 +2,9 @@ import { Marked } from 'marked';
 
 import type { BrowserResourceEnvelope } from '@openagentinternet/agent-browser-host-contract';
 
-const INTERNAL_BROWSER_URI_PATTERN = /^(metaid|metaapp|metafile|map|pin):\/\//iu;
+// A MetaWeb URI must carry a non-empty body after "://" — bare prefixes like
+// "metafile://" in prose are never actionable links.
+const INTERNAL_BROWSER_URI_PATTERN = /^(metaid|metaapp|metafile|map|pin):\/\/[^\x00-\x20"'<>()\[\]{}\u007f-\uffff]/iu;
 const EXTERNAL_URL_PATTERN = /^https?:\/\//iu;
 const MEDIA_KEYS = ['images', 'image', 'imageUrls', 'attachments', 'files', 'media'];
 const IMAGE_MEDIA_KEYS = new Set(['images', 'image', 'imageUrls']);
@@ -715,7 +717,7 @@ function mediaKind(uri: string, sourceKey = ''): PinMediaItem['kind'] {
 }
 
 function isMediaReferenceUri(uri: string): boolean {
-  return EXTERNAL_URL_PATTERN.test(uri) || uri.startsWith('metafile://');
+  return EXTERNAL_URL_PATTERN.test(uri) || (uri.startsWith('metafile://') && uri.length > 'metafile://'.length);
 }
 
 function mediaReference(value: unknown, sourceKey = ''): PinMediaItem | null {

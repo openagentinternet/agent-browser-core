@@ -553,6 +553,36 @@ test('Pin inspector styles wrap long tokens so payloads never blow out the card 
   assert.match(html, /\.browser-pin-markdown table \{ display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; \}/);
 });
 
+test('Pin inspector never recognizes empty-body MetaWeb URIs as links or media', () => {
+  const linkedPinId = 'fd7603131166e30663981864c0223351deb1336b6eb33a0396237d5847fa504ai9';
+  const markdown = [
+    '原文配图已全部上链，以 metafile:// 内嵌于对应篇章。',
+    '',
+    `章节索引见 pin://${linkedPinId}。`,
+  ].join('\n');
+  const markdownHtml = renderers.renderPinInspectorHtml(pinInspectorResource('text/markdown', markdown, {
+    rawPayload: markdown,
+  }));
+
+  // Bare prefixes in prose stay plain text — no anchor, no Related Links pill.
+  assert.doesNotMatch(markdownHtml, /href="metafile:\/\/"/);
+  assert.doesNotMatch(markdownHtml, /class="browser-pin-link-pill" href="metafile:\/\/"/);
+  assert.match(markdownHtml, /以 metafile:\/\/ 内嵌于对应篇章。/);
+  // Valid references in the same payload are still recognized.
+  assert.match(markdownHtml, new RegExp(`href="pin://${linkedPinId}" data-browser-map-link`));
+  assert.match(markdownHtml, new RegExp(`class="browser-pin-link-pill" href="pin://${linkedPinId}"`));
+
+  const jsonHtml = renderers.renderPinInspectorHtml(pinInspectorResource('application/json', {
+    note: 'metaid://',
+    images: ['metafile://', `metafile://${linkedPinId}`],
+  }, { rawPayload: '{}' }));
+
+  assert.doesNotMatch(jsonHtml, /href="metaid:\/\/"/);
+  // Empty media references produce no preview or file row; valid ones still do.
+  assert.doesNotMatch(jsonHtml, /data-browser-media-preview-ref="metafile:\/\/"/);
+  assert.match(jsonHtml, new RegExp(`data-browser-media-preview-ref="metafile://${linkedPinId}"`));
+});
+
 test('Pin inspector honors content-type key variant for wrapped markdown payloads', () => {
   const html = renderers.renderPinInspectorHtml(pinInspectorResource('application/json', {
     'content-type': 'text/markdown; charset=utf-8',

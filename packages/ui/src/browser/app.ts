@@ -893,7 +893,9 @@ function buildMetafileContentHref(reference) {
 }
 
 function isBrowserInternalHref(value) {
-  return /^(metaid|metaapp|metafile|map|pin):\\/\\//i.test(textValue(value));
+  // A MetaWeb URI must carry a non-empty body after "://" — bare prefixes
+  // like "metafile://" in prose are never actionable links.
+  return /^(metaid|metaapp|metafile|map|pin):\\/\\/[^\\x00-\\x20"'<>()\\[\\]{}\\u007f-\\uffff]/i.test(textValue(value));
 }
 
 function currentBrowserHtmlFrameWindow() {
@@ -7182,7 +7184,7 @@ function pinInspectorMediaKind(uri, sourceKey) {
 }
 
 function pinInspectorIsMediaReferenceUri(uri) {
-  return /^https?:\\/\\//i.test(uri) || uri.indexOf('metafile://') === 0;
+  return /^https?:\\/\\//i.test(uri) || (uri.indexOf('metafile://') === 0 && uri.length > 'metafile://'.length);
 }
 
 function pinInspectorMediaReference(value, sourceKey) {
@@ -7245,7 +7247,7 @@ function pinInspectorCollectBrowserUris(value, output, seen, includeExternal, ig
         while (uri && '),.;!?'.indexOf(uri.charAt(uri.length - 1)) !== -1) {
           uri = uri.slice(0, -1);
         }
-        if (uri) output.add(uri);
+        if (uri.length > prefix.length) output.add(uri);
         start = end;
       }
     });

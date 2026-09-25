@@ -3126,6 +3126,64 @@ test('pin-inspector style sheet wraps long tokens so mobile viewports stay scrol
   assert.match(script, /\.browser-pin-markdown table \{ display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; \}/);
 });
 
+test('pin-inspector never recognizes empty-body MetaWeb URIs as links', async () => {
+  const markdown = [
+    '原文配图已全部上链，以 metafile:// 内嵌于对应篇章。',
+    '',
+    `章节索引见 pin://${relatedBarePinId}。`,
+    '',
+    '空的 metaid:// 与 metaapp:// 均不识别。',
+  ].join('\n');
+  const { nodes } = runWithResolve(result({
+    type: 'pin-inspector',
+    contentType: 'text/markdown',
+    data: {
+      rendererId: 'generic.pin-inspector',
+      version: {
+        requestedPinId: servicePinId,
+        resolvedPinId: buzzPinId,
+        versionSelector: 'latest',
+      },
+      pin: {
+        pinId: buzzPinId,
+        path: '/protocols/simplebuzz',
+        contentType: 'text/markdown',
+        chainName: 'btc',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+      payload: markdown,
+      rawPayload: markdown,
+      rawPinRecord: {
+        path: '/protocols/simplebuzz',
+        contentType: 'text/markdown',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+    },
+  }, {
+    uri: `pin://${servicePinId}`,
+    normalizedUri: `pin://${servicePinId}`,
+    resourceType: 'pin',
+    title: 'Pin empty URI fixture',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-pin-markdown'), 'markdown pin render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+
+  // Bare prefixes in prose stay plain text: no anchor in the document body and
+  // no Related Links pill, for every MetaWeb scheme.
+  assert.doesNotMatch(html, /href="metafile:\/\/"/);
+  assert.doesNotMatch(html, /href="metaid:\/\/"/);
+  assert.doesNotMatch(html, /href="metaapp:\/\/"/);
+  assert.doesNotMatch(html, /browser-pin-link-pill" href="metafile:\/\//);
+  assert.match(html, /以 metafile:\/\/ 内嵌于对应篇章。/);
+  // Valid references in the same payload are still recognized.
+  assert.match(html, new RegExp(`href="pin://${relatedBarePinId}" data-browser-map-link`));
+  assert.match(html, new RegExp(`browser-pin-link-pill" href="pin://${relatedBarePinId}"`));
+});
+
 test('pin-inspector renders JSON strings from plain text payloads as structured documents', async () => {
   const rawPayload = '{"content":"7\\n#美食工厂","contentType":"application/json;utf-8","attachments":["metafile://50d939b24815df1afd4c37137eebe15f65dbd71ae2ea505b465558a3f170c342i0.jpg"]}';
   const { nodes } = runWithResolve(result({
