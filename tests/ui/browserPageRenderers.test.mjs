@@ -3114,6 +3114,18 @@ test('pin-inspector stops MetaWeb URI recognition at CJK prose and links the ful
   assert.doesNotMatch(html, /browser-pin-link-pill" href="[^"]*[）记录。]/);
 });
 
+test('pin-inspector style sheet wraps long tokens so mobile viewports stay scroll-free', () => {
+  const script = buildBrowserPageDefinition().script;
+  // Bare pin:// URIs inside markdown must wrap instead of forcing the
+  // markdown grid column past the mobile viewport width.
+  assert.match(script, /\.browser-pin-markdown \{ display: grid; gap: 10px; min-width: 0; line-height: 1\.7; color: #162132; overflow-wrap: anywhere; \}/);
+  // Section-inherited wrapping guards JSON values, list items, and media
+  // labels against the same min-content blowout.
+  assert.match(script, /\.browser-pin-section \{ display: grid; gap: 12px; min-width: 0; padding: 16px 18px; border: 1px solid #d9e1ed; border-radius: 14px; background: #fff; overflow-wrap: anywhere; \}/);
+  // Markdown tables scroll inside the card on narrow screens.
+  assert.match(script, /\.browser-pin-markdown table \{ display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; \}/);
+});
+
 test('pin-inspector renders JSON strings from plain text payloads as structured documents', async () => {
   const rawPayload = '{"content":"7\\n#美食工厂","contentType":"application/json;utf-8","attachments":["metafile://50d939b24815df1afd4c37137eebe15f65dbd71ae2ea505b465558a3f170c342i0.jpg"]}';
   const { nodes } = runWithResolve(result({

@@ -537,6 +537,22 @@ test('Pin inspector renders markdown documents wrapped in JSON payloads', () => 
   assert.match(html, /&quot;contentType&quot;: &quot;text\/markdown&quot;/);
 });
 
+test('Pin inspector styles wrap long tokens so payloads never blow out the card width', () => {
+  const markdown = `# Mobile wrap\n\nRef pin://${'ab'.repeat(32)}i0 and prose.`;
+  const html = renderers.renderPinInspectorHtml(pinInspectorResource('text/markdown', markdown, {
+    rawPayload: markdown,
+  }));
+
+  // Long unbreakable tokens (bare pin URIs) must wrap instead of widening the
+  // markdown column past the mobile viewport.
+  assert.match(html, /\.browser-pin-markdown \{[^}]*min-width: 0[^}]*overflow-wrap: anywhere/);
+  // Section-level inherited wrapping also guards JSON values, list items, and
+  // media labels against min-content blowout inside grid tracks.
+  assert.match(html, /\.browser-pin-section \{[^}]*overflow-wrap: anywhere/);
+  // Server-rendered markdown tables scroll inside the card on narrow screens.
+  assert.match(html, /\.browser-pin-markdown table \{ display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; \}/);
+});
+
 test('Pin inspector honors content-type key variant for wrapped markdown payloads', () => {
   const html = renderers.renderPinInspectorHtml(pinInspectorResource('application/json', {
     'content-type': 'text/markdown; charset=utf-8',
