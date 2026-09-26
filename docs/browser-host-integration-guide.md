@@ -239,11 +239,21 @@ Deployment notes:
   Hosts that need cross-restart persistence should pin a fixed preview origin
   (e.g. `previewContentBaseUrl: 'http://127.0.0.1:<fixed-port>'` served by the
   same preview-assets routes) or front a stable dedicated domain.
-- Public (non-loopback) deployments: visitors' browsers cannot reach the
-  host's loopback preview origin, so the client rewrites preview URLs onto the
-  page origin and frames intentionally render opaque (session-only). Serve
-  preview assets from a stable dedicated origin (subdomain or separate port on
-  the public host) via `previewContentBaseUrl` to keep storage persistent.
+- Public (non-loopback) deployments: the ephemeral loopback origin is
+  unreachable from a visitor's browser by nature — the client rewrites
+  loopback preview URLs onto the page origin, so frames intentionally render
+  opaque and app storage is session-only. **Remote deployments must provide a
+  second public origin** (a dedicated subdomain such as
+  `preview.<host>.org`, or a separate port, with TLS) and pin it via
+  `previewContentBaseUrl` (on the adapter or the server input). The main
+  server already serves the same `/api/browser/preview-assets/` routes, so
+  the second origin only needs to reverse-proxy that path prefix. With a
+  pinned cross-origin base URL the renderer grants `allow-same-origin` on
+  both the SSR and client paths (absolute non-loopback preview URLs are never
+  rewritten onto the page origin), `/healthz` reports
+  `metaAppPreview.storage: "host-configured"`, and app storage persists.
+  Without it, `metaAppPreview.storage` stays `"session-only"` — treat that as
+  a deployment misconfiguration for storage-backed apps.
 - SSR callers of `renderResourceHtml()` should pass
   `{ pageOrigin }` so the emitted `sandbox` attribute matches the client-side
   decision (`htmlFrameSandboxAttributeValue()` is the shared helper); without

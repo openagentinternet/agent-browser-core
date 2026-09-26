@@ -4,6 +4,7 @@
 // document.cookie / navigator.serviceWorker access throws, and canvas export
 // is tainted.
 import assert from 'node:assert/strict';
+import http from 'node:http';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -181,6 +182,87 @@ test('opted-out preview frames degrade to session-only storage on the page origi
     await waitForReport(reports, 'storage:written', 15000);
     const persisted = reports.find((report) => report.startsWith('storage:persisted'));
     assert.equal(persisted, undefined, `degraded frames must not report persisted storage, got: ${persisted}`);
+  } finally {
+    if (page) await page.close();
+    await browser.close();
+  }
+});
+
+// Public deployments cannot use the ephemeral loopback origin (a visitor's
+// browser would dial its own loopback), so hosts must pin a second reachable
+// origin via previewContentBaseUrl. This test simulates that shape: the
+// Browser page is served from one origin while preview assets are fronted by
+// an independent reverse-proxy origin standing in for a public preview
+// subdomain, and the pinned base URL must win over any ephemeral wiring.
+test('explicit cross-origin previewContentBaseUrl keeps persistent storage for remote deployments (e2e)', async (t) => {
+  const dir = await mkdtemp(join(tmpdir(), 'preview-public-e2e-'));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  await writeFile(join(dir, 'index.html'), PROBE_APP_HTML);
+
+  // Second origin for preview assets: an independent loopback port fronting
+  // the main server's same preview-assets route. It closes over the main
+  // base URL before the main server exists.
+  let mainBaseUrl = '';
+  const proxy = http.createServer(async (req, res) => {
+    try {
+      const upstream = await fetch(`${mainBaseUrl}${req.url}`);
+      res.statusCode = upstream.status;
+      const contentType = upstream.headers.get('content-type');
+      if (contentType) res.setHeader('content-type', contentType);
+      res.end(Buffer.from(await upstream.arrayBuffer()));
+    } catch (error) {
+      res.statusCode = 502;
+      res.end(String(error));
+    }
+  });
+  t.after(() => new Promise((resolve) => proxy.close(resolve)));
+  await new Promise((resolve) => proxy.listen(0, '127.0.0.1', resolve));
+  const proxyAddress = proxy.address();
+  assert.equal(typeof proxyAddress, 'object');
+  const proxyBaseUrl = `http://127.0.0.1:${proxyAddress.port}`;
+
+  // Host shape: pin the public preview origin on the adapter at construction.
+  const adapter = standalone.createStandaloneBrowserHostAdapter({ previewContentBaseUrl: proxyBaseUrl });
+  const server = standalone.createStandaloneBrowserServer({ adapter });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const mainAddress = server.address();
+  assert.equal(typeof mainAddress, 'object');
+  mainBaseUrl = `http://127.0.0.1:${mainAddress.port}`;
+
+  const health = await (await fetch(`${mainBaseUrl}/healthz`)).json();
+  assert.equal(health.metaAppPreview.storage, 'host-configured');
+  assert.equal(health.metaAppPreview.previewOrigin, proxyBaseUrl);
+
+  const playwright = await import('playwright');
+  const browser = await playwright.chromium.launch();
+  let page;
+  try {
+    page = await browser.newPage();
+    const reports = probeCollector(page);
+    const downloadPromise = page.waitForEvent('download', { timeout: 15000 });
+
+    const frame = await openPreviewApp(page, mainBaseUrl, dir);
+
+    // The frame must load from the pinned second origin (different from the
+    // page origin) and keep its own real origin in the sandbox. This also
+    // proves the client does NOT rewrite non-loopback absolute preview URLs
+    // onto the page origin.
+    const src = await frame.getAttribute('src');
+    const frameOrigin = new URL(src, mainBaseUrl).origin;
+    assert.notEqual(frameOrigin, new URL(mainBaseUrl).origin, 'frame origin must differ from the page origin');
+    assert.equal(frameOrigin, new URL(proxyBaseUrl).origin, 'frame origin must be the pinned preview origin');
+    const sandbox = await frame.getAttribute('sandbox');
+    assert.ok(sandbox.includes('allow-same-origin'), `sandbox should include allow-same-origin, got: ${sandbox}`);
+
+    assert.equal(await waitForReport(reports, 'storage:persisted'), 'storage:persisted');
+    assert.equal(await waitForReport(reports, 'cookie:'), 'cookie:ok');
+    assert.equal(await waitForReport(reports, 'sw:'), 'sw:ok');
+    assert.equal(await waitForReport(reports, 'canvas:'), 'canvas:ok');
+
+    const download = await downloadPromise;
+    assert.equal(download.suggestedFilename(), 'probe.txt');
+    await download.cancel();
   } finally {
     if (page) await page.close();
     await browser.close();
