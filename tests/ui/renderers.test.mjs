@@ -121,6 +121,8 @@ test('html iframe renderer is sandboxed and rejects unsafe URLs', () => {
     actions: [],
     sections: [],
   });
+  // No pageOrigin: the renderer cannot prove the frame is cross-origin, so it
+  // keeps the conservative opaque sandbox.
   assert.match(safe, /<iframe class="browser-html-frame" sandbox="allow-scripts allow-downloads" src="https:\/\/metaweb\.example\/app"/);
   assert.doesNotMatch(safe, /allow-same-origin/);
   assert.doesNotMatch(safe, /allow-top-navigation/);
@@ -136,6 +138,46 @@ test('html iframe renderer is sandboxed and rejects unsafe URLs', () => {
   });
   assert.match(blocked, /Renderer URL blocked/);
   assert.doesNotMatch(blocked, /javascript:alert/);
+});
+
+test('html iframe renderer grants allow-same-origin only for cross-origin frame URLs', () => {
+  const envelope = (url) => ({
+    uri: 'metaapp://pin',
+    normalizedUri: 'metaapp://pin',
+    resourceType: 'metaapp',
+    title: 'Fixture App',
+    renderer: { type: 'html-iframe', contentType: 'text/html', url },
+    actions: [],
+    sections: [],
+  });
+  const pageOrigin = 'http://127.0.0.1:8787';
+
+  // Cross-origin absolute URL (dedicated preview origin): keep the frame's
+  // own real origin so its storage persists across reloads.
+  const crossOrigin = ui.renderResourceHtml(envelope('http://127.0.0.1:39753/api/browser/preview-assets/x/index.html'), { pageOrigin });
+  assert.match(crossOrigin, /sandbox="allow-scripts allow-same-origin allow-downloads"/);
+
+  // Relative preview URL resolves to the page origin: stay opaque.
+  const relative = ui.renderResourceHtml(envelope('/api/browser/preview-assets/x/index.html'), { pageOrigin });
+  assert.match(relative, /sandbox="allow-scripts allow-downloads"/);
+  assert.doesNotMatch(relative, /allow-same-origin/);
+
+  // Absolute URL on the page origin itself: stay opaque.
+  const sameOrigin = ui.renderResourceHtml(envelope(`${pageOrigin}/api/browser/preview-assets/x/index.html`), { pageOrigin });
+  assert.match(sameOrigin, /sandbox="allow-scripts allow-downloads"/);
+  assert.doesNotMatch(sameOrigin, /allow-same-origin/);
+
+  // Invalid pageOrigin falls back to the conservative opaque sandbox.
+  const noOrigin = ui.renderResourceHtml(envelope('http://127.0.0.1:39753/api/browser/preview-assets/x/index.html'), { pageOrigin: '' });
+  assert.match(noOrigin, /sandbox="allow-scripts allow-downloads"/);
+
+  // The shared decision helper must agree with the client-side
+  // htmlFrameSandbox() matrix (see browserPageRenderers sandbox tests).
+  assert.equal(ui.htmlFrameSandboxAttributeValue('http://127.0.0.1:39753/a', 'http://127.0.0.1:8787'), 'allow-scripts allow-same-origin allow-downloads');
+  assert.equal(ui.htmlFrameSandboxAttributeValue('/a', 'http://127.0.0.1:8787'), 'allow-scripts allow-downloads');
+  assert.equal(ui.htmlFrameSandboxAttributeValue('http://127.0.0.1:8787/a', 'http://127.0.0.1:8787'), 'allow-scripts allow-downloads');
+  assert.equal(ui.htmlFrameSandboxAttributeValue('http://127.0.0.1:39753/a'), 'allow-scripts allow-downloads');
+  assert.equal(ui.htmlFrameSandboxAttributeValue('javascript:alert(1)', 'http://127.0.0.1:8787'), 'allow-scripts allow-downloads');
 });
 
 test('UI renders protocol-pin resources through first-party renderer pack', () => {

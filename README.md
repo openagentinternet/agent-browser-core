@@ -32,6 +32,18 @@ integration are planned as follow-up implementation phases.
 - `docs/superpowers/specs/2026-06-08-agent-browser-core-independent-project-design.md`
 - `docs/superpowers/plans/2026-06-08-agent-browser-core-bootstrap-extraction.md`
 
+## Deployment Note: MetaApp Preview Origin
+
+MetaApp preview frames must be served from an origin independent of the Browser
+page origin, or app storage silently degrades to session-only (localStorage
+dies on reload, canvas export is tainted, `document.cookie` /
+`navigator.serviceWorker` throw). The standalone server enables an ephemeral
+loopback preview origin by default; `/healthz` reports the effective state as
+`metaAppPreview.storage` (`persistent`, `host-configured`, or `session-only`
+with a warning). See "MetaApp preview origin and storage persistence" in the
+host integration guide for the security model, opt-outs, and public-host
+caveats.
+
 ## Release Process
 
 The next package release is `v0.2.0`. Package publishing is tag-triggered through

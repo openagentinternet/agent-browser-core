@@ -20,13 +20,40 @@ async function json(response) {
   return response.json();
 }
 
+// The ephemeral preview origin binds right after the main server starts
+// listening; poll /healthz until it reports the expected storage scope.
+async function waitForPreviewStorage(baseUrl, expected, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  let state;
+  do {
+    const health = await json(await fetch(`${baseUrl}/healthz`));
+    assert.equal(health.ok, true);
+    state = health.metaAppPreview;
+    if (state.storage === expected) return state;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  } while (Date.now() < deadline);
+  assert.fail(`timed out waiting for metaAppPreview.storage === ${expected}; last state: ${JSON.stringify(state)}`);
+}
+
+async function writePreviewFixture() {
+  const { mkdtemp, writeFile } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const nodePath = await import('node:path');
+  const dir = await mkdtemp(nodePath.join(tmpdir(), 'preview-adapter-'));
+  await writeFile(nodePath.join(dir, 'index.html'), '<h1>preview-marker</h1>');
+  return dir;
+}
+
 test('standalone Browser server serves Browser shell and health route', async (t) => {
   const server = standalone.createStandaloneBrowserServer();
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const baseUrl = await listen(server);
 
   const health = await json(await fetch(`${baseUrl}/healthz`));
-  assert.deepEqual(health, { ok: true });
+  assert.equal(health.ok, true);
+  assert.match(health.metaAppPreview.storage, /persistent|session-only|host-configured/);
+  const previewState = await waitForPreviewStorage(baseUrl, 'persistent');
+  assert.match(previewState.previewOrigin, /^http:\/\/127\.0\.0\.1:\d+$/);
 
   const response = await fetch(`${baseUrl}/browser`);
   const html = await response.text();
@@ -446,6 +473,87 @@ test('standalone Browser serves a preview-metaapp localhost directory over HTTP 
   assert.match(asset.headers.get('content-type'), /text\/html/);
   const body = await asset.text();
   assert.match(body, new RegExp(marker));
+});
+
+test('standalone server grants factory adapters an ephemeral preview origin by default', async (t) => {
+  const dir = await writePreviewFixture();
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(dir, { recursive: true, force: true })));
+  const adapter = standalone.createStandaloneBrowserHostAdapter();
+  const server = standalone.createStandaloneBrowserServer({ adapter });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const state = await waitForPreviewStorage(baseUrl, 'persistent');
+  assert.match(state.previewOrigin, /^http:\/\/127\.0\.0\.1:\d+$/);
+  assert.equal(state.warning, undefined);
+
+  const uri = `preview-metaapp://localhost${dir}`;
+  const resolveResponse = await fetch(`${baseUrl}/api/browser/resolve?uri=${encodeURIComponent(uri)}`);
+  const resolved = await json(resolveResponse);
+  assert.equal(resolved.ok, true, `resolve ok for ${uri}`);
+  const previewUrl = resolved.data?.renderer?.url;
+  assert.ok(previewUrl, 'expected a renderer url');
+  // The adapter (built before the server, without a previewContentBaseUrl)
+  // must still emit preview URLs on the dedicated loopback origin so the
+  // sandboxed frame keeps a real cross-origin and its storage persists.
+  assert.match(previewUrl, /^http:\/\/127\.0\.0\.1:\d+\/api\/browser\/preview-assets\//);
+  assert.notEqual(new URL(previewUrl).origin, new URL(baseUrl).origin, 'preview origin must differ from the Browser page origin');
+  assert.equal(new URL(previewUrl).origin, new URL(state.previewOrigin).origin);
+
+  const asset = await fetch(previewUrl);
+  assert.equal(asset.status, 200);
+  assert.match(await asset.text(), /preview-marker/);
+});
+
+test('standalone server keeps adapter-pinned preview origins host-configured', async (t) => {
+  const dir = await writePreviewFixture();
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(dir, { recursive: true, force: true })));
+  const adapter = standalone.createStandaloneBrowserHostAdapter({ previewContentBaseUrl: 'https://preview.example' });
+  const server = standalone.createStandaloneBrowserServer({ adapter });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const health = await json(await fetch(`${baseUrl}/healthz`));
+  assert.equal(health.metaAppPreview.storage, 'host-configured');
+  assert.equal(health.metaAppPreview.previewOrigin, 'https://preview.example');
+
+  const uri = `preview-metaapp://localhost${dir}`;
+  const resolveResponse = await fetch(`${baseUrl}/api/browser/resolve?uri=${encodeURIComponent(uri)}`);
+  const resolved = await json(resolveResponse);
+  assert.equal(resolved.ok, true, `resolve ok for ${uri}`);
+  assert.match(resolved.data?.renderer?.url, /^https:\/\/preview\.example\/api\/browser\/preview-assets\//);
+});
+
+test('standalone server warns when no independent preview origin can serve MetaApps', async (t) => {
+  // A fully custom adapter (not built by createStandaloneBrowserHostAdapter)
+  // cannot be wired to the ephemeral preview origin.
+  const foreignServer = standalone.createStandaloneBrowserServer({ adapter: {} });
+  t.after(() => new Promise((resolve) => foreignServer.close(resolve)));
+  const foreignBase = await listen(foreignServer);
+  const foreignHealth = await json(await fetch(`${foreignBase}/healthz`));
+  assert.equal(foreignHealth.metaAppPreview.storage, 'session-only');
+  assert.equal(foreignHealth.metaAppPreview.previewOrigin, '');
+  assert.match(foreignHealth.metaAppPreview.warning, /session-only/);
+
+  // Explicit opt-out falls back to relative preview URLs with the same
+  // explicit warning instead of degrading silently.
+  const dir = await writePreviewFixture();
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(dir, { recursive: true, force: true })));
+  const optOutServer = standalone.createStandaloneBrowserServer({ enablePreviewOriginServer: false });
+  t.after(() => new Promise((resolve) => optOutServer.close(resolve)));
+  const optOutBase = await listen(optOutServer);
+  const optOutHealth = await json(await fetch(`${optOutBase}/healthz`));
+  assert.equal(optOutHealth.metaAppPreview.storage, 'session-only');
+  assert.match(optOutHealth.metaAppPreview.warning, /session-only/);
+
+  const uri = `preview-metaapp://localhost${dir}`;
+  const resolveResponse = await fetch(`${optOutBase}/api/browser/resolve?uri=${encodeURIComponent(uri)}`);
+  const resolved = await json(resolveResponse);
+  assert.equal(resolved.ok, true, `resolve ok for ${uri}`);
+  assert.match(resolved.data?.renderer?.url, /^\/api\/browser\/preview-assets\//);
+  // The relative URL is still served by the main origin.
+  const asset = await fetch(`${optOutBase}${resolved.data.renderer.url}`);
+  assert.equal(asset.status, 200);
 });
 
 test('standalone CLI rejects listen errors', async (t) => {

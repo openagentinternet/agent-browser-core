@@ -95,6 +95,34 @@ export interface StandaloneBrowserHostAdapter extends BrowserHostAdapter {
   resolveBotProfile(input: { globalMetaId: string }): Promise<BrowserCommandResult<{ globalMetaId: string; name: string; avatar: string }>>;
 }
 
+// Wiring between createStandaloneBrowserHostAdapter and the standalone server
+// for the ephemeral preview origin. Hosts typically build their adapter first
+// and pass it to createStandaloneBrowserServer afterwards, so the server needs
+// a channel to (a) detect that the adapter came from this factory, (b) know
+// whether the adapter pinned its own previewContentBaseUrl at construction,
+// and (c) hand it a freshly bound loopback origin. The registration dies with
+// the adapter object.
+export interface StandaloneAdapterPreviewOriginRegistration {
+  /** previewContentBaseUrl was explicitly provided at construction. */
+  pinned: boolean;
+  /** String form of the construction-time previewContentBaseUrl, when known. */
+  pinnedBaseUrl: string;
+  /** Server-assigned ephemeral preview origin; wins over pinned values. */
+  ephemeralBaseUrl: string;
+}
+
+const standaloneAdapterPreviewOriginRegistrations = new WeakMap<
+  StandaloneBrowserHostAdapter,
+  StandaloneAdapterPreviewOriginRegistration
+>();
+
+export function getStandaloneAdapterPreviewOriginRegistration(
+  adapter: unknown,
+): StandaloneAdapterPreviewOriginRegistration | undefined {
+  if (!adapter || typeof adapter !== 'object') return undefined;
+  return standaloneAdapterPreviewOriginRegistrations.get(adapter as StandaloneBrowserHostAdapter);
+}
+
 export interface StandaloneLlmCompleteInput {
   messages: BrowserLlmCompleteMessage[];
   options?: {
@@ -527,6 +555,15 @@ export function createStandaloneBrowserHostAdapter(
     env,
     now,
   });
+  // Preview URL base resolution order: server-assigned ephemeral origin, then
+  // a construction-time pinned base, then the raw input (a getter from the
+  // no-adapter server path, evaluated per session).
+  const previewOriginRegistration: StandaloneAdapterPreviewOriginRegistration = {
+    pinned: input.previewContentBaseUrl != null
+      && (typeof input.previewContentBaseUrl !== 'string' || normalizeText(input.previewContentBaseUrl) !== ''),
+    pinnedBaseUrl: typeof input.previewContentBaseUrl === 'string' ? normalizeText(input.previewContentBaseUrl) : '',
+    ephemeralBaseUrl: '',
+  };
 
   function createPreviewSessionForArtifact(input: {
     artifactDir: string;
@@ -543,11 +580,13 @@ export function createStandaloneBrowserHostAdapter(
       ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
     });
     const previewPath = `/api/browser/preview-assets/${encodeURIComponent(previewId)}/${encodeAssetPath(input.indexFile)}`;
-    const previewBase = normalizeText(
-      typeof hostInput.previewContentBaseUrl === 'function'
-        ? hostInput.previewContentBaseUrl()
-        : hostInput.previewContentBaseUrl,
-    );
+    const previewBase = previewOriginRegistration.ephemeralBaseUrl
+      || previewOriginRegistration.pinnedBaseUrl
+      || normalizeText(
+        typeof hostInput.previewContentBaseUrl === 'function'
+          ? hostInput.previewContentBaseUrl()
+          : hostInput.previewContentBaseUrl,
+      );
     return {
       previewId,
       localPreviewUrl: previewBase ? `${previewBase.replace(/\/+$/, '')}${previewPath}` : previewPath,
@@ -1292,7 +1331,7 @@ export function createStandaloneBrowserHostAdapter(
     });
   }
 
-  return {
+  const adapter: StandaloneBrowserHostAdapter = {
     getRuntime,
     resolveResource,
     resolveBotProfile,
@@ -1303,4 +1342,6 @@ export function createStandaloneBrowserHostAdapter(
     runTrustedAction,
     resolvePreviewAsset,
   };
+  standaloneAdapterPreviewOriginRegistrations.set(adapter, previewOriginRegistration);
+  return adapter;
 }

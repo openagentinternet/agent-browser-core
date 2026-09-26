@@ -609,7 +609,7 @@ test('standalone Browser server forwards MetaApp deep-link launch parameters to 
       return new Response('not found', { status: 404 });
     },
   });
-  const server = createStandaloneBrowserServer({ adapter });
+  const server = createStandaloneBrowserServer({ adapter, enablePreviewOriginServer: false });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const baseUrl = await listen(server);
 
@@ -725,7 +725,7 @@ test('standalone Browser server downloads ZIP MetaApp content into artifact cach
       throw new Error(`Unexpected fetch URL: ${textUrl}`);
     },
   });
-  const server = createStandaloneBrowserServer({ adapter });
+  const server = createStandaloneBrowserServer({ adapter, enablePreviewOriginServer: false });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const baseUrl = await listen(server);
 
@@ -944,7 +944,7 @@ test('standalone Browser server proxies single-HTML MetaApp content with Agent I
       throw new Error(`Unexpected fetch URL: ${textUrl}`);
     },
   });
-  const server = createStandaloneBrowserServer({ adapter });
+  const server = createStandaloneBrowserServer({ adapter, enablePreviewOriginServer: false });
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const baseUrl = await listen(server);
 

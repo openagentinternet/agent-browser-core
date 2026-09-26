@@ -1,6 +1,8 @@
 export {
   createStandaloneBrowserHostAdapter,
+  getStandaloneAdapterPreviewOriginRegistration,
   type CreateStandaloneBrowserHostAdapterInput,
+  type StandaloneAdapterPreviewOriginRegistration,
   type StandaloneBrowserHostAdapter,
   type StandaloneBrowserPreviewAsset,
   type StandaloneBrowserPreviewAssetInput,

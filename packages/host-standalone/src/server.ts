@@ -18,6 +18,7 @@ import {
 } from './assets.js';
 import {
   createStandaloneBrowserHostAdapter,
+  getStandaloneAdapterPreviewOriginRegistration,
   type CreateStandaloneBrowserHostAdapterInput,
   type StandaloneBrowserHostAdapter,
 } from './adapter.js';
@@ -25,6 +26,18 @@ import {
 export interface CreateStandaloneBrowserServerInput extends CreateStandaloneBrowserHostAdapterInput {
   adapter?: StandaloneBrowserHostAdapter;
   assetsRoot?: string;
+  /**
+   * Control for the ephemeral loopback preview origin. Defaults to enabled:
+   * MetaApp preview content is served from a dedicated loopback port so the
+   * sandboxed app frame keeps its own real origin (different from the Browser
+   * page origin) and its localStorage survives reloads. This also applies to
+   * adapters built by createStandaloneBrowserHostAdapter and passed via
+   * `adapter` unless they pinned their own previewContentBaseUrl. Set to false
+   * to always serve preview URLs relative to the main origin: frames render
+   * opaque and MetaApp storage becomes session-only (surfaced as a startup
+   * warning and in /healthz).
+   */
+  enablePreviewOriginServer?: boolean;
 }
 
 async function loadInitialPage(): Promise<string> {
@@ -164,26 +177,66 @@ async function servePreviewAssetRequest(
 export function createStandaloneBrowserServer(input: CreateStandaloneBrowserServerInput = {}): http.Server {
   // MetaApp preview content is served from a dedicated ephemeral loopback
   // origin so the sandboxed app frame keeps a real origin that is deliberately
-  // DIFFERENT from the Browser page origin. The UI can then grant
-  // allow-same-origin (image-export canvases stop being tainted, downloads
-  // work) while the app still cannot script the Browser page or pass the
-  // same-origin API guard. Without a preview origin (custom adapter, or an
-  // explicit previewContentBaseUrl fronted by the caller's own proxy) preview
-  // URLs stay relative to the main origin and frames render opaque — safe,
-  // but image-export apps degrade.
+  // DIFFERENT from the Browser page origin. The UI then grants
+  // allow-same-origin (app storage persists, canvases export, downloads work)
+  // while the app still cannot script the Browser page or pass the
+  // same-origin API guard. The ephemeral origin runs for the default
+  // standalone path AND for adapters built by createStandaloneBrowserHostAdapter
+  // passed via `adapter` (wired through the adapter's preview-origin
+  // registration), unless the adapter pinned its own previewContentBaseUrl or
+  // the caller disables it via enablePreviewOriginServer. Fully custom
+  // adapters cannot be wired, so they fall back to relative preview URLs and
+  // /healthz reports the session-only degradation instead of hiding it.
   const previewOrigin = { baseUrl: '' };
-  const usesPreviewOriginServer = !input.adapter && !input.previewContentBaseUrl;
+  const adapterRegistration = input.adapter
+    ? getStandaloneAdapterPreviewOriginRegistration(input.adapter)
+    : undefined;
+  // Caller-owned external preview origin: a server-level previewContentBaseUrl
+  // (no-adapter path only — with `adapter` it was never applied to the
+  // adapter) or one pinned on the adapter at construction. Function-form
+  // getters count as caller-owned too.
+  const externalPreviewBaseUrl = (
+    !input.adapter && typeof input.previewContentBaseUrl === 'string'
+      ? input.previewContentBaseUrl.trim()
+      : ''
+  ) || adapterRegistration?.pinnedBaseUrl || '';
+  const externalPreviewConfigured = !!externalPreviewBaseUrl
+    || (!input.adapter && typeof input.previewContentBaseUrl === 'function')
+    || !!adapterRegistration?.pinned;
+  const usesPreviewOriginServer = input.enablePreviewOriginServer !== false
+    && !externalPreviewConfigured
+    && (!input.adapter || !!adapterRegistration);
   const adapter = input.adapter ?? createStandaloneBrowserHostAdapter({
     ...input,
     previewContentBaseUrl: input.previewContentBaseUrl ?? (() => previewOrigin.baseUrl),
   });
   const assetsRoot = input.assetsRoot ?? resolveStandaloneAssetsRoot();
 
+  // Storage degradation surface for /healthz and startup logs. Ephemeral mode
+  // reports its actual bind result at request time (the loopback port is
+  // bound shortly after the main server starts listening).
+  function previewStorageState(): {
+    storage: 'persistent' | 'session-only' | 'host-configured';
+    previewOrigin: string;
+    warning?: string;
+  } {
+    if (externalPreviewConfigured) {
+      return { storage: 'host-configured', previewOrigin: externalPreviewBaseUrl };
+    }
+    return previewOrigin.baseUrl
+      ? { storage: 'persistent', previewOrigin: previewOrigin.baseUrl }
+      : {
+        storage: 'session-only',
+        previewOrigin: '',
+        warning: 'MetaApp preview frames share the Browser page origin, so MetaApp storage is session-only and app data is lost on reload.',
+      };
+  }
+
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url ?? '/', 'http://127.0.0.1');
     try {
       if (url.pathname === '/healthz') {
-        sendJson(res, 200, { ok: true });
+        sendJson(res, 200, { ok: true, metaAppPreview: previewStorageState() });
         return;
       }
       if (url.pathname.startsWith('/api/') && !url.pathname.startsWith(PREVIEW_ASSET_PREFIX)) {
@@ -244,9 +297,14 @@ export function createStandaloneBrowserServer(input: CreateStandaloneBrowserServ
         sendJson(res, 500, browserFailure('internal_error', error instanceof Error ? error.message : String(error)));
       }
     });
-    // On listen failure fall back to relative preview URLs (opaque frames).
+    // On listen failure fall back to relative preview URLs (opaque frames)
+    // and say so loudly instead of degrading silently.
     previewServer.on('error', () => {
       previewOrigin.baseUrl = '';
+      if (adapterRegistration) {
+        adapterRegistration.ephemeralBaseUrl = '';
+      }
+      console.warn('[standalone-browser] MetaApp preview origin failed to bind; preview frames fall back to the page origin and MetaApp storage will be session-only.');
     });
     // Bind only while the main server is listening, so a server that is
     // created but never listens (e.g. a CLI run whose port is taken) never
@@ -257,15 +315,31 @@ export function createStandaloneBrowserServer(input: CreateStandaloneBrowserServ
         const port = typeof address === 'object' && address ? address.port : 0;
         if (port) {
           previewOrigin.baseUrl = `http://127.0.0.1:${port}`;
+          if (adapterRegistration) {
+            adapterRegistration.ephemeralBaseUrl = previewOrigin.baseUrl;
+          }
+          console.log(`[standalone-browser] MetaApp preview origin listening at ${previewOrigin.baseUrl} (MetaApp storage persists across reloads).`);
         }
       });
     });
     server.on('close', () => {
+      // The ephemeral origin dies with the server; stop advertising it to the
+      // adapter so later preview sessions fall back to relative URLs.
+      if (adapterRegistration) {
+        adapterRegistration.ephemeralBaseUrl = '';
+      }
+      previewOrigin.baseUrl = '';
       // close() alone leaves idle keep-alive connections holding the event
       // loop (tests would hang at exit); drop them explicitly.
       previewServer.closeIdleConnections();
       previewServer.closeAllConnections();
       previewServer.close();
+    });
+  } else {
+    server.on('listening', () => {
+      if (previewStorageState().storage === 'session-only') {
+        console.warn('[standalone-browser] No independent MetaApp preview origin is active; MetaApp preview frames share the page origin and MetaApp storage will be session-only.');
+      }
     });
   }
 
