@@ -171,8 +171,9 @@ prepared first:
 - a navigation bridge script is injected so internal-URI anchor clicks are
   forwarded to ABC through the `agent-browser:navigate` channel, and
   `window.AgentBrowser.navigate(uri)` becomes available to the app;
-- a `localStorage`/`sessionStorage` memory fallback is injected because the
-  sandboxed preview iframe runs in an opaque origin.
+- a `localStorage`/`sessionStorage` memory fallback is injected for frames that
+  still run in an opaque origin (it keeps `setItem` working but the data dies
+  on reload — see the preview origin section below for the non-degraded form).
 
 `href` values are deliberately left as Agent Internet URIs: navigation stays
 inside the Browser instead of opening a raw content URL.
@@ -190,6 +191,63 @@ HTML Metafiles opened directly by URI (not as MetaApp content) are not served by
 the host and are not prepared; their authors must embed the manual navigation
 helper documented in the
 [Custom Bot Homepage and MetaApp Guide](./custom-bot-homepage-metaapp-guide.md).
+
+### MetaApp preview origin and storage persistence
+
+MetaApp preview frames are sandboxed with `allow-scripts allow-downloads`. How
+their storage behaves depends entirely on whether the frame keeps a **real
+origin different from the Browser page origin**:
+
+- **Independent preview origin (the supported form).** Preview content is
+  served from a dedicated origin, so the renderer adds `allow-same-origin`.
+  The app frame then owns a normal storage partition for its own origin:
+  `localStorage` / `IndexedDB` survive reloads, `document.cookie` and
+  `navigator.serviceWorker` are accessible, and `canvas.toBlob()` exports
+  without tainting. The security model is unchanged: `allow-same-origin` only
+  gives the frame its **own** origin — an origin that deliberately differs
+  from the Browser page — so the app still cannot script the Browser UI or
+  call the host's same-origin API.
+- **Same-origin degradation.** When no independent origin is available (preview
+  URLs served relative to the main origin, e.g. behind a single reverse
+  proxy), the frame is kept fully opaque (no `allow-same-origin`):
+  `localStorage` writes survive only until reload, `document.cookie` /
+  `navigator.serviceWorker` property access throws `SecurityError`, canvas
+  export is tainted, and a memory storage shim merely keeps `setItem` from
+  throwing. App "auto-save" is effectively session-only and data is lost when
+  the app closes. This is safe, but a silent product regression for storage
+  apps — never ship it accidentally.
+
+Standalone server behavior (`createStandaloneBrowserServer`):
+
+- The ephemeral loopback preview origin (`http://127.0.0.1:<random port>`) is
+  **enabled by default**, including when the adapter was built by
+  `createStandaloneBrowserHostAdapter` and passed through the `adapter` input.
+  `/healthz` reports the result as `metaAppPreview.storage: "persistent"`.
+- `enablePreviewOriginServer: false` opts out; `previewContentBaseUrl` (on the
+  adapter) pins your own preview origin, reported as `"host-configured"`.
+  Fully custom adapters that are not built by the factory cannot be wired to
+  the ephemeral origin.
+- Whenever the effective state degrades to same-origin frames, the server
+  prints a startup warning and `/healthz` returns
+  `metaAppPreview.storage: "session-only"` with a `warning` field. Monitor or
+  assert this in deployment checks.
+
+Deployment notes:
+
+- The ephemeral port is random per server process. Storage persists across
+  reloads **within** that process; across daemon restarts the origin changes.
+  Hosts that need cross-restart persistence should pin a fixed preview origin
+  (e.g. `previewContentBaseUrl: 'http://127.0.0.1:<fixed-port>'` served by the
+  same preview-assets routes) or front a stable dedicated domain.
+- Public (non-loopback) deployments: visitors' browsers cannot reach the
+  host's loopback preview origin, so the client rewrites preview URLs onto the
+  page origin and frames intentionally render opaque (session-only). Serve
+  preview assets from a stable dedicated origin (subdomain or separate port on
+  the public host) via `previewContentBaseUrl` to keep storage persistent.
+- SSR callers of `renderResourceHtml()` should pass
+  `{ pageOrigin }` so the emitted `sandbox` attribute matches the client-side
+  decision (`htmlFrameSandboxAttributeValue()` is the shared helper); without
+  it the conservative opaque sandbox is emitted.
 
 ### Local MetaApp preview
 
@@ -240,6 +298,9 @@ durable replicated log.
   publish, or inject them into an agent prompt without the host's applicable
   consent and privacy policy.
 - Disable local MetaApp filesystem preview in public deployments.
+- Serve MetaApp preview content from an origin independent of the Browser page
+  origin; check `/healthz` for `metaAppPreview.storage` and treat
+  `"session-only"` as a deployment misconfiguration for storage-backed apps.
 - Keep unsupported runtime capabilities disabled instead of presenting controls
   that can never complete.
 
