@@ -98,13 +98,45 @@ export function renderBotPageHtml(resource: BrowserResourceEnvelope): string {
   </article>`;
 }
 
-function renderUrlRenderer(renderer: BrowserRendererDescriptor, className: string, tag: 'iframe' | 'img' | 'video'): string {
+// Origin-aware sandbox decision for the MetaApp html frame, mirroring the
+// client-side htmlFrameSandbox() in the Browser client script: opaque-origin
+// frames lose localStorage/IndexedDB on reload and get tainted canvases, so a
+// frame served from its own real origin (different from the Browser page
+// origin) keeps allow-same-origin — it still cannot script the page or call
+// its same-origin API. Frames that resolve to the page origin stay opaque.
+const HTML_FRAME_OPAQUE_SANDBOX = 'allow-scripts allow-downloads';
+const HTML_FRAME_CROSS_ORIGIN_SANDBOX = 'allow-scripts allow-same-origin allow-downloads';
+
+export function htmlFrameSandboxAttributeValue(frameUrl: string, pageOrigin?: string): string {
+  const origin = text(pageOrigin);
+  if (!origin) return HTML_FRAME_OPAQUE_SANDBOX;
+  try {
+    const parsed = new URL(frameUrl, origin);
+    // Non-http(s) schemes resolve to the origin "null"; they never earn
+    // allow-same-origin.
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return HTML_FRAME_OPAQUE_SANDBOX;
+    }
+    return parsed.origin === origin
+      ? HTML_FRAME_OPAQUE_SANDBOX
+      : HTML_FRAME_CROSS_ORIGIN_SANDBOX;
+  } catch {
+    return HTML_FRAME_OPAQUE_SANDBOX;
+  }
+}
+
+function renderUrlRenderer(
+  renderer: BrowserRendererDescriptor,
+  className: string,
+  tag: 'iframe' | 'img' | 'video',
+  pageOrigin?: string,
+): string {
   const url = safeResourceUrl(renderer.url);
   if (!url) {
     return '<section class="browser-empty-state"><h2>Renderer URL blocked</h2></section>';
   }
   if (tag === 'iframe' && className === 'browser-html-frame') {
-    return `<iframe class="${className}" sandbox="allow-scripts allow-downloads" src="${escapeHtml(url)}" title="MetaApp preview"></iframe>`;
+    return `<iframe class="${className}" sandbox="${htmlFrameSandboxAttributeValue(url, pageOrigin)}" src="${escapeHtml(url)}" title="MetaApp preview"></iframe>`;
   }
   if (tag === 'iframe' && className === 'browser-pdf') {
     // Chrome's PDF viewer needs allow-scripts + allow-same-origin (and
@@ -143,10 +175,23 @@ function renderMediaRenderer(renderer: BrowserRendererDescriptor, kind: 'video' 
   return `${MEDIA_STAGE_STYLE}<section class="browser-media-stage"><div class="browser-pin-media-preview browser-pin-media-preview-${kind}" ${slotAttr}${refAttr}><span class="browser-pin-media-pending">${escapeHtml(message)}</span></div></section>`;
 }
 
-export function renderResourceHtml(resource: BrowserResourceEnvelope): string {
+export interface RenderResourceHtmlOptions {
+  /**
+   * Origin of the page that will host the rendered HTML (e.g.
+   * 'http://127.0.0.1:8787'). When provided, the MetaApp html-frame sandbox
+   * decision matches the client-side renderer: a frame URL that resolves to a
+   * different origin keeps its own real origin (allow-same-origin) so its
+   * storage persists, while same-origin frames stay opaque. Without a page
+   * origin the conservative opaque sandbox is used.
+   */
+  pageOrigin?: string;
+}
+
+export function renderResourceHtml(resource: BrowserResourceEnvelope, options?: RenderResourceHtmlOptions): string {
   const renderer = resource.renderer;
+  const pageOrigin = options?.pageOrigin;
   if (renderer.type === 'bot-page') return renderBotPageHtml(resource);
-  if (renderer.type === 'html-iframe') return renderUrlRenderer(renderer, 'browser-html-frame', 'iframe');
+  if (renderer.type === 'html-iframe') return renderUrlRenderer(renderer, 'browser-html-frame', 'iframe', pageOrigin);
   if (renderer.type === 'pdf') return renderUrlRenderer(renderer, 'browser-pdf', 'iframe');
   if (renderer.type === 'image') return renderUrlRenderer(renderer, 'browser-image', 'img');
   if (renderer.type === 'video') return renderMediaRenderer(renderer, 'video');

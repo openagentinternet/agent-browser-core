@@ -51,10 +51,12 @@ export {
 } from './browser/library.js';
 export {
   escapeHtml,
+  htmlFrameSandboxAttributeValue,
   renderBotPageHtml,
   renderResourceHtml,
   safeRendererUrl,
   safeResourceUrl,
+  type RenderResourceHtmlOptions,
 } from './renderers.js';
 export {
   BROWSER_BASE_URL_FIELDS,
