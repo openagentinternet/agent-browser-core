@@ -1169,6 +1169,35 @@ test('html-iframe renderer is sandboxed without privileged permissions', async (
   assert.doesNotMatch(html, /wallet|payment|signing/i);
 });
 
+test('metaapp html iframe delegates autoplay while ordinary pages do not', async () => {
+  const metaapp = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://metaweb.example/app',
+  }, {
+    uri: 'metaapp://4423e9032c929c3a2d132c30380c525cfa7f571a4668530b348275b4ccb1c714i0?view=play&pin=822gw',
+    normalizedUri: 'metaapp://4423e9032c929c3a2d132c30380c525cfa7f571a4668530b348275b4ccb1c714i0?view=play&pin=822gw',
+  }));
+
+  await waitFor(() => metaapp.nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'metaapp iframe render');
+  const metaappHtml = metaapp.nodes['[data-browser-viewport]'].innerHTML;
+  assert.match(metaappHtml, /<iframe class="browser-html-frame"[^>]*src="https:\/\/metaweb\.example\/app"[^>]*allow="autoplay"/);
+
+  const external = runWithResolve(result({
+    type: 'html-iframe',
+    contentType: 'text/html',
+    url: 'https://example.com/app',
+  }, {
+    uri: 'https://example.com/app',
+    normalizedUri: 'https://example.com/app',
+    resourceType: 'document',
+  }));
+
+  await waitFor(() => external.nodes['[data-browser-viewport]'].innerHTML.includes('browser-html-frame'), 'external iframe render');
+  const externalHtml = external.nodes['[data-browser-viewport]'].innerHTML;
+  assert.doesNotMatch(externalHtml, /allow="autoplay"/);
+});
+
 test('html-iframe sandbox keeps the frame own origin only for cross-origin preview URLs', async () => {
   // Loopback-hosted page (local dev / embedded host topology): the dedicated
   // loopback preview origin is reachable and stays cross-origin, keeping allow-same-origin.

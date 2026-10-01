@@ -36,6 +36,10 @@ function text(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function isMetaAppUri(value: unknown): boolean {
+  return /^metaapp:\/\//i.test(text(value));
+}
+
 function sectionItemTitle(item: Record<string, unknown>): string {
   return text(item.title) || text(item.displayName) || text(item.name) || text(item.id) || 'Untitled';
 }
@@ -130,13 +134,15 @@ function renderUrlRenderer(
   className: string,
   tag: 'iframe' | 'img' | 'video',
   pageOrigin?: string,
+  allowAutoplay = false,
 ): string {
   const url = safeResourceUrl(renderer.url);
   if (!url) {
     return '<section class="browser-empty-state"><h2>Renderer URL blocked</h2></section>';
   }
   if (tag === 'iframe' && className === 'browser-html-frame') {
-    return `<iframe class="${className}" sandbox="${htmlFrameSandboxAttributeValue(url, pageOrigin)}" src="${escapeHtml(url)}" title="MetaApp preview"></iframe>`;
+    const autoplay = allowAutoplay ? ' allow="autoplay"' : '';
+    return `<iframe class="${className}" sandbox="${htmlFrameSandboxAttributeValue(url, pageOrigin)}" src="${escapeHtml(url)}" title="MetaApp preview"${autoplay}></iframe>`;
   }
   if (tag === 'iframe' && className === 'browser-pdf') {
     // Chrome's PDF viewer needs allow-scripts + allow-same-origin (and
@@ -191,7 +197,7 @@ export function renderResourceHtml(resource: BrowserResourceEnvelope, options?: 
   const renderer = resource.renderer;
   const pageOrigin = options?.pageOrigin;
   if (renderer.type === 'bot-page') return renderBotPageHtml(resource);
-  if (renderer.type === 'html-iframe') return renderUrlRenderer(renderer, 'browser-html-frame', 'iframe', pageOrigin);
+  if (renderer.type === 'html-iframe') return renderUrlRenderer(renderer, 'browser-html-frame', 'iframe', pageOrigin, isMetaAppUri(resource.normalizedUri || resource.uri));
   if (renderer.type === 'pdf') return renderUrlRenderer(renderer, 'browser-pdf', 'iframe');
   if (renderer.type === 'image') return renderUrlRenderer(renderer, 'browser-image', 'img');
   if (renderer.type === 'video') return renderMediaRenderer(renderer, 'video');

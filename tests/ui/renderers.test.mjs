@@ -140,6 +140,42 @@ test('html iframe renderer is sandboxed and rejects unsafe URLs', () => {
   assert.doesNotMatch(blocked, /javascript:alert/);
 });
 
+test('html iframe renderer delegates autoplay only for metaapp:// resources', () => {
+  const renderer = { type: 'html-iframe', contentType: 'text/html', url: 'https://metaweb.example/app' };
+  const metaapp = ui.renderResourceHtml({
+    uri: 'metaapp://pin',
+    normalizedUri: 'metaapp://pin',
+    resourceType: 'metaapp',
+    title: 'Fixture App',
+    renderer,
+    actions: [],
+    sections: [],
+  });
+  assert.match(metaapp, /allow="autoplay"/);
+
+  const preview = ui.renderResourceHtml({
+    uri: 'preview-metaapp://localhost/app/index.html',
+    normalizedUri: 'preview-metaapp://localhost/app/index.html',
+    resourceType: 'metaapp',
+    title: 'Preview App',
+    renderer,
+    actions: [],
+    sections: [],
+  });
+  assert.doesNotMatch(preview, /allow="autoplay"/);
+
+  const external = ui.renderResourceHtml({
+    uri: 'https://metaweb.example/app',
+    normalizedUri: 'https://metaweb.example/app',
+    resourceType: 'document',
+    title: 'External Page',
+    renderer,
+    actions: [],
+    sections: [],
+  });
+  assert.doesNotMatch(external, /allow="autoplay"/);
+});
+
 test('html iframe renderer grants allow-same-origin only for cross-origin frame URLs', () => {
   const envelope = (url) => ({
     uri: 'metaapp://pin',
