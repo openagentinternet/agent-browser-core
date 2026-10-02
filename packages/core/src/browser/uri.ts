@@ -9,6 +9,7 @@ export { parsePinUri, type ParsedPinUri } from './pinUri.js';
 export {
   parseMetaAppLaunchUri,
   serializeMetaAppLaunchQuery,
+  serializeMetaAppLaunchHash,
   type MetaAppLaunchContext,
   type MetaAppLaunchParseResult,
 } from './metaAppLaunchContext.js';
