@@ -6,6 +6,7 @@ import {
 } from './menuModel.js';
 import { LLM_PROVIDERS, GENERIC_ICON } from './llmProviders.js';
 import { BROWSER_LIBRARY_REQUEST_TYPES } from './library.js';
+import { BROWSER_UI_VERSION } from './version.js';
 import { BOT_HOMEPAGE_TEMPLATES } from '@openagentinternet/agent-browser-core';
 
 export interface BrowserPagePanelDefinition {
@@ -141,6 +142,7 @@ var browserLibraryRequestTypes = ${JSON.stringify(BROWSER_LIBRARY_REQUEST_TYPES)
 var botHomepageTemplateIds = ${JSON.stringify(BOT_HOMEPAGE_TEMPLATES.map((template) => template.id))};
 var llmProviders = ${JSON.stringify(LLM_PROVIDERS)};
 var llmGenericIcon = ${JSON.stringify(GENERIC_ICON)};
+var browserUiVersion = ${JSON.stringify(BROWSER_UI_VERSION)};
 function getLlmProvider(providerId) {
   var id = typeof providerId === 'string' ? providerId.trim().toLowerCase() : '';
   var known = id ? llmProviders[id] : null;
@@ -3443,6 +3445,10 @@ async function requestMetaAppRemix() {
   }
 }
 
+function browserSettingsVersionBadge() {
+  return '<span class="browser-settings-version" title="Agent Browser Core">v' + escapeHtml(browserUiVersion) + '</span>';
+}
+
 function renderSettingsTabs() {
   return '<div class="browser-settings-tabs" role="tablist">' + browserSettingsTabs.map(function (tab) {
     var tabId = textValue(tab.id);
@@ -3621,7 +3627,7 @@ function renderBrowserSettingsModal() {
     : '';
   elements.modalRoot.hidden = false;
   elements.modalRoot.innerHTML = '<section class="browser-modal-panel browser-settings-panel" role="dialog" aria-modal="true">' +
-    '<header><h2>Browser Settings</h2><button type="button" class="browser-icon-button" data-browser-modal-close aria-label="Close settings">' + iconHtml('close') + '</button></header>' +
+    '<header><h2>Browser Settings</h2>' + browserSettingsVersionBadge() + '<button type="button" class="browser-icon-button" data-browser-modal-close aria-label="Close settings">' + iconHtml('close') + '</button></header>' +
     '<div class="browser-modal-body">' + renderSettingsTabs() + body + '</div>' +
     '<footer><button type="button" data-browser-modal-close>Close</button>' + saveButton + '</footer></section>';
 }
@@ -3639,7 +3645,7 @@ async function openBrowserSettings(tabId) {
   if (elements.modalRoot) {
     elements.modalRoot.hidden = false;
     elements.modalRoot.innerHTML = '<section class="browser-modal-panel browser-settings-panel" role="dialog" aria-modal="true">' +
-      '<header><h2>Browser Settings</h2><button type="button" class="browser-icon-button" data-browser-modal-close aria-label="Close settings">' + iconHtml('close') + '</button></header>' +
+      '<header><h2>Browser Settings</h2>' + browserSettingsVersionBadge() + '<button type="button" class="browser-icon-button" data-browser-modal-close aria-label="Close settings">' + iconHtml('close') + '</button></header>' +
       '<div class="browser-modal-body"><p class="browser-settings-note">Loading...</p></div></section>';
   }
   try {
@@ -3649,7 +3655,7 @@ async function openBrowserSettings(tabId) {
     setStatus('error', error && error.message ? error.message : 'Settings failed.');
     if (elements.modalRoot) {
       elements.modalRoot.innerHTML = '<section class="browser-modal-panel browser-settings-panel" role="dialog" aria-modal="true">' +
-        '<header><h2>Browser Settings</h2><button type="button" class="browser-icon-button" data-browser-modal-close aria-label="Close settings">' + iconHtml('close') + '</button></header>' +
+        '<header><h2>Browser Settings</h2>' + browserSettingsVersionBadge() + '<button type="button" class="browser-icon-button" data-browser-modal-close aria-label="Close settings">' + iconHtml('close') + '</button></header>' +
         '<div class="browser-modal-body"><p class="browser-settings-error">' + escapeHtml(state.error) + '</p></div></section>';
     }
   }

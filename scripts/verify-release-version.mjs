@@ -52,6 +52,19 @@ export async function verifyReleaseVersion(input = {}) {
     validateInternalDependencyPins(manifest, releaseVersion);
   }
 
+  // The Browser Settings panel shows this constant to users; it must track
+  // the release version so the served UI never advertises a stale version.
+  const uiVersionSource = await readFile(
+    path.join(repoRoot, "packages/ui/src/browser/version.ts"),
+    "utf8",
+  );
+  const uiVersion = uiVersionSource.match(/BROWSER_UI_VERSION = "([^"]+)"/u)?.[1];
+  if (uiVersion !== releaseVersion) {
+    throw new Error(
+      `Browser UI version constant ${uiVersion ?? "(missing)"} does not match release version ${releaseVersion}`,
+    );
+  }
+
   return { version: releaseVersion };
 }
 
