@@ -5,6 +5,7 @@ import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
 const { buildBrowserPageDefinition } = require('../../packages/ui/dist/browser/app.js');
+const { BROWSER_UI_VERSION } = require('../../packages/ui/dist/browser/version.js');
 
 class FakeElement {
   constructor(value = '') {
@@ -1276,6 +1277,23 @@ test('Browser menu matches owner panel outside-click dismissal behavior', async 
   documentClick({});
   assert.equal(elements['[data-browser-menu]'].hidden, true);
   assert.equal(elements['[data-browser-menu-trigger]'].getAttribute('aria-expanded'), 'false');
+});
+
+test('Browser settings header shows the Browser UI version next to the title', async () => {
+  const { context, elements } = createBrowserContext();
+
+  await waitFor(() => context.state.current, 'initial Browser load');
+  await context.openBrowserSettings('baseUrls');
+
+  const html = elements['[data-browser-modal-root]'].innerHTML;
+  assert.ok(
+    html.includes(
+      '<h2>Browser Settings</h2><span class="browser-settings-version" title="Agent Browser Core">v' +
+        BROWSER_UI_VERSION +
+        '</span>',
+    ),
+    `settings header is missing the version badge: ${html.slice(0, 400)}`,
+  );
 });
 
 test('Browser base URL settings show only resolver base URL fields', async () => {
