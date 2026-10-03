@@ -1,7 +1,6 @@
 import { parseMapUri } from '../browser/mapUri.js';
 import {
   parseMetaAppLaunchUri,
-  serializeMetaAppLaunchQuery,
   type MetaAppLaunchContext,
 } from '../browser/metaAppLaunchContext.js';
 import { parsePinUri } from '../browser/pinUri.js';
@@ -225,20 +224,23 @@ export function parseBrowserUri(input: string): ParsedBrowserUri {
   }
 
   if (scheme === 'metaapp') {
-    // Deep links may carry a launch query: metaapp://<appPinId>?view=buzz&pin=<pin>.
-    // Only the appPinId is used to resolve the MetaApp package; query/path/hash
-    // fragments never leak into the id. The launch context is attached for the
-    // host to forward to the app entry URL (see serializeMetaAppLaunchQuery).
+    // Deep links may carry a launch query and fragment:
+    // metaapp://<appPinId>?view=buzz&pin=<pin>#<hash>. Only the appPinId is
+    // used to resolve the MetaApp package; query/path/hash fragments never
+    // leak into the id. The launch context is attached for the host to
+    // forward the full deep-link query and hash to the app entry URL (see
+    // serializeMetaAppLaunchQuery).
     const launch = parseMetaAppLaunchUri(originalUri);
-    const launchQuery = serializeMetaAppLaunchQuery(launch.launchContext);
+    const launchContext = launch.launchContext;
+    const launchSuffix = launchContext
+      ? `${launchContext.rawQuery ? `?${launchContext.rawQuery}` : ''}${launchContext.rawHash ? `#${launchContext.rawHash}` : ''}`
+      : '';
     return {
       originalUri,
-      normalizedUri: launchQuery
-        ? `metaapp://${launch.appPinId}?${launchQuery}`
-        : `metaapp://${launch.appPinId}`,
+      normalizedUri: `metaapp://${launch.appPinId}${launchSuffix}`,
       scheme,
       id: launch.appPinId,
-      ...(launch.launchContext ? { launchContext: launch.launchContext } : {}),
+      ...(launchContext ? { launchContext } : {}),
     };
   }
 

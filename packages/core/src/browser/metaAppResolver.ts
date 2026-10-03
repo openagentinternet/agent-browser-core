@@ -1,5 +1,8 @@
 import type { MetaAppLaunchContext } from './metaAppLaunchContext.js';
-import { serializeMetaAppLaunchQuery } from './metaAppLaunchContext.js';
+import {
+  serializeMetaAppLaunchHash,
+  serializeMetaAppLaunchQuery,
+} from './metaAppLaunchContext.js';
 import type { BrowserRendererType, BrowserResolveResult, MetaAppGalleryRecord } from './types.js';
 
 function safeRendererUrl(value: unknown): string | undefined {
@@ -65,11 +68,18 @@ function withLaunchContextQuery(
     return url;
   }
   const query = serializeMetaAppLaunchQuery(launchContext);
-  if (!query) {
+  const hash = serializeMetaAppLaunchHash(launchContext);
+  if (!query && !hash) {
     return url;
   }
   const withoutFragment = url.split('#', 1)[0];
-  return `${withoutFragment}${withoutFragment.includes('?') ? '&' : '?'}${query}`;
+  let target = query
+    ? `${withoutFragment}${withoutFragment.includes('?') ? '&' : '?'}${query}`
+    : withoutFragment;
+  if (hash) {
+    target += `#${hash}`;
+  }
+  return target;
 }
 
 export function buildMetaAppResolveResult(input: {
