@@ -94,8 +94,12 @@ function createElements() {
     '[data-browser-status-txid]', '[data-browser-drawer]', '[data-browser-inspector]',
     '[data-browser-modal-root]', '[data-browser-toast]', '[data-browser-tabstrip]',
     '[data-browser-tabs-container]', '[data-browser-tab-new]',
+    '[data-browser-tab-context-menu]',
   ];
   for (const s of selectors) els[s] = new FakeElement();
+  // The served page markup starts the context menu hidden (hidden attribute);
+  // mirror that on the harness element.
+  els['[data-browser-tab-context-menu]'].hidden = true;
   return els;
 }
 
@@ -719,4 +723,343 @@ test('goBack and goForward keep the Back/Forward buttons in sync with historyInd
   await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1bob', 'forward navigation');
   assert.equal(elements['[data-browser-back]'].disabled, false, 'back at newest entry: Back enabled');
   assert.equal(elements['[data-browser-forward]'].disabled, true, 'back at newest entry: Forward disabled');
+});
+
+// --- PR1: tab context menu / pinned / rename / undo close --------------------
+//
+// The context menu is a delegated contextmenu listener on the tab strip plus
+// one shared overlay element; dispatch helpers below feed synthetic events
+// into the registered listeners (same pattern the click-triggered tests use).
+
+function delegatableTarget(attrName, attrValue, disabled) {
+  return {
+    getAttribute: (name) => (name === attrName ? String(attrValue) : ''),
+    hasAttribute: (name) => name === attrName,
+    disabled: !!disabled,
+    parentElement: null,
+  };
+}
+
+// Right-click (contextmenu event) on the strip, targeting one tab.
+function dispatchTabContextMenu(elements, tabId) {
+  const listener = elements['[data-browser-tabs-container]'].listeners.get('contextmenu');
+  listener({
+    preventDefault() {}, stopPropagation() {}, clientX: 24, clientY: 10,
+    target: delegatableTarget('data-tab-id', tabId),
+  });
+}
+
+function dispatchTabMenuClick(elements, action, disabled) {
+  const listener = elements['[data-browser-tab-context-menu]'].listeners.get('click');
+  listener({
+    preventDefault() {}, stopPropagation() {},
+    target: delegatableTarget('data-browser-tab-ctx-action', action, disabled),
+  });
+}
+
+// Rename through the context menu + modal, asserting the intermediate states.
+function renameTabViaMenu(elements, activeId, value) {
+  dispatchTabContextMenu(elements, activeId);
+  const menu = elements['[data-browser-tab-context-menu]'];
+  assert.equal(menu.hidden, false, 'context menu opened');
+  dispatchTabMenuClick(elements, 'rename');
+  const modalRoot = elements['[data-browser-modal-root]'];
+  assert.equal(modalRoot.hidden, false, 'rename modal opened');
+  const input = modalRoot.querySelector('[data-browser-tab-rename-input]');
+  input.value = value;
+  const dispatcher = modalRoot.listeners.get('click');
+  dispatcher({
+    preventDefault() {}, stopPropagation() {},
+    target: delegatableTarget('data-browser-modal-action', 'tab-rename'),
+  });
+  return modalRoot;
+}
+
+test('openTab second-arg label form sets TabInfo.label and is shown in the strip', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const newId = context.AgentBrowserTabs.openTab('metaid://idq1bob', { label: 'Bob Review' });
+  await waitFor(() => fetchCalls.length === 3, 'openTab resolve');
+
+  const tabs = context.AgentBrowserTabs.getTabs();
+  const opened = tabs.find((tab) => tab.id === newId);
+  assert.equal(opened.label, 'Bob Review', 'label override lands in TabInfo');
+  assert.ok(!('label' in tabs.find((tab) => tab.id !== newId)), 'ordinary tabs keep the older five-field shape');
+  assert.ok(!('pinned' in opened), 'unpinned tabs carry no pinned field');
+  const stripHtml = elements['[data-browser-tabs-container]'].innerHTML;
+  assert.match(stripHtml, /Bob Review/, 'strip shows the label override');
+});
+
+test('openTab with an empty label option behaves like the plain call', async () => {
+  const { context, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const newId = context.AgentBrowserTabs.openTab('metaid://idq1bob', { label: '   ' });
+  await waitFor(() => fetchCalls.length === 3, 'openTab resolve');
+  const opened = context.AgentBrowserTabs.getTabs().find((tab) => tab.id === newId);
+  assert.ok(!('label' in opened), 'blank label does not create a label field');
+});
+
+test('context menu opens on right-click with the expected items', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const activeId = context.AgentBrowserTabs.getActiveTab().id;
+
+  dispatchTabContextMenu(elements, activeId);
+  const menu = elements['[data-browser-tab-context-menu]'];
+  assert.equal(menu.hidden, false, 'menu visible');
+  const menuHtml = menu.innerHTML;
+  for (const item of ['Close tab', 'Close other tabs', 'Close tabs to the right', 'Pin', 'Rename…']) {
+    assert.match(menuHtml, new RegExp(escapeRegExp(item)), `menu has "${item}"`);
+  }
+  assert.match(menuHtml, /data-browser-tab-ctx-action="reopen-closed" disabled/, 'Reopen closed tab disabled with an empty stack');
+});
+
+function escapeRegExp(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+test('close other tabs keeps the anchor tab and pinned tabs', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const baseId = context.AgentBrowserTabs.getActiveTab().id;
+  const bobId = context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  const carolId = context.AgentBrowserTabs.openTab('metaid://idq1carol');
+  await waitFor(() => fetchCalls.length === 4, 'three resolves');
+
+  // Pin the base tab via the context menu: bulk closes must skip it.
+  dispatchTabContextMenu(elements, baseId);
+  dispatchTabMenuClick(elements, 'pin');
+  assert.equal(context.AgentBrowserTabs.getTabs().find((tab) => tab.id === baseId).pinned, true, 'base tab pinned');
+
+  dispatchTabContextMenu(elements, bobId);
+  dispatchTabMenuClick(elements, 'close-others');
+  // Array.from: getTabs() hands out a vm-realm array; deepStrictEqual compares
+  // prototypes, so bring the copy into the host realm first.
+  const remaining = Array.from(context.AgentBrowserTabs.getTabs(), (tab) => tab.id).sort((a, b) => a - b);
+  assert.deepEqual(remaining, [baseId, bobId].sort((a, b) => a - b), 'only the anchor and pinned tabs remain');
+
+  // Undo close walks the stack from the most recent entry: Carol first.
+  dispatchTabContextMenu(elements, bobId);
+  dispatchTabMenuClick(elements, 'reopen-closed');
+  await waitFor(() => context.AgentBrowserTabs.getTabs().some((tab) => tab.uri === 'metaid://idq1carol'), 'carol restored');
+  // The stack is drained: a further reopen is a no-op.
+  const tabsAfterOneRestore = context.AgentBrowserTabs.getTabs().length;
+  dispatchTabContextMenu(elements, bobId);
+  dispatchTabMenuClick(elements, 'reopen-closed');
+  assert.equal(context.AgentBrowserTabs.getTabs().length, tabsAfterOneRestore, 'empty stack: reopen is a no-op');
+});
+
+test('close tabs to the right removes only later strip tabs and keeps pinned', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const baseId = context.AgentBrowserTabs.getActiveTab().id;
+  const bobId = context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  const carolId = context.AgentBrowserTabs.openTab('metaid://idq1carol');
+  await waitFor(() => fetchCalls.length === 4, 'three resolves');
+
+  dispatchTabContextMenu(elements, bobId);
+  dispatchTabMenuClick(elements, 'close-right');
+  // Array.from: see the realm note in the close-others test above.
+  const remaining = Array.from(context.AgentBrowserTabs.getTabs(), (tab) => tab.id).sort((a, b) => a - b);
+  assert.deepEqual(remaining, [baseId, bobId].sort((a, b) => a - b), 'carol (right of bob) is closed');
+});
+
+test('pin and unpin reset the strip order and TabInfo.pinned', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const baseId = context.AgentBrowserTabs.getActiveTab().id;
+  const bobId = context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  const carolId = context.AgentBrowserTabs.openTab('metaid://idq1carol');
+  await waitFor(() => fetchCalls.length === 4, 'three resolves');
+  const stripHtml = () => elements['[data-browser-tabs-container]'].innerHTML;
+
+  dispatchTabContextMenu(elements, carolId);
+  dispatchTabMenuClick(elements, 'pin');
+  const carolInfo = context.AgentBrowserTabs.getTabs().find((tab) => tab.id === carolId);
+  assert.equal(carolInfo.pinned, true, 'pinned flag set');
+  const html = stripHtml();
+  assert.ok(
+    html.indexOf(`data-tab-id="${carolId}"`) < html.indexOf(`data-tab-id="${baseId}"`),
+    'pinned tab renders before unpinned tabs',
+  );
+  assert.ok(
+    html.indexOf(`data-tab-id="${carolId}"`) < html.indexOf(`data-tab-id="${bobId}"`),
+    'pinned tab renders before the other unpinned tab',
+  );
+  assert.match(html, /is-pinned/, 'pinned visual class present');
+
+  // Unpin flips the flag back and restores creation order.
+  dispatchTabContextMenu(elements, carolId);
+  assert.match(elements['[data-browser-tab-context-menu]'].innerHTML, /Unpin/, 'menu label switches to Unpin');
+  dispatchTabMenuClick(elements, 'pin');
+  const carolAfter = context.AgentBrowserTabs.getTabs().find((tab) => tab.id === carolId);
+  assert.ok(!('pinned' in carolAfter), 'unpinned tabs carry no pinned field');
+  const htmlAfter = stripHtml();
+  assert.ok(
+    htmlAfter.indexOf(`data-tab-id="${carolId}"`) > htmlAfter.indexOf(`data-tab-id="${bobId}"`),
+    'unpinned tab renders after its senior sibling again',
+  );
+});
+
+test('rename via context menu writes the override shown in TabInfo and the strip', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const activeId = context.AgentBrowserTabs.getActiveTab().id;
+
+  renameTabViaMenu(elements, activeId, 'My Named Tab');
+  const info = context.AgentBrowserTabs.getActiveTab();
+  assert.equal(info.label, 'My Named Tab', 'rename override stored');
+  assert.match(elements['[data-browser-tabs-container]'].innerHTML, /My Named Tab/, 'strip shows the renamed label');
+  assert.equal(elements['[data-browser-modal-root]'].hidden, true, 'rename modal closed after confirm');
+  assert.equal(fetchCalls.length, 2, 'rename does not navigate');
+});
+
+test('rename override survives later navigation-committed title updates', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const activeId = context.AgentBrowserTabs.getActiveTab().id;
+  renameTabViaMenu(elements, activeId, 'Alice Home');
+
+  // A committed navigation recomputes the resource title; the override stays.
+  await context.navigateTo('metaid://idq1bob');
+  await waitFor(() => context.AgentBrowserTabs.getActiveTab().uri === 'metaid://idq1bob', 'second navigation');
+  assert.equal(context.AgentBrowserTabs.getActiveTab().label, 'Alice Home', 'override survived the commit');
+  const stripHtml = elements['[data-browser-tabs-container]'].innerHTML;
+  assert.match(stripHtml, /Alice Home/, 'strip still shows the override');
+});
+
+test('rename with an empty field clears the override', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const activeId = context.AgentBrowserTabs.getActiveTab().id;
+  renameTabViaMenu(elements, activeId, 'Temp Name');
+  assert.equal(context.AgentBrowserTabs.getActiveTab().label, 'Temp Name');
+
+  renameTabViaMenu(elements, activeId, '');
+  const info = context.AgentBrowserTabs.getActiveTab();
+  assert.ok(!('label' in info), 'empty rename clears the label field');
+  assert.match(elements['[data-browser-tabs-container]'].innerHTML, /Alice Bot/, 'strip falls back to the page title');
+});
+
+test('context menu Close tab closes the targeted tab', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const baseId = context.AgentBrowserTabs.getActiveTab().id;
+  const bobId = context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'bob resolve');
+
+  dispatchTabContextMenu(elements, bobId);
+  dispatchTabMenuClick(elements, 'close-tab');
+  assert.ok(!context.AgentBrowserTabs.getTabs().some((tab) => tab.id === bobId), 'bob closed by the menu action');
+  assert.equal(context.AgentBrowserTabs.getActiveTab().id, baseId, 'base tab became active');
+});
+
+test('undo close restores the tab with its uri and pinned/label state', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const baseId = context.AgentBrowserTabs.getActiveTab().id;
+  const bobId = context.AgentBrowserTabs.openTab('metaid://idq1bob', { label: 'Bob Note' });
+  await waitFor(() => fetchCalls.length === 3, 'bob resolve');
+
+  dispatchTabContextMenu(elements, bobId);
+  dispatchTabMenuClick(elements, 'pin');
+  assert.equal(context.AgentBrowserTabs.getTabs().find((tab) => tab.id === bobId).pinned, true, 'pinned before close');
+
+  context.AgentBrowserTabs.closeTab(bobId);
+  assert.ok(!context.AgentBrowserTabs.getTabs().some((tab) => tab.id === bobId), 'bob is gone after close');
+
+  dispatchTabContextMenu(elements, baseId);
+  dispatchTabMenuClick(elements, 'reopen-closed');
+  await waitFor(() => {
+    const tabs = context.AgentBrowserTabs.getTabs();
+    return tabs.some((tab) => tab.uri === 'metaid://idq1bob' && tab.label === 'Bob Note' && tab.pinned);
+  }, 'bob restored with label and pinned state');
+
+  // The stack is empty again: a fresh menu shows the reopen item disabled.
+  dispatchTabContextMenu(elements, baseId);
+  assert.match(
+    elements['[data-browser-tab-context-menu]'].innerHTML,
+    /data-browser-tab-ctx-action="reopen-closed" disabled/,
+    'reopen disabled once the stack drained',
+  );
+});
+
+test('closing the last tab then undo replaces the untouched placeholder', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const baseId = context.AgentBrowserTabs.getActiveTab().id;
+
+  context.AgentBrowserTabs.closeTab(baseId);
+  assert.equal(context.AgentBrowserTabs.getTabs().length, 1, 'placeholder keeps the window alive');
+
+  dispatchTabContextMenu(elements, context.AgentBrowserTabs.getActiveTab().id);
+  dispatchTabMenuClick(elements, 'reopen-closed');
+  await waitFor(() => {
+    const tabs = context.AgentBrowserTabs.getTabs();
+    return tabs.length === 1 && tabs[0].uri === 'metaid://idq1alice';
+  }, 'placeholder replaced by the restored tab');
+});
+
+test('Cmd+Shift+T and Ctrl+Shift+T reopen the most recently closed tab', async () => {
+  const { context, elements, documentListeners, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const bobId = context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'bob resolve');
+  context.AgentBrowserTabs.closeTab(bobId);
+
+  const keydownListeners = documentListeners.get('keydown');
+  assert.ok(Array.isArray(keydownListeners) && keydownListeners.length >= 1, 'a document keydown listener is registered');
+  let preventDefaultCalled = false;
+  for (const handler of keydownListeners) {
+    handler({
+      key: 't', shiftKey: true, ctrlKey: false, metaKey: true,
+      preventDefault() { preventDefaultCalled = true; },
+    });
+  }
+  await waitFor(() => context.AgentBrowserTabs.getTabs().some((tab) => tab.uri === 'metaid://idq1bob'), 'bob restored by Cmd+Shift+T');
+  assert.equal(preventDefaultCalled, true, 'preventDefault when a reopen happened');
+
+  // Ctrl variant (non-mac) restores the initial tab after a close.
+  const baseId = context.AgentBrowserTabs.getActiveTab().id;
+  context.AgentBrowserTabs.closeTab(baseId);
+  let ctrlPrevented = false;
+  for (const handler of keydownListeners) {
+    handler({
+      key: 'T', shiftKey: true, ctrlKey: true, metaKey: false,
+      preventDefault() { ctrlPrevented = true; },
+    });
+  }
+  await waitFor(() => context.AgentBrowserTabs.getTabs().some((tab) => tab.uri && tab.uri.toLowerCase().indexOf('alice') !== -1), 'initial tab restored by Ctrl+Shift+T');
+  assert.equal(ctrlPrevented, true);
+});
+
+test('right-click outside a tab does not open the menu and Escape dismisses it', async () => {
+  const { context, elements, documentListeners, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+
+  // Right-click on the strip but NOT on a tab (no data-tab-id target).
+  const listener = elements['[data-browser-tabs-container]'].listeners.get('contextmenu');
+  listener({ preventDefault() {}, stopPropagation() {}, clientX: 0, clientY: 0, target: { getAttribute: () => '', hasAttribute: () => false, parentElement: null } });
+  assert.equal(elements['[data-browser-tab-context-menu]'].hidden, true, 'no menu for a non-tab target');
+
+  dispatchTabContextMenu(elements, context.AgentBrowserTabs.getActiveTab().id);
+  assert.equal(elements['[data-browser-tab-context-menu]'].hidden, false, 'menu open');
+  for (const handler of documentListeners.get('keydown')) {
+    handler({ key: 'Escape', preventDefault() {} });
+  }
+  assert.equal(elements['[data-browser-tab-context-menu]'].hidden, true, 'Escape closed the menu');
+});
+
+test('bridge open-tab message accepts a label pass-through', async () => {
+  const { context, hostMessages, parentWindow, fetchCalls } = createBrowserContext({
+    search: '?uri=metaid%3A%2F%2Fidq1alice',
+  });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  const before = context.AgentBrowserTabs.getTabs().length;
+  context.handleBrowserMessage({ source: parentWindow, data: { type: 'agent-browser:open-tab', uri: 'metaid://idq1carol', label: 'Carol Launched' } });
+  await waitFor(() => fetchCalls.length === 3, 'carol resolve');
+  const tabs = context.AgentBrowserTabs.getTabs();
+  assert.equal(tabs.length, before + 1);
+  assert.equal(tabs.find((tab) => tab.title === 'Carol Bot' || tab.label === 'Carol Launched').label, 'Carol Launched',
+    'the opened tab carries the label');
 });
