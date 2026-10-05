@@ -182,6 +182,47 @@ test('standalone artifact cache preserves an existing artifact when a replacemen
   assert.match(await readFile(path.join(hit.artifactDir, 'index.html'), 'utf8'), /Valid/);
 });
 
+test('buildMetaAppArtifactCacheKey folds the head modify pin so modify chains stop sharing one key', () => {
+  // Regression for the "modify on chain, entry still serves the old bundle"
+  // incident: the key previously ignored modifyHistory, so every revision of
+  // the same contentReference/contentType/indexFile collided in one bucket.
+  const legacy = buildMetaAppArtifactCacheKey(descriptor);            // no history -> legacy-compatible key
+  assert.equal(legacy, buildMetaAppArtifactCacheKey({ ...descriptor, modifyHistory: undefined }));
+  const rev1 = buildMetaAppArtifactCacheKey({ ...descriptor, modifyHistory: ['aa'.repeat(32) + 'i0'] });
+  const rev2 = buildMetaAppArtifactCacheKey({ ...descriptor, modifyHistory: ['aa'.repeat(32) + 'i0', 'bb'.repeat(32) + 'i0'] });
+  assert.notEqual(rev1, legacy);
+  assert.notEqual(rev2, rev1);
+  assert.equal(rev2, buildMetaAppArtifactCacheKey({ ...descriptor, modifyHistory: ['aa'.repeat(32) + 'i0', 'bb'.repeat(32) + 'i0'] }));
+});
+
+test('artifact cache misses when the modify-chain head moves, keeps the old entry intact', async (t) => {
+  const cacheRoot = await mkdtemp(path.join(tmpdir(), 'abc-artifact-cache-modify-'));
+  t.after(() => rm(cacheRoot, { recursive: true, force: true }));
+
+  const cache = createStandaloneMetaAppArtifactCacheStore({ cacheRoot });
+  const archive = makeMetaAppZipArchive({ 'index.html': '<!doctype html><title>v1</title>' });
+  const v1 = await cache.writeArtifact({ ...descriptor, archive });
+
+  const movedDescriptor = {
+    ...descriptor,
+    modifyHistory: ['cc'.repeat(32) + 'i0'],
+  };
+  // Head moved: the old bundle TYPICALLY no longer matches the chain head.
+  assert.equal(await cache.getArtifact(movedDescriptor), null);
+
+  const v2 = await cache.writeArtifact({
+    ...movedDescriptor,
+    archive: makeMetaAppZipArchive({ 'index.html': '<!doctype html><title>v2</title>' }),
+  });
+  assert.notEqual(v2.cacheKey, v1.cacheKey);
+  assert.match(await readFile(path.join(v2.artifactDir, 'index.html'), 'utf8'), /v2/);
+
+  // The old entry is untouched and still resolvable for its own descriptor.
+  const oldHit = await cache.getArtifact(descriptor);
+  assert.equal(oldHit.cacheKey, v1.cacheKey);
+  assert.match(await readFile(path.join(oldHit.artifactDir, 'index.html'), 'utf8'), /v1/);
+});
+
 test('buildMetaAppArtifactCacheKey changes when content identity changes', () => {
   const first = buildMetaAppArtifactCacheKey(descriptor);
   const second = buildMetaAppArtifactCacheKey({

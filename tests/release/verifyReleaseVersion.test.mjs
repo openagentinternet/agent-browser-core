@@ -15,6 +15,7 @@ async function copyFixtureRepo() {
   await Promise.all([
     copyFile("package.json", fixtureRoot),
     copyFile("release/compatibility.json", fixtureRoot),
+    copyFile("packages/ui/src/browser/version.ts", fixtureRoot),
     ...BROWSER_WORKSPACES.map((workspace) => copyFile(path.join(workspace.path, "package.json"), fixtureRoot)),
   ]);
 
@@ -33,6 +34,11 @@ async function mutateJson(filePath, mutate) {
   const contents = JSON.parse(await readFile(filePath, "utf8"));
   mutate(contents);
   await writeFile(filePath, `${JSON.stringify(contents, null, 2)}\n`, "utf8");
+}
+
+async function mutateText(filePath, replace) {
+  const contents = await readFile(filePath, "utf8");
+  await writeFile(filePath, replace(contents), "utf8");
 }
 
 test("accepts repo tag v0.6.3", async () => {
@@ -59,6 +65,23 @@ test("rejects mismatched internal dependency pin", async () => {
     await assert.rejects(
       () => verifyReleaseVersion({ tag: "v0.6.3", repoRoot: fixtureRoot }),
     /@openagentinternet\/agent-browser-core depends on @openagentinternet\/agent-browser-host-contract@0\.2\.0, expected 0\.6\.3/,
+    );
+  } finally {
+    await rm(fixtureRoot, { recursive: true, force: true });
+  }
+});
+
+test("rejects mismatched Browser UI version constant", async () => {
+  const fixtureRoot = await copyFixtureRepo();
+
+  try {
+    await mutateText(path.join(fixtureRoot, "packages/ui/src/browser/version.ts"), (contents) =>
+      contents.replace('BROWSER_UI_VERSION = "0.6.3"', 'BROWSER_UI_VERSION = "0.2.0"'),
+    );
+
+    await assert.rejects(
+      () => verifyReleaseVersion({ tag: "v0.6.3", repoRoot: fixtureRoot }),
+      /Browser UI version constant 0\.2\.0 does not match release version 0\.6\.3/,
     );
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true });

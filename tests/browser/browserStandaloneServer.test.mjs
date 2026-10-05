@@ -613,7 +613,7 @@ test('standalone Browser server forwards MetaApp deep-link launch parameters to 
   t.after(() => new Promise((resolve) => server.close(resolve)));
   const baseUrl = await listen(server);
 
-  const deepLinkUri = `metaapp://${pinId}?view=buzz&pin=${buzzPinId}`;
+  const deepLinkUri = `metaapp://${pinId}?view=buzz&pin=${buzzPinId}&foo=bar&flag=%E4%B8%AD#section-1`;
   const response = await fetch(`${baseUrl}/api/browser/resolve?actorId=standalone-wallet&uri=${encodeURIComponent(deepLinkUri)}`);
   const resolved = await readJson(response);
   assert.equal(response.status, 200);
@@ -621,9 +621,10 @@ test('standalone Browser server forwards MetaApp deep-link launch parameters to 
   assert.equal(resolved.data.renderer.type, 'html-iframe');
   // The appPinId used for package resolution stays pure (no query leakage).
   assert.equal(fetchUrls[0], `https://man.example.test/pin/${pinId}`);
+  // The local preview iframe URL carries the full deep-link query and hash.
   assert.match(
     resolved.data.renderer.url,
-    new RegExp(`^/api/browser/preview-assets/standalone-[0-9a-f-]+/index\\.html\\?view=buzz&pin=${buzzPinId}$`),
+    new RegExp(`^/api/browser/preview-assets/standalone-[0-9a-f-]+/index\\.html\\?view=buzz&pin=${buzzPinId}&foo=bar&flag=%E4%B8%AD#section-1$`),
   );
 });
 
