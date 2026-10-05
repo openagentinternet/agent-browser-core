@@ -3,4 +3,4 @@
  * the workspace root version; scripts/verify-release-version.mjs fails the
  * release check when this constant drifts from the root package.json version.
  */
-export const BROWSER_UI_VERSION = "0.6.3";
+export const BROWSER_UI_VERSION = "0.7.0";

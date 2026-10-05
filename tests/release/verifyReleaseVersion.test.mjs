@@ -41,16 +41,16 @@ async function mutateText(filePath, replace) {
   await writeFile(filePath, replace(contents), "utf8");
 }
 
-test("accepts repo tag v0.6.3", async () => {
-  const result = await verifyReleaseVersion({ tag: "v0.6.3", repoRoot });
+test("accepts repo tag v0.7.0", async () => {
+  const result = await verifyReleaseVersion({ tag: "v0.7.0", repoRoot });
 
-  assert.deepEqual(result, { version: "0.6.3" });
+  assert.deepEqual(result, { version: "0.7.0" });
 });
 
 test("rejects repo tag v0.2.0", async () => {
   await assert.rejects(
     () => verifyReleaseVersion({ tag: "v0.2.0", repoRoot }),
-    /Tag version 0\.2\.0 does not match root package version 0\.6\.3/,
+    /Tag version 0\.2\.0 does not match root package version 0\.7\.0/,
   );
 });
 
@@ -63,8 +63,8 @@ test("rejects mismatched internal dependency pin", async () => {
     });
 
     await assert.rejects(
-      () => verifyReleaseVersion({ tag: "v0.6.3", repoRoot: fixtureRoot }),
-    /@openagentinternet\/agent-browser-core depends on @openagentinternet\/agent-browser-host-contract@0\.2\.0, expected 0\.6\.3/,
+      () => verifyReleaseVersion({ tag: "v0.7.0", repoRoot: fixtureRoot }),
+    /@openagentinternet\/agent-browser-core depends on @openagentinternet\/agent-browser-host-contract@0\.2\.0, expected 0\.7\.0/,
     );
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true });
@@ -76,12 +76,12 @@ test("rejects mismatched Browser UI version constant", async () => {
 
   try {
     await mutateText(path.join(fixtureRoot, "packages/ui/src/browser/version.ts"), (contents) =>
-      contents.replace('BROWSER_UI_VERSION = "0.6.3"', 'BROWSER_UI_VERSION = "0.2.0"'),
+      contents.replace('BROWSER_UI_VERSION = "0.7.0"', 'BROWSER_UI_VERSION = "0.2.0"'),
     );
 
     await assert.rejects(
-      () => verifyReleaseVersion({ tag: "v0.6.3", repoRoot: fixtureRoot }),
-      /Browser UI version constant 0\.2\.0 does not match release version 0\.6\.3/,
+      () => verifyReleaseVersion({ tag: "v0.7.0", repoRoot: fixtureRoot }),
+      /Browser UI version constant 0\.2\.0 does not match release version 0\.7\.0/,
     );
   } finally {
     await rm(fixtureRoot, { recursive: true, force: true });
