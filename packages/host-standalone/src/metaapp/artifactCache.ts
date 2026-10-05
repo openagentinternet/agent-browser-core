@@ -138,11 +138,18 @@ function normalizeDescriptor(input: MetaAppArtifactDescriptor): MetaAppArtifactD
   };
 }
 
-export function buildMetaAppArtifactCacheKey(input: Pick<MetaAppArtifactDescriptor, 'contentReference' | 'contentType' | 'indexFile'>): string {
+export function buildMetaAppArtifactCacheKey(input: MetaAppArtifactDescriptor): string {
+  const latestModify = latestModifyPinId(input.modifyHistory);
   const descriptor = {
     contentReference: normalizeText(input.contentReference),
     contentType: normalizeText(input.contentType),
     indexFile: normalizeText(input.indexFile) || 'index.html',
+    // Folding the head modify pinId into the cache key makes every
+    // modify-chain entry resolve to a key of its own: a bundled artifact
+    // can no longer outlive its chain head. Before this, the cache had no
+    // TTL and no head re-check, so an on-chain modify was invisible at the
+    // entry until an unrelated manifest rewrite happened to land.
+    ...(latestModify ? { latestModifyPinId: latestModify } : {}),
   };
   return createHash('sha256').update(JSON.stringify(descriptor)).digest('hex');
 }
