@@ -17,3 +17,4 @@ coverage/
 
 # Agent tooling session state
 .zcode/
+node_modules

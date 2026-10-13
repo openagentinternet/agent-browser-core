@@ -147,3 +147,30 @@ test('served preview assets rewrite metafile src and carry the navigation bridge
     // best-effort cleanup; the host is in-memory
   }
 });
+
+test('injects the video play fallback shim once into preview HTML', () => {
+  const html = '<html><head><title>t</title></head><body><video autoplay muted playsinline></video></body></html>';
+  const prepared = String(preparePreviewHtml({
+    body: Buffer.from(html, 'utf8'),
+    contentType: 'text/html; charset=utf-8',
+    metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
+  }));
+  assert.ok(prepared.includes('__agentBrowserVideoPlayFallback'), 'fallback shim injected');
+  assert.equal(prepared.split('(function __agentBrowserVideoPlayFallback(').length - 1, 1, 'shim injected exactly once');
+  assert.ok(prepared.includes('HTMLMediaElement.prototype.play'), 'wraps play()');
+  assert.ok(prepared.includes("video.play() rejected: '"), 'logs rejected play() with error name');
+  // A video-less page still carries the shim (injected unconditionally, harmless).
+  const plain = String(preparePreviewHtml({
+    body: Buffer.from('<html><head></head><body><p>hi</p></body></html>', 'utf8'),
+    contentType: 'text/html',
+    metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
+  }));
+  assert.ok(plain.includes('__agentBrowserVideoPlayFallback'));
+  // Non-HTML payloads pass through untouched.
+  const passthrough = preparePreviewHtml({
+    body: Buffer.from('<video/>', 'utf8'),
+    contentType: 'image/svg+xml',
+    metafileContentBaseUrl: 'https://file.metaid.io/metafile-indexer',
+  });
+  assert.ok(!String(passthrough).includes('__agentBrowserVideoPlayFallback'));
+});
