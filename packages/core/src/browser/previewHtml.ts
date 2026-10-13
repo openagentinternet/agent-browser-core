@@ -17,6 +17,97 @@ const METAFILE_URI_RE = /^metafile:\/\/(.*)$/iu;
 const SUBRESOURCE_ATTRIBUTE_RE = /(^|\s)(src|srcset|poster)\s*=\s*(?:"([^"]*)"|'([^']*)')/giu;
 
 const PREVIEW_STORAGE_SHIM_MARKER = '__agentBrowserPreviewStorageShim';
+const PREVIEW_VIDEO_PLAY_FALLBACK_MARKER = '__agentBrowserVideoPlayFallback';
+const PREVIEW_VIDEO_PLAY_FALLBACK = `<script>
+(function ${PREVIEW_VIDEO_PLAY_FALLBACK_MARKER}() {
+  if (window.${PREVIEW_VIDEO_PLAY_FALLBACK_MARKER}Installed) return;
+  window.${PREVIEW_VIDEO_PLAY_FALLBACK_MARKER}Installed = true;
+  var PENDING_TIMEOUT_MS = 8000;
+  var BUTTON_ID = '__ab-video-play-fallback';
+  function logRejected(media, err) {
+    var name = err && err.name ? err.name : 'UnknownError';
+    console.warn('[agent-browser] video.play() rejected: ' + name + ' — auto-injected fallback play button', media, err);
+  }
+  function ensureButton(media) {
+    var doc = media.ownerDocument;
+    if (!doc) return;
+    var existing = doc.getElementById(BUTTON_ID);
+    if (existing && existing.__abTarget === media) return existing;
+    if (existing) existing.remove();
+    var btn = doc.createElement('button');
+    btn.id = BUTTON_ID;
+    btn.type = 'button';
+    btn.setAttribute('aria-label', 'Play video');
+    btn.textContent = '▶ 播放视频';
+    // Always visible (no hover dependency), high z-index, fixed at the bottom
+    // center of the frame so it works for any video layout and in screenshot
+    // / headless paths.
+    btn.style.cssText = 'position:fixed;left:50%;bottom:48px;transform:translateX(-50%);z-index:2147483647;'
+      + 'padding:10px 22px;font-size:16px;line-height:1;background:#1f6feb;color:#fff;border:none;'
+      + 'border-radius:24px;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,0.35);';
+    btn.__abTarget = media;
+    btn.addEventListener('click', function () {
+      var p;
+      try { p = media.play(); } catch (err) {
+        console.warn('[agent-browser] fallback video.play() threw', media, err);
+        return;
+      }
+      if (p && typeof p.catch === 'function') {
+        p.catch(function (err) { console.warn('[agent-browser] fallback video.play() rejected', media, err); });
+      }
+    });
+    if (doc.body) doc.body.appendChild(btn);
+    else doc.addEventListener('DOMContentLoaded', function () { if (doc.body) doc.body.appendChild(btn); });
+    return btn;
+  }
+  function removeButton(media) {
+    var doc = media.ownerDocument;
+    var existing = doc && doc.getElementById(BUTTON_ID);
+    if (existing && existing.__abTarget === media) existing.remove();
+  }
+  var origPlay = HTMLMediaElement.prototype.play;
+  if (!origPlay.__abWrapped) {
+    var wrapped = function play() {
+      var media = this;
+      var result;
+      try { result = origPlay.apply(this, arguments); }
+      catch (err) { logRejected(media, err); ensureButton(media); throw err; }
+      if (result && typeof result.then === 'function') {
+        var settled = false;
+        result.then(
+          function () { settled = true; removeButton(media); },
+          function (err) { settled = true; logRejected(media, err); ensureButton(media); }
+        );
+        setTimeout(function () {
+          if (settled) return;
+          console.warn('[agent-browser] video.play() pending > ' + PENDING_TIMEOUT_MS + 'ms — injecting fallback play button', media);
+          ensureButton(media);
+        }, PENDING_TIMEOUT_MS);
+      }
+      return result;
+    };
+    wrapped.__abWrapped = true;
+    HTMLMediaElement.prototype.play = wrapped;
+  }
+  // Silent-autoplay watchdog: native autoplay no-ops (policy block) never call
+  // the JS play() wrapper, so the rejected-promise hook above cannot see it.
+  // Poll a few times after load: a declared-autoplay video still paused at t=0
+  // with media data loaded is treated as a silently blocked autoplay.
+  function silentAutoplayCheck() {
+    var videos = document.querySelectorAll('video');
+    for (var i = 0; i < videos.length; i++) {
+      (function (v) {
+        if (!v.autoplay && v.getAttribute('autoplay') === null) return;
+        if (!v.paused || v.currentTime > 0 || v.readyState < 1) return;
+        console.warn('[agent-browser] <video autoplay> still paused after load — silent autoplay block suspected — injecting fallback play button', v);
+        ensureButton(v);
+      })(videos[i]);
+    }
+  }
+  [1500, 4000, 8000].forEach(function (delay) { setTimeout(silentAutoplayCheck, delay); });
+})();
+</script>`;
+
 const PREVIEW_NAVIGATION_BRIDGE_MARKER = '__agentBrowserPreviewBridge';
 
 const PREVIEW_STORAGE_SHIM = `<script>
@@ -195,6 +286,9 @@ export function preparePreviewHtml(input: {
   }
   if (!html.includes(PREVIEW_NAVIGATION_BRIDGE_MARKER)) {
     html = injectHeadScript(html, PREVIEW_NAVIGATION_BRIDGE);
+  }
+  if (!html.includes(PREVIEW_VIDEO_PLAY_FALLBACK_MARKER)) {
+    html = injectHeadScript(html, PREVIEW_VIDEO_PLAY_FALLBACK);
   }
   return html;
 }
