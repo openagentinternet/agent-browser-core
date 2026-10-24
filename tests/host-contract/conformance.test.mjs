@@ -370,3 +370,77 @@ test('host conformance accepts protocol resources and open-conversation actions'
     sampleUri: 'map://simplebuzz/pin/6ea8a0bd0bac9a9c6cf4e035e9ce0a18e3a89f390c355dcc43074010fbee7ee7i0',
   });
 });
+
+// --- Actor list conformance (multi Human/Bot runtimes) -----------------------
+
+const humanActor = {
+  id: 'idbots-account',
+  label: 'Sunny (Account)',
+  kind: 'idbots-account',
+  globalMetaId: 'idq1sunny',
+  isDefault: false,
+  capabilities: ['template-settings'],
+};
+const botActor = {
+  id: 'idbots-agent',
+  label: 'Worker Agent',
+  kind: 'idbots-agent',
+  globalMetaId: 'idq1agent',
+  isDefault: true,
+  capabilities: ['private-chat', 'service-call'],
+};
+
+function adapterWithActors(actors, defaultActor) {
+  return createConformantAdapter({
+    async getRuntime() {
+      return browserSuccess({
+        host: { kind: 'standalone', name: 'Fake Browser', localMode: false },
+        actors,
+        defaultActor,
+        defaultUri: null,
+        features: {
+          privateChat: false,
+          serviceCall: false,
+          cacheManagement: true,
+          templateSettings: true,
+          walletLogin: true,
+        },
+        labels: {
+          actorChip: 'Actor',
+          noActorTitle: 'No Actor',
+          noActorBody: 'No actor.',
+        },
+      });
+    },
+  });
+}
+
+test('host conformance accepts a runtime with one human and one bot actor', async () => {
+  await assertBrowserHostConformance({
+    adapter: adapterWithActors([botActor, humanActor], botActor),
+    expectedHostKind: 'standalone',
+    sampleUri: 'metaid://idq1fake',
+  });
+});
+
+test('host conformance rejects duplicate actor ids', async () => {
+  await assert.rejects(
+    () => assertBrowserHostConformance({
+      adapter: adapterWithActors([botActor, { ...humanActor, id: 'idbots-agent' }], botActor),
+      expectedHostKind: 'standalone',
+      sampleUri: 'metaid://idq1fake',
+    }),
+    /duplicate/,
+  );
+});
+
+test('host conformance rejects a default actor outside the actor list', async () => {
+  await assert.rejects(
+    () => assertBrowserHostConformance({
+      adapter: adapterWithActors([botActor], { ...humanActor, isDefault: true }),
+      expectedHostKind: 'standalone',
+      sampleUri: 'metaid://idq1fake',
+    }),
+    /defaultActor membership/,
+  );
+});
