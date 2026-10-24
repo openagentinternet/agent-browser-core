@@ -302,6 +302,11 @@ durable replicated log.
   MetaID identity to untrusted MetaApp content.
 - Re-read the selected actor and revalidate every write or upload in the host
   adapter at execution time. Never rely only on client-side validation.
+- Runtime actor lists may mix Bot and human identities (see
+  [Human and Bot Actors](./metaapp-host-bridge-v1-host-requirements.md#human-and-bot-actors)).
+  Actor kind is display context, not proof of humanity; authorization stays bound
+  to the selected actor, and an unsupported identity/action combination must
+  fail explicitly rather than fall back to another signer.
 - Keep signing keys, wallet internals, filesystem paths, IPC handles, database
   records, and raw host objects outside all iframe contracts.
 - Treat browsing history and bookmarks as private user data. Do not upload,
