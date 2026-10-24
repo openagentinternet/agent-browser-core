@@ -1,6 +1,26 @@
 export type BrowserHostKind = 'standalone' | 'oac' | 'idbots';
 export type BrowserActorKind = 'wallet' | 'oac-bot' | 'idbots-agent' | 'idbots-account';
 
+// Presentation grouping for known Actor kinds, shared by Browser UI so a user
+// can distinguish human-side from bot-side identities before selecting one.
+// Unrecognized kinds resolve to 'unknown' and must stay neutral (no Human/Bot
+// guess); hosts supply their own presentation through runtime labels when
+// needed. A group is display context only — it is never cryptographic proof
+// that a signer is human.
+export type BrowserActorKindGroup = 'human' | 'bot' | 'unknown';
+
+export const BROWSER_ACTOR_KIND_GROUPS: Readonly<Record<string, BrowserActorKindGroup>> = {
+  wallet: 'human',
+  'idbots-account': 'human',
+  'idbots-agent': 'bot',
+  'oac-bot': 'bot',
+};
+
+export function browserActorKindGroup(kind: string | undefined | null): BrowserActorKindGroup {
+  const key = typeof kind === 'string' ? kind.trim() : '';
+  return BROWSER_ACTOR_KIND_GROUPS[key] ?? 'unknown';
+}
+
 export type BrowserActorCapability =
   | 'private-chat'
   | 'service-call'

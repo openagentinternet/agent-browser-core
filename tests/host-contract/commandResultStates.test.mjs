@@ -42,3 +42,26 @@ test('command helpers create success failed waiting and manual action results', 
     action: { label: 'Connect wallet', route: '/browser/login' },
   });
 });
+
+test('actor kind grouping classifies known kinds and stays neutral for unknown kinds', () => {
+  // Known kinds: human-side and bot-side identities are distinguishable.
+  assert.equal(contract.browserActorKindGroup('wallet'), 'human');
+  assert.equal(contract.browserActorKindGroup('idbots-account'), 'human');
+  assert.equal(contract.browserActorKindGroup('idbots-agent'), 'bot');
+  assert.equal(contract.browserActorKindGroup('oac-bot'), 'bot');
+
+  // Every kind ABC ships is classified — adding a kind without a group is a
+  // contract change that must be deliberate.
+  const kinds = ['wallet', 'oac-bot', 'idbots-agent', 'idbots-account'];
+  for (const kind of kinds) {
+    assert.notEqual(contract.browserActorKindGroup(kind), 'unknown', `${kind} must stay classified`);
+  }
+
+  // Unrecognized kinds are never guessed as Human or Bot.
+  assert.equal(contract.browserActorKindGroup('some-future-kind'), 'unknown');
+  assert.equal(contract.browserActorKindGroup('human'), 'unknown');
+  assert.equal(contract.browserActorKindGroup(''), 'unknown');
+  assert.equal(contract.browserActorKindGroup(undefined), 'unknown');
+  assert.equal(contract.browserActorKindGroup(null), 'unknown');
+  assert.equal(contract.browserActorKindGroup('  wallet  '), 'human', 'whitespace is trimmed');
+});
