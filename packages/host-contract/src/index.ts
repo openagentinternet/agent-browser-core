@@ -411,6 +411,10 @@ export interface BrowserRuntimeLabels {
   actorChip: string;
   noActorTitle: string;
   noActorBody: string;
+  // Optional overrides for the Actor selector's kind badge text. When absent
+  // the badge falls back to the fixed English defaults ('Human' / 'Bot').
+  actorKindHuman?: string;
+  actorKindBot?: string;
   walletConnect?: string;
   walletSelectTitle?: string;
   walletPrimaryProviderId?: string;

@@ -3070,8 +3070,8 @@ function actorKindBadgeHtml(actor) {
   var group = actorKindGroup(actor && actor.kind);
   if (group !== 'human' && group !== 'bot') return '';
   var label = group === 'human'
-    ? browserText('actorChip.kindHuman', 'Human')
-    : browserText('actorChip.kindBot', 'Bot');
+    ? runtimeLabel('actorKindHuman', browserText('actorChip.kindHuman', 'Human'))
+    : runtimeLabel('actorKindBot', browserText('actorChip.kindBot', 'Bot'));
   var note = browserText('actorChip.kindNote', 'Identity kind reported by the host; not cryptographic proof of humanity.');
   return '<span class="browser-actor-kind-badge is-' + group + '" title="' + escapeHtml(note) + '">' + escapeHtml(label) + '</span>';
 }

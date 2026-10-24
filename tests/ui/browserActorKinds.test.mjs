@@ -325,6 +325,26 @@ test('Actor selector renders human and bot actors with kind badges; unknown kind
   assert.match(modalHtml, /Proto Kind/);
 });
 
+test('Runtime labels can override the kind badge text', async () => {
+  const run = createBrowserContext({
+    runtime: runtimePayload({
+      labels: {
+        actorChip: 'Actor',
+        noActorTitle: 'No Actor',
+        noActorBody: 'No actor',
+        actorKindHuman: '人类身份',
+        actorKindBot: '机器人',
+      },
+    }),
+  });
+  await waitFor(() => run.context.state.runtime, 'initial load');
+
+  run.nodes['[data-browser-using-selector]'].click();
+  const modalHtml = run.nodes['[data-browser-modal-root]'].innerHTML;
+  assert.match(modalHtml, /browser-actor-kind-badge is-human[^>]*>人类身份</);
+  assert.match(modalHtml, /browser-actor-kind-badge is-bot[^>]*>机器人</);
+});
+
 test('Bot-only runtime keeps the selector behavior with a bot badge and no human badge', async () => {
   const run = createBrowserContext({
     runtime: runtimePayload({ actors: [botActor] }),

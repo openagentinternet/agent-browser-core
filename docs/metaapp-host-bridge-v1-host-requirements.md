@@ -140,7 +140,9 @@ the shared Browser Actor chip. Hosts map their identities onto the shared
 `BrowserActorKind` values (`idbots-account` for the IDBots human account, `idbots-agent` for IDBots
 Bots, `oac-bot` for OAC Bots, `wallet` for wallet-backed identities). ABC renders a neutral
 Human/Bot presentation badge for known kinds and stays neutral for unrecognized kinds; hosts supply
-their own labels through `runtime.labels` and `actor.label`. Do not invent a second identity list
+their own labels through `runtime.labels` and `actor.label`, and may override the badge text itself
+through the optional `labels.actorKindHuman` / `labels.actorKindBot` fields (fixed English
+`Human` / `Bot` defaults otherwise). Do not invent a second identity list
 or a parallel selection UI.
 
 Host responsibilities in this model:
