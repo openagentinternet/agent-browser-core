@@ -64,4 +64,12 @@ test('actor kind grouping classifies known kinds and stays neutral for unknown k
   assert.equal(contract.browserActorKindGroup(undefined), 'unknown');
   assert.equal(contract.browserActorKindGroup(null), 'unknown');
   assert.equal(contract.browserActorKindGroup('  wallet  '), 'human', 'whitespace is trimmed');
+
+  // Object.prototype keys must resolve to 'unknown', not leak the inherited
+  // property value (e.g. the Object constructor) through the lookup.
+  for (const key of ['constructor', 'toString', 'hasOwnProperty', '__proto__', 'valueOf', 'isPrototypeOf']) {
+    const group = contract.browserActorKindGroup(key);
+    assert.equal(typeof group, 'string', `${key} must resolve to a group string`);
+    assert.equal(group, 'unknown', `${key} must stay neutral instead of hitting Object.prototype`);
+  }
 });

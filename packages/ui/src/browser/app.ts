@@ -3054,9 +3054,13 @@ function avatarHtml(rawUrl, label, className) {
 
 // Display grouping of an Actor kind. Unrecognized kinds return 'unknown' and
 // render without a Human/Bot guess; the host's own labels stay authoritative.
+// The lookup is an explicit own-key check so Object.prototype keys
+// ('constructor', '__proto__', ...) stay neutral like any other unknown kind.
 function actorKindGroup(kind) {
   var key = typeof kind === 'string' ? kind.trim() : '';
-  return browserActorKindGroups[key] || 'unknown';
+  return Object.prototype.hasOwnProperty.call(browserActorKindGroups, key)
+    ? browserActorKindGroups[key]
+    : 'unknown';
 }
 
 // Kind badge for the Using Actor selector so Human and Bot identities are

@@ -18,7 +18,10 @@ export const BROWSER_ACTOR_KIND_GROUPS: Readonly<Record<string, BrowserActorKind
 
 export function browserActorKindGroup(kind: string | undefined | null): BrowserActorKindGroup {
   const key = typeof kind === 'string' ? kind.trim() : '';
-  return BROWSER_ACTOR_KIND_GROUPS[key] ?? 'unknown';
+  // Explicit own-key lookup: plain property access would let Object.prototype
+  // keys ('constructor', 'toString', '__proto__', ...) leak inherited values
+  // through instead of the neutral 'unknown'.
+  return Object.hasOwn(BROWSER_ACTOR_KIND_GROUPS, key) ? BROWSER_ACTOR_KIND_GROUPS[key] : 'unknown';
 }
 
 export type BrowserActorCapability =

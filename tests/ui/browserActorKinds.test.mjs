@@ -149,6 +149,13 @@ const unknownKindActor = {
   isDefault: false,
   capabilities: [],
 };
+// Kinds that collide with Object.prototype keys must render exactly like any
+// other unknown kind: present in the list, never badged as Human or Bot.
+const prototypeKeyKindActors = [
+  { ...unknownKindActor, id: 'proto-constructor', label: 'Constructor Kind', kind: 'constructor' },
+  { ...unknownKindActor, id: 'proto-tostring', label: 'ToString Kind', kind: 'toString' },
+  { ...unknownKindActor, id: 'proto-proto', label: 'Proto Kind', kind: '__proto__' },
+];
 
 function runtimePayload(overrides = {}) {
   return {
@@ -293,7 +300,9 @@ function seedGrant(overrides = {}) {
 
 test('Actor selector renders human and bot actors with kind badges; unknown kinds stay neutral', async () => {
   const run = createBrowserContext({
-    runtime: runtimePayload({ actors: [botActor, humanActor, unknownKindActor] }),
+    runtime: runtimePayload({
+      actors: [botActor, humanActor, unknownKindActor, ...prototypeKeyKindActors],
+    }),
   });
   await waitFor(() => run.context.state.runtime, 'initial load');
 
@@ -308,7 +317,12 @@ test('Actor selector renders human and bot actors with kind badges; unknown kind
   assert.match(modalHtml, /browser-actor-kind-badge is-human[^>]*>Human</);
   assert.match(modalHtml, /browser-actor-kind-badge is-bot[^>]*>Bot</);
   const badgeCount = (modalHtml.match(/browser-actor-kind-badge/g) || []).length;
-  assert.equal(badgeCount, 2, 'only the two known kinds are badged; the unknown kind stays neutral');
+  assert.equal(badgeCount, 2, 'only the two known kinds are badged; unknown kinds stay neutral');
+
+  // Object.prototype-colliding kinds render like any other unknown kind.
+  assert.match(modalHtml, /Constructor Kind/);
+  assert.match(modalHtml, /ToString Kind/);
+  assert.match(modalHtml, /Proto Kind/);
 });
 
 test('Bot-only runtime keeps the selector behavior with a bot badge and no human badge', async () => {
