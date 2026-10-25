@@ -1,6 +1,29 @@
 export type BrowserHostKind = 'standalone' | 'oac' | 'idbots';
 export type BrowserActorKind = 'wallet' | 'oac-bot' | 'idbots-agent' | 'idbots-account';
 
+// Presentation grouping for known Actor kinds, shared by Browser UI so a user
+// can distinguish human-side from bot-side identities before selecting one.
+// Unrecognized kinds resolve to 'unknown' and must stay neutral (no Human/Bot
+// guess); hosts supply their own presentation through runtime labels when
+// needed. A group is display context only — it is never cryptographic proof
+// that a signer is human.
+export type BrowserActorKindGroup = 'human' | 'bot' | 'unknown';
+
+export const BROWSER_ACTOR_KIND_GROUPS: Readonly<Record<string, BrowserActorKindGroup>> = {
+  wallet: 'human',
+  'idbots-account': 'human',
+  'idbots-agent': 'bot',
+  'oac-bot': 'bot',
+};
+
+export function browserActorKindGroup(kind: string | undefined | null): BrowserActorKindGroup {
+  const key = typeof kind === 'string' ? kind.trim() : '';
+  // Explicit own-key lookup: plain property access would let Object.prototype
+  // keys ('constructor', 'toString', '__proto__', ...) leak inherited values
+  // through instead of the neutral 'unknown'.
+  return Object.hasOwn(BROWSER_ACTOR_KIND_GROUPS, key) ? BROWSER_ACTOR_KIND_GROUPS[key] : 'unknown';
+}
+
 export type BrowserActorCapability =
   | 'private-chat'
   | 'service-call'
@@ -388,6 +411,10 @@ export interface BrowserRuntimeLabels {
   actorChip: string;
   noActorTitle: string;
   noActorBody: string;
+  // Optional overrides for the Actor selector's kind badge text. When absent
+  // the badge falls back to the fixed English defaults ('Human' / 'Bot').
+  actorKindHuman?: string;
+  actorKindBot?: string;
   walletConnect?: string;
   walletSelectTitle?: string;
   walletPrimaryProviderId?: string;

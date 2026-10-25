@@ -7,6 +7,7 @@ import {
 import { LLM_PROVIDERS, GENERIC_ICON } from './llmProviders.js';
 import { BROWSER_LIBRARY_REQUEST_TYPES } from './library.js';
 import { BROWSER_UI_VERSION } from './version.js';
+import { BROWSER_ACTOR_KIND_GROUPS } from '@openagentinternet/agent-browser-host-contract';
 import { BOT_HOMEPAGE_TEMPLATES } from '@openagentinternet/agent-browser-core';
 
 export interface BrowserPagePanelDefinition {
@@ -144,6 +145,9 @@ var botHomepageTemplateIds = ${JSON.stringify(BOT_HOMEPAGE_TEMPLATES.map((templa
 var llmProviders = ${JSON.stringify(LLM_PROVIDERS)};
 var llmGenericIcon = ${JSON.stringify(GENERIC_ICON)};
 var browserUiVersion = ${JSON.stringify(BROWSER_UI_VERSION)};
+// Known Actor kinds grouped for display (human / bot). Kinds that are not in
+// this map stay neutral — see actorKindGroup()/actorKindBadgeHtml().
+var browserActorKindGroups = ${JSON.stringify(BROWSER_ACTOR_KIND_GROUPS)};
 function getLlmProvider(providerId) {
   var id = typeof providerId === 'string' ? providerId.trim().toLowerCase() : '';
   var known = id ? llmProviders[id] : null;
@@ -3046,6 +3050,30 @@ function avatarHtml(rawUrl, label, className) {
     return '<span class="' + classValue + ' browser-avatar-image-wrap" aria-hidden="true"><img class="browser-avatar-image" src="' + escapeHtml(url) + '" alt="" /></span>';
   }
   return '<span class="' + classValue + ' browser-avatar-fallback" aria-hidden="true">' + escapeHtml(initials(label)) + '</span>';
+}
+
+// Display grouping of an Actor kind. Unrecognized kinds return 'unknown' and
+// render without a Human/Bot guess; the host's own labels stay authoritative.
+// The lookup is an explicit own-key check so Object.prototype keys
+// ('constructor', '__proto__', ...) stay neutral like any other unknown kind.
+function actorKindGroup(kind) {
+  var key = typeof kind === 'string' ? kind.trim() : '';
+  return Object.prototype.hasOwnProperty.call(browserActorKindGroups, key)
+    ? browserActorKindGroups[key]
+    : 'unknown';
+}
+
+// Kind badge for the Using Actor selector so Human and Bot identities are
+// distinguishable before selection. Neutral (empty) for unknown kinds. The
+// badge is host-reported context, not cryptographic proof of humanity.
+function actorKindBadgeHtml(actor) {
+  var group = actorKindGroup(actor && actor.kind);
+  if (group !== 'human' && group !== 'bot') return '';
+  var label = group === 'human'
+    ? runtimeLabel('actorKindHuman', browserText('actorChip.kindHuman', 'Human'))
+    : runtimeLabel('actorKindBot', browserText('actorChip.kindBot', 'Bot'));
+  var note = browserText('actorChip.kindNote', 'Identity kind reported by the host; not cryptographic proof of humanity.');
+  return '<span class="browser-actor-kind-badge is-' + group + '" title="' + escapeHtml(note) + '">' + escapeHtml(label) + '</span>';
 }
 
 function modalCloseButtonHtml(ariaLabel) {
@@ -6250,9 +6278,10 @@ function openUsingIdentitySelector() {
             '</span>' +
           '</span>' +
         '</button>' +
+        actorKindBadgeHtml(actorData) +
         '<button type="button" class="browser-using-option-open browser-primary-action" data-browser-actor-open="' + escapeHtml(actorId) + '"' +
           (globalMetaId ? '' : ' disabled aria-disabled="true" title="Open homepage is unavailable without a Global MetaID"') +
-          '>' + escapeHtml(browserText('actorChip.open', 'Open')) + '</button>' +
+        '>' + escapeHtml(browserText('actorChip.open', 'Open')) + '</button>' +
       '</div>';
     }).join('') + '</div></div></section>';
 }

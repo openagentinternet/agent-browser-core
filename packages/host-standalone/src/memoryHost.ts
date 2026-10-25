@@ -284,8 +284,16 @@ export function createMemoryStandaloneBrowserHost(input: MemoryStandaloneHostInp
         const operation = normalizeText(input.payload?.operation);
         const path = normalizeText(input.payload?.path);
         const records = sessionGrants.get(normalizeText(input.sessionId) || 'default-session') ?? [];
+        // Grants are bound to (resourceUri, actorId, operation, path) plus the
+        // page session — mirroring the standalone adapter's hasActiveGrant().
+        // Checking actorId is what makes an Actor switch fail closed: a grant
+        // issued for one actor must never cover a write as another actor.
         const granted = operation === 'create' && records.some(
-          (record) => record.resourceUri === normalizeText(input.resourceUri) && record.path === path,
+          (record) =>
+            record.resourceUri === normalizeText(input.resourceUri) &&
+            record.actorId === normalizeText(input.actorId) &&
+            record.operation === operation &&
+            record.path === path,
         );
         if (granted) {
           return browserFailure(

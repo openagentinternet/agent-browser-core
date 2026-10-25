@@ -93,6 +93,33 @@ export async function assertBrowserHostConformance(input: BrowserHostConformance
   assert.equal(typeof runtime.data.host.localMode, 'boolean');
   assert.equal(Array.isArray(runtime.data.actors), true);
   assert.equal(Object.prototype.hasOwnProperty.call(runtime.data, 'defaultActor'), true);
+  // Actor list shape: every entry is a well-formed BrowserActor with a unique,
+  // non-empty id. Kinds outside the shipped set are allowed (hosts may extend
+  // additively) but must be non-empty strings so UI grouping stays neutral
+  // rather than crashing on the list.
+  const seenActorIds = new Set<string>();
+  for (const actor of runtime.data.actors) {
+    assert.equal(typeof actor, 'object', 'getRuntime actor');
+    assert.notEqual(actor, null, 'getRuntime actor');
+    assert.equal(typeof actor.id, 'string', 'getRuntime actor id');
+    assert.notEqual(actor.id, '', 'getRuntime actor id');
+    assert.equal(seenActorIds.has(actor.id), false, `getRuntime actor id duplicate: ${actor.id}`);
+    seenActorIds.add(actor.id);
+    assert.equal(typeof actor.label, 'string', `getRuntime actor label: ${actor.id}`);
+    assert.equal(typeof actor.kind, 'string', `getRuntime actor kind: ${actor.id}`);
+    assert.notEqual(actor.kind, '', `getRuntime actor kind: ${actor.id}`);
+    assert.equal(typeof actor.isDefault, 'boolean', `getRuntime actor isDefault: ${actor.id}`);
+    assert.equal(Array.isArray(actor.capabilities), true, `getRuntime actor capabilities: ${actor.id}`);
+  }
+  // The default actor, when set, must be one of the listed actors: a runtime
+  // default that no selector can select is a host bug.
+  if (runtime.data.defaultActor !== null) {
+    assert.equal(
+      seenActorIds.has(runtime.data.defaultActor.id),
+      true,
+      'getRuntime defaultActor membership',
+    );
+  }
   assert.equal(typeof runtime.data.features, 'object');
   assert.notEqual(runtime.data.features, null);
   assert.equal(typeof runtime.data.labels, 'object');

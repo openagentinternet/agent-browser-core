@@ -22,7 +22,8 @@ ABC provides the shared iframe bridge, in-Browser navigation, request validation
 snapshots, host-neutral TypeScript contracts, and the shared PIN-write confirmation modal. A
 downstream host provides the real side effects and authorization:
 
-- current Actor Bot selection;
+- selected Actor management and selection (the Actor may be a Bot, a human account, or a wallet
+  identity, depending on the host — see [Human and Bot Actors](#human-and-bot-actors));
 - host-issued, single-use confirmation authorization;
 - MetaID PIN transaction building, signing, and broadcast;
 - MetaFile file picking, upload, and progress handling;
@@ -78,7 +79,7 @@ The iframe posts this message to the parent Browser page:
 ```
 
 The navigation bridge is implemented by ABC UI. It does not require a host adapter method, trusted
-action, signing path, upload endpoint, or Actor Bot selection.
+action, signing path, upload endpoint, or Actor selection.
 
 Host compatibility requirements:
 
@@ -131,6 +132,39 @@ Host requirements:
 - Treat the actor snapshot as display context only. The host must re-read the current actor at write
   or upload execution time.
 
+### Human and Bot Actors
+
+ABC's Actor model is host-neutral and generic: a Browser host may offer Bot identities, human
+identities, or both in the same Actor list, and the user selects the signing Actor per tab through
+the shared Browser Actor chip. Hosts map their identities onto the shared
+`BrowserActorKind` values (`idbots-account` for the IDBots human account, `idbots-agent` for IDBots
+Bots, `oac-bot` for OAC Bots, `wallet` for wallet-backed identities). ABC renders a neutral
+Human/Bot presentation badge for known kinds and stays neutral for unrecognized kinds; hosts supply
+their own labels through `runtime.labels` and `actor.label`, and may override the badge text itself
+through the optional `labels.actorKindHuman` / `labels.actorKindBot` fields (fixed English
+`Human` / `Bot` defaults otherwise). Do not invent a second identity list
+or a parallel selection UI.
+
+Host responsibilities in this model:
+
+- Hosts inject the available identities and their signing capabilities into the ABC runtime
+  (`runtime.actors`, `runtime.defaultActor`). A host without a human identity simply omits it; no
+  feature flag is required.
+- ABC does not access host wallets, accounts, or private keys. Identity resolution and signing are
+  always host-side.
+- Actor kind is UI/host context, not cryptographic proof of humanity. No consumer may treat a kind
+  badge or a MetaApp claim as evidence that a signer is human.
+- Host adapters must re-read the actual selected Actor at execution time. The `actorId` attached by
+  the trusted Browser page is a hint for scoping, never a signer assignment; the host validates it
+  against its own Actor state.
+- Authorization is bound to `(resourceUri, actorId, operation, exactPath, sessionId)`. After the
+  user switches Actors, an earlier Actor's confirmation token or session grant must not authorize a
+  write as the newly selected Actor, and removing or replacing a human identity must invalidate its
+  stale Actor state and authorizations before further writes.
+- Unsupported host/Actor/action combinations (for example, a human identity with no usable signing
+  path) must return an explicit error. A host must never silently fall back to signing as another
+  Actor, Bot-for-human or human-for-Bot.
+
 ### Identity Disclosure Consent
 
 Because MetaApps are untrusted content, a Browser host MUST NOT disclose the connected identity
@@ -140,7 +174,8 @@ events. When the user has not approved, the host answers `browser.actor.current`
 with a `{ code: 'consent_denied' }` bridge error and suppresses
 `browser.actor.changed` events for that resource. Approvals may be held in
 memory only (reset on page reload); hosts MUST NOT persist a blanket
-"always allow for all MetaApps" grant.
+"always allow for all MetaApps" grant. Consent is scoped per resource and per identity and applies
+equally to human and Bot Actors: an approval for one identity never discloses another.
 
 ## MetaID PIN Write Requirements
 
@@ -194,7 +229,7 @@ Host requirements:
   below. ABC renders the shared confirmation modal; the host still owns authorization and execution.
 - Build the MetaID OP_RETURN tuple from the request fields: `metaid`, operation, path, encryption,
   version, content type, and payload body.
-- Broadcast using the host's current Actor Bot signing and broadcast stack.
+- Broadcast using the selected Actor's signing and broadcast stack.
 - Return the actual actor used for the write.
 - Do not let MetaApps access private keys, arbitrary signing, wallet balances, payment APIs, or raw
   transaction builders.
@@ -402,7 +437,8 @@ Recommended OAC responsibilities:
 - Route `POST /api/browser/actions` or the OAC-equivalent Browser action route to the OAC Browser
   host adapter.
 - Add `metaid-pin-write` handling in the OAC Browser host adapter.
-- Connect that handling to the selected OAC Actor Bot identity, existing MetaID write stack, and
+- Connect that handling to the selected OAC Actor identity (Bot or human), existing MetaID write
+  stack, and
   host-issued two-phase confirmation flow.
 - Remove wrapper-level `handleBridgePinWrite` confirmation overrides after adopting ABC's shared
   modal; otherwise Browser chrome writes and iframe writes can follow different code paths.
@@ -431,7 +467,8 @@ Recommended IDBots responsibilities:
   MetaApp can still navigate to an Agent Internet URI inside Browser.
 - Route Browser action requests from renderer to main process through explicit IPC handlers.
 - Add `metaid-pin-write` handling in the IDBots Browser host adapter or main-process service layer.
-- Connect that handling to the selected Bot identity, existing MetaID write stack, and host-owned
+- Connect that handling to the selected Actor identity (Bot or human account), existing MetaID write
+  stack, and host-owned
   confirmation authorization.
 - To use the shared visual treatment, return the two-phase response from trusted main-process code
   instead of opening an Electron `dialog.showMessageBox` confirmation.
