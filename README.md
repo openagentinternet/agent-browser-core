@@ -40,7 +40,9 @@ dies on reload, canvas export is tainted, `document.cookie` /
 `navigator.serviceWorker` throw). The standalone server enables an ephemeral
 loopback preview origin by default; `/healthz` reports the effective state as
 `metaAppPreview.storage` (`persistent`, `host-configured`, or `session-only`
-with a warning). See "MetaApp preview origin and storage persistence" in the
+with a warning). Remote deployments pin a second cross-origin origin with
+`--preview-base-url <url>` (or `BROWSER_PREVIEW_BASE_URL`) on the standalone
+CLI. See "MetaApp preview origin and storage persistence" in the
 host integration guide for the security model, opt-outs, and public-host
 caveats.
 

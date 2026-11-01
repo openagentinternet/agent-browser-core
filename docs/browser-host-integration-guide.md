@@ -245,7 +245,10 @@ Deployment notes:
   opaque and app storage is session-only. **Remote deployments must provide a
   second public origin** (a dedicated subdomain such as
   `preview.<host>.org`, or a separate port, with TLS) and pin it via
-  `previewContentBaseUrl` (on the adapter or the server input). The main
+  `previewContentBaseUrl` (on the adapter or the server input). The standalone
+  CLI entry exposes this directly: pass `--preview-base-url <url>` or set
+  `BROWSER_PREVIEW_BASE_URL` (an empty value keeps the default ephemeral
+  origin; a malformed or non-http(s) value aborts startup). The main
   server already serves the same `/api/browser/preview-assets/` routes, so
   the second origin only needs to reverse-proxy that path prefix. With a
   pinned cross-origin base URL the renderer grants `allow-same-origin` on
