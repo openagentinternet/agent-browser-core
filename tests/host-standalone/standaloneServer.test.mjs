@@ -524,6 +524,28 @@ test('standalone server keeps adapter-pinned preview origins host-configured', a
   assert.match(resolved.data?.renderer?.url, /^https:\/\/preview\.example\/api\/browser\/preview-assets\//);
 });
 
+test('standalone server pins a server-level preview base URL without an adapter', async (t) => {
+  // The no-adapter path is what the standalone CLI entry uses: a server-level
+  // previewContentBaseUrl string must reach the internally built adapter and
+  // suppress the ephemeral preview origin, so MetaApp frames emit absolute URLs
+  // on the pinned cross-origin origin.
+  const dir = await writePreviewFixture();
+  t.after(() => import('node:fs/promises').then(({ rm }) => rm(dir, { recursive: true, force: true })));
+  const server = standalone.createStandaloneBrowserServer({ previewContentBaseUrl: 'https://preview.example' });
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const baseUrl = await listen(server);
+
+  const health = await json(await fetch(`${baseUrl}/healthz`));
+  assert.equal(health.metaAppPreview.storage, 'host-configured');
+  assert.equal(health.metaAppPreview.previewOrigin, 'https://preview.example');
+
+  const uri = `preview-metaapp://localhost${dir}`;
+  const resolveResponse = await fetch(`${baseUrl}/api/browser/resolve?uri=${encodeURIComponent(uri)}`);
+  const resolved = await json(resolveResponse);
+  assert.equal(resolved.ok, true, `resolve ok for ${uri}`);
+  assert.match(resolved.data?.renderer?.url, /^https:\/\/preview\.example\/api\/browser\/preview-assets\//);
+});
+
 test('standalone server warns when no independent preview origin can serve MetaApps', async (t) => {
   // A fully custom adapter (not built by createStandaloneBrowserHostAdapter)
   // cannot be wired to the ephemeral preview origin.

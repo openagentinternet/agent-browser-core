@@ -22,6 +22,25 @@ function parsePort(value: string): number {
   return port;
 }
 
+// Pins the MetaApp preview origin (server input previewContentBaseUrl). Empty
+// keeps the default ephemeral loopback preview origin; public deployments pass
+// a second cross-origin https origin so MetaApp frames keep allow-same-origin
+// and their localStorage persists across reloads.
+export function parsePreviewBaseUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    throw new Error(`Invalid Browser standalone preview base URL: ${value}`);
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error(`Invalid Browser standalone preview base URL: ${value}`);
+  }
+  return trimmed;
+}
+
 function isDirectCliInvocation(): boolean {
   if (!process.argv[1]) return false;
   const modulePath = fileURLToPath(import.meta.url);
@@ -35,8 +54,13 @@ function isDirectCliInvocation(): boolean {
 export async function main(argv: string[] = process.argv.slice(2), env: NodeJS.ProcessEnv = process.env): Promise<void> {
   const host = readOption(argv, '--host') ?? env.BROWSER_HOST ?? '127.0.0.1';
   const port = parsePort(readOption(argv, '--port') ?? env.BROWSER_PORT ?? '8787');
+  const previewBaseUrl = parsePreviewBaseUrl(readOption(argv, '--preview-base-url') ?? env.BROWSER_PREVIEW_BASE_URL ?? '');
   const assetsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'assets');
-  const server = createStandaloneBrowserServer({ env, assetsRoot });
+  const server = createStandaloneBrowserServer({
+    env,
+    assetsRoot,
+    ...(previewBaseUrl ? { previewContentBaseUrl: previewBaseUrl } : {}),
+  });
 
   await new Promise<void>((resolve, reject) => {
     const onError = (error: Error) => {
@@ -54,6 +78,9 @@ export async function main(argv: string[] = process.argv.slice(2), env: NodeJS.P
   const address = server.address();
   const actualPort = typeof address === 'object' && address ? address.port : port;
   process.stdout.write(`Agent Internet Browser listening at http://${host}:${actualPort}/browser\n`);
+  if (previewBaseUrl) {
+    process.stdout.write(`MetaApp preview origin pinned to ${previewBaseUrl} (host-configured)\n`);
+  }
 }
 
 if (isDirectCliInvocation()) {
