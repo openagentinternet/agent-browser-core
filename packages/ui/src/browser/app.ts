@@ -2617,7 +2617,8 @@ async function submitMetaIdPinWrite(resourceUri, payload) {
 // posted back. A rejected card never sends phase two, so the host pending
 // authorization simply expires — zero side effects.
 
-var NFT_BUY_GENESIS_RE = /^[0-9a-fA-F]{64}$/;
+var NFT_BUY_GENESIS_RE = /^[0-9a-fA-F]{40}$|^[0-9a-fA-F]{64}$/;
+var NFT_BUY_TXID_RE = /^[0-9a-fA-F]{64}$/;
 var NFT_BUY_CODEHASH_RE = /^[0-9a-fA-F]{40}$/;
 var NFT_BUY_TOKEN_INDEX_RE = /^[0-9]{1,18}$/;
 
@@ -2627,7 +2628,7 @@ function validateNftBuyParams(params) {
   var codehash = textValue(input.codehash);
   var tokenIndex = textValue(input.tokenIndex);
   if (!NFT_BUY_GENESIS_RE.test(genesis)) {
-    return { ok: false, error: { code: 'invalid_params', message: 'NFT buy requires genesis (64 hex).' } };
+    return { ok: false, error: { code: 'invalid_params', message: 'NFT buy requires genesis (40 or 64 hex).' } };
   }
   if (!NFT_BUY_CODEHASH_RE.test(codehash)) {
     return { ok: false, error: { code: 'invalid_params', message: 'NFT buy requires codehash (40 hex).' } };
@@ -2642,7 +2643,7 @@ function validateNftBuyParams(params) {
   var sellTxid = textValue(input.sellTxid);
   var sellOutputIndex = input.sellOutputIndex;
   if (sellTxid || sellOutputIndex !== undefined) {
-    if (!NFT_BUY_GENESIS_RE.test(sellTxid)) {
+    if (!NFT_BUY_TXID_RE.test(sellTxid)) {
       return { ok: false, error: { code: 'invalid_params', message: 'NFT buy sellTxid must be 64 hex when the sell outpoint is supplied.' } };
     }
     if (!isIntegerValue(sellOutputIndex) || sellOutputIndex < 0) {
