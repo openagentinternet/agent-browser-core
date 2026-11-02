@@ -246,8 +246,12 @@ function primeFrame(nodes) {
     });
 }
 
-const GENESIS = 'a'.repeat(64);
-const CODEHASH = 'b'.repeat(40);
+// Real MetaContract genesis values are 40 hex on-chain (e.g. MetaBot Avatar
+// 005d69cba8c80e6978157e146f998c21288a9d49); 64-hex is accepted for forward
+// compatibility. Fixtures must use real-world shapes, not synthetic lengths.
+const GENESIS = '005d69cba8c80e6978157e146f998c21288a9d49';
+const GENESIS_64 = 'a'.repeat(64);
+const CODEHASH = 'e205939ad9956673ce7da9fbd40514b30f66dc35';
 
 function buyParams(overrides = {}) {
   return {
@@ -345,6 +349,7 @@ test('browser.nft.buy validates the four-tuple before any host action', async ()
 
   const cases = [
     buyParams({ genesis: 'not-hex' }),
+    buyParams({ genesis: 'a'.repeat(41) }),
     buyParams({ codehash: 'zz' }),
     buyParams({ tokenIndex: 'abc' }),
     buyParams({ priceSats: 0 }),
@@ -414,6 +419,52 @@ test('browser.nft.buy renders the purchase card and returns txids on approval', 
   assert.equal(phaseTwo.payload.hostConfirmation.id, 'nftbuy-1');
   assert.equal(phaseTwo.payload.hostConfirmation.token, 'opaque-token-1');
   assert.equal(phaseTwo.payload.genesis, GENESIS);
+});
+
+test('browser.nft.buy accepts a 64-hex genesis as well as the on-chain 40-hex form', async () => {
+  const { nodes, fetchRequests, windowListeners } = runWithResolve(result(), {
+    runtime: runtimeWithActor(),
+    actionResponses: [
+      nftBuyManualResponse('opaque-token-64', {
+        confirmRequest: {
+          resourceUri: 'metaapp://pin',
+          kind: 'nft-buy',
+          payload: {
+            genesis: GENESIS_64,
+            codehash: CODEHASH,
+            tokenIndex: '7898',
+            priceSats: 100000,
+            sellTxid: 'c'.repeat(64),
+            sellOutputIndex: 0,
+            sellerAddress: '1SellerAddressFixture',
+            collectionName: 'MetaBot Avatar',
+            name: 'Avatar #7898',
+            imgUrl: 'https://metaweb.example/avatar-7898.png',
+            confirmed: true,
+            hostConfirmation: { id: 'nftbuy-64', token: 'opaque-token-64' },
+          },
+        },
+      }),
+      { ok: true, data: { kind: 'nft-buy', handled: true, data: { txid: 'd'.repeat(64), fundingTxid: 'e'.repeat(64), tokenIndex: '7898', genesis: GENESIS_64 } } },
+    ],
+  });
+  const activeFrameWindow = await primeFrame(nodes);
+
+  postBridgeRequest(windowListeners, activeFrameWindow, {
+    id: 'buy-64', method: 'browser.nft.buy', params: buyParams({ genesis: GENESIS_64 }),
+  });
+
+  await waitFor(() => nodes['[data-browser-modal-root]'].hidden === false, 'purchase card for 64-hex genesis');
+  const phaseOne = actionBody(fetchRequests, 0);
+  assert.equal(phaseOne.kind, 'nft-buy');
+  assert.equal(phaseOne.payload.genesis, GENESIS_64);
+
+  nodes['[data-browser-modal-root]'].listeners.get('click')({
+    preventDefault() {},
+    target: browserActionTarget({ 'data-browser-modal-action': 'nft-buy-confirm' }),
+  });
+  await waitFor(() => activeFrameWindow.postMessageCalls.length === 1, 'purchase response for 64-hex genesis');
+  assert.equal(activeFrameWindow.postMessageCalls[0].ok, true);
 });
 
 test('browser.nft.buy returns user_rejected with zero side effects when the card is cancelled', async () => {
