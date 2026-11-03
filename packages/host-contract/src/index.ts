@@ -123,6 +123,12 @@ export type BrowserTrustedActionKind =
   | 'metafile-upload'
   | 'llm-complete'
   | 'permissions-request'
+  // Page-initiated NFT purchases (browser.nft.buy / browser.mrc721.buy).
+  // The bridge v0.8.x shipped the on-chain wallet purchase without adding
+  // kinds to this union, forcing host adapters to cast; both bridge actions
+  // are listed here from v0.9.x.
+  | 'nft-buy'
+  | 'mrc721-buy'
   | 'app-session-start'
   | 'app-session-list'
   | 'app-session-status'

@@ -2924,6 +2924,346 @@ async function handleBridgeNftBuy(sourceWindow, id, params) {
   }
 }
 
+// --- browser.mrc721.buy bridge (page-initiated MRC-721 atomic-swap purchase) ---
+//
+// MRC-721 listings are pin-based MetaID NFT atomic swaps: the seller hands the
+// buyer a listing credential whose partialTx is a partially signed tx (input 0
+// is the NFT, signed SIGHASH_ALL|FORKID|ANYONECANPAY; the buyer's paytool
+// appends the payment and broadcasts). This bridge mirrors the browser.nft.buy
+// two-phase contract but validates the listing credential shape instead of the
+// contract-system four-tuple, because the two payload schemas share nothing —
+// mixing them in one validated/hashed intent would put the "card shows A, pays
+// B" classes back on the menu. Page validation is UX-grade only; the host
+// worker path re-verifies the credential against the chain (signature, outputs,
+// unspent) before anything is signed.
+
+var MRC721_BUY_PIN_ID_RE = /^[0-9a-f]{64}i[0-9]{1,5}$/;
+var MRC721_BUY_TXID_RE = /^[0-9a-f]{64}$/;
+var MRC721_BUY_ADDRESS_RE = /^[1-9A-HJ-NP-Za-km-z]{20,}$/;
+var MRC721_BUY_LISTING_KIND = 'mrc721-atomic-swap';
+var MRC721_BUY_LISTING_VERSION = 1;
+// SIGHASH_ALL | SIGHASH_FORKID | SIGHASH_ANYONECANPAY = 0xC1 (193). The
+// published v1.1 listing kind *shipped on-chain plus the seller's wallet
+// workers*; a listing signed with anything else is refused by the host.
+var MRC721_BUY_SIGHASH = 193;
+// Same published floor as the mrc721_sell agent tool (2026-11-04 MRC-721 sell
+// chain v1.1). Page-side trusted gate so obviously-wrong listings never reach
+// the confirmation card; the host worker re-enforces it.
+var MRC721_BUY_MIN_SELL_PRICE_SATS = 22000;
+var MRC721_BUY_PARTIAL_TX_MAX = 100000;
+
+function parseMrc721ListingCredential(params) {
+  var input = params;
+  // The credential travels as a JSON object, a plain JSON string, or wrapped
+  // in { listing: ... } — all three forms the seller-side channels produce.
+  if (typeof input === 'string') {
+    try {
+      input = JSON.parse(input);
+    } catch (error) {
+      return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy expects the listing credential JSON.' } };
+    }
+  }
+  if (isPlainObject(input) && input.version === undefined && input.kind === undefined
+    && (isPlainObject(input.listing) || typeof input.listing === 'string')) {
+    return parseMrc721ListingCredential(input.listing);
+  }
+  if (!isPlainObject(input)) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy expects the listing credential JSON.' } };
+  }
+  if (Number(input.version) !== MRC721_BUY_LISTING_VERSION || textValue(input.kind) !== MRC721_BUY_LISTING_KIND) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy requires version ' + MRC721_BUY_LISTING_VERSION + ' kind "' + MRC721_BUY_LISTING_KIND + '" (an MRC-721 atomic-swap listing credential).' } };
+  }
+  var rawItemPinId = textValue(input.itemPinId);
+  if (!MRC721_BUY_PIN_ID_RE.test(rawItemPinId)) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy requires itemPinId (64-hex txid + "i" + output index).' } };
+  }
+  var sellerAddress = textValue(input.sellerAddress);
+  var buyerAddress = textValue(input.buyerAddress);
+  if (!MRC721_BUY_ADDRESS_RE.test(sellerAddress) || !MRC721_BUY_ADDRESS_RE.test(buyerAddress)) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy requires sellerAddress and buyerAddress (base58 MVC addresses).' } };
+  }
+  var priceSats = input.priceSats;
+  if (typeof priceSats !== 'number' || !isFinite(priceSats) || !isIntegerValue(priceSats) || priceSats <= 0 || priceSats > 1e15) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy requires priceSats (positive integer sats).' } };
+  }
+  if (priceSats < MRC721_BUY_MIN_SELL_PRICE_SATS) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy priceSats is below the ' + MRC721_BUY_MIN_SELL_PRICE_SATS + ' sats listing floor of the published sell chain.' } };
+  }
+  var sigtype = input.sigtype;
+  if (typeof sigtype !== 'number' || !isIntegerValue(sigtype) || sigtype !== MRC721_BUY_SIGHASH) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy requires sigtype ' + MRC721_BUY_SIGHASH + ' (SIGHASH_ALL|FORKID|ANYONECANPAY); other sighashes leave the price output unprotected.' } };
+  }
+  var partialTx = typeof input.partialTx === 'string' ? input.partialTx : '';
+  if (!partialTx) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy requires partialTx (the seller\\'s partially signed transaction).' } };
+  }
+  if (partialTx.length > MRC721_BUY_PARTIAL_TX_MAX || /[\\r\\n]/.test(partialTx)) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy partialTx is out of the acceptable serialized form.' } };
+  }
+  var rawOutpoint = isPlainObject(input.outpoint) ? input.outpoint : {};
+  var rawOutpointTxid = textValue(rawOutpoint.txid);
+  var outpointVout = rawOutpoint.vout;
+  var outpointSatoshis = rawOutpoint.satoshis;
+  if (!MRC721_BUY_TXID_RE.test(rawOutpointTxid) || !isIntegerValue(outpointVout) || outpointVout < 0
+    || !isIntegerValue(outpointSatoshis) || outpointSatoshis <= 0 || outpointSatoshis > 1e15) {
+    return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy requires outpoint {txid (64 hex), vout, satoshis} pointing at the listed item output.' } };
+  }
+  var value = {
+    version: MRC721_BUY_LISTING_VERSION,
+    kind: MRC721_BUY_LISTING_KIND,
+    itemPinId: rawItemPinId.toLowerCase(),
+    sellerAddress: sellerAddress,
+    buyerAddress: buyerAddress,
+    priceSats: priceSats,
+    partialTx: partialTx,
+    sigtype: sigtype,
+    outpoint: { txid: rawOutpointTxid.toLowerCase(), vout: outpointVout, satoshis: outpointSatoshis }
+  };
+  // Optional pass-throughs the host worker reads (fee rate, expiry, collection
+  // grouping). Tiny bounded strings only — the worker re-parses everything.
+  var optionalNumbers = [['feeRate', 0], ['createdAt', 0], ['expiresAt', 0]];
+  for (var index = 0; index < optionalNumbers.length; index += 1) {
+    var key = optionalNumbers[index][0];
+    var raw = input[key];
+    if (raw === undefined || raw === null) continue;
+    if (typeof raw !== 'number' || !isFinite(raw) || !isIntegerValue(raw) || raw < 0) {
+      return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy ' + key + ' must be a non-negative integer when present.' } };
+    }
+    value[key] = raw;
+  }
+  var collectionPinId = typeof input.collectionPinId === 'string' ? input.collectionPinId : '';
+  if (collectionPinId) {
+    if (collectionPinId.length > 128 || /[\\r\\n]/.test(collectionPinId)) {
+      return { ok: false, error: { code: 'invalid_params', message: 'MRC-721 buy collectionPinId is invalid.' } };
+    }
+    value.collectionPinId = collectionPinId;
+  }
+  return { ok: true, value: value };
+}
+
+function structuredMrc721BuyConfirmation(result) {
+  if (!result || result.ok !== false || result.state !== 'manual_action_required') return null;
+  var data = isPlainObject(result.data) ? result.data : null;
+  var confirmation = data && isPlainObject(data.confirmation) ? data.confirmation : null;
+  var confirmRequest = data && isPlainObject(data.confirmRequest) ? data.confirmRequest : null;
+  if (!confirmation || !confirmRequest) return null;
+  if (textValue(confirmRequest.kind) !== 'mrc721-buy') return null;
+  if (!textValue(confirmRequest.resourceUri) || !isPlainObject(confirmRequest.payload)) return null;
+  return { confirmation: confirmation, confirmRequest: confirmRequest };
+}
+
+function mrc721BuyConfirmationField(label, value, valueClass) {
+  var text = textValue(value);
+  if (!text) return '';
+  return '<div class="browser-pin-write-field">' +
+    '<dt>' + escapeHtml(label) + '</dt>' +
+    '<dd' + (valueClass ? ' class="' + escapeHtml(valueClass) + '"' : '') + '>' + escapeHtml(text) + '</dd>' +
+  '</div>';
+}
+
+function mrc721BuyConfirmationHtml(confirmation) {
+  var actor = isPlainObject(confirmation.actor) ? confirmation.actor : {};
+  var actorName = textValue(actor.name) || 'Current actor';
+  var actorGlobalMetaId = textValue(actor.globalMetaId);
+  var display = isPlainObject(confirmation.display) ? confirmation.display : {};
+  var listing = isPlainObject(confirmation.listing) ? confirmation.listing : {};
+  var tokenName = textValue(display.name) || 'MRC-721 Item';
+  var collectionName = textValue(display.collectionName);
+  var imgUrl = textValue(display.imgUrl);
+  var imageHref = imgUrl ? resolveMediaPreviewHref(imgUrl) : '';
+  var imageHtml = imageHref
+    ? '<img class="browser-nft-buy-image-img" src="' + escapeHtml(imageHref) + '" alt="" />'
+    : '<span class="browser-nft-buy-image-fallback">' + iconHtml('layout') + '</span>';
+  var outpoint = isPlainObject(listing.outpoint) ? listing.outpoint : null;
+  var itemOutpoint = outpoint && textValue(outpoint.txid)
+    ? shortId(textValue(outpoint.txid)) + ':' + (typeof outpoint.vout === 'number' ? outpoint.vout : 0)
+    : '';
+  return '<div class="browser-pin-write-confirmation browser-nft-buy-confirmation">' +
+    '<div class="browser-pin-write-intro">' +
+      '<span class="browser-pin-write-mark">' + iconHtml('shield') + '</span>' +
+      '<div><span class="browser-pin-write-eyebrow">' + escapeHtml(browserText('mrc721Buy.eyebrow', 'MRC-721 PURCHASE')) + '</span>' +
+      '<p>' + escapeHtml(browserText('mrc721Buy.intro', 'Review this MRC-721 atomic-swap purchase. After approval the host appends the payment to the seller\\'s partial transaction and broadcasts it for the actor below.')) + '</p></div>' +
+    '</div>' +
+    '<div class="browser-pin-write-actor">' +
+      avatarHtml('', actorName, 'browser-pin-write-actor-avatar') +
+      '<div class="browser-pin-write-actor-copy"><strong>' + escapeHtml(actorName) + '</strong>' +
+        (actorGlobalMetaId ? '<code>' + escapeHtml(actorGlobalMetaId) + '</code>' : '') +
+      '</div>' +
+    '</div>' +
+    '<div class="browser-nft-buy-token">' +
+      '<span class="browser-nft-buy-image">' + imageHtml + '</span>' +
+      '<div class="browser-nft-buy-token-copy"><strong>' + escapeHtml(tokenName) + '</strong>' +
+        (collectionName ? '<span>' + escapeHtml(collectionName) + '</span>' : '') +
+        '<code>' + escapeHtml(shortId(textValue(listing.itemPinId))) + '</code>' +
+      '</div>' +
+    '</div>' +
+    '<dl class="browser-pin-write-details">' +
+      mrc721BuyConfirmationField(browserText('mrc721Buy.price', 'Price'), formatSatsAmount(listing.priceSats), 'browser-nft-buy-price') +
+      mrc721BuyConfirmationField(browserText('mrc721Buy.seller', 'Seller'), shortAddress(textValue(display.sellerAddress) || textValue(listing.sellerAddress)), 'browser-pin-write-code') +
+      mrc721BuyConfirmationField(browserText('mrc721Buy.buyer', 'Buyer'), shortAddress(textValue(display.buyerAddress) || textValue(listing.buyerAddress)), 'browser-pin-write-code') +
+      mrc721BuyConfirmationField(browserText('mrc721Buy.item', 'Item'), itemOutpoint, 'browser-pin-write-code') +
+    '</dl>' +
+    '<p class="browser-pin-write-note">' + escapeHtml(browserText('mrc721Buy.note', 'This is a directed listing: output 0 of the partial transaction pays the NFT only to the buyer address above, so only that wallet can complete the purchase. Purchases are irreversible on-chain payments; this card is the only approval step, and rejecting it performs no on-chain action.')) + '</p>' +
+    '<p class="browser-pin-write-status" data-browser-mrc721-buy-status role="status" aria-live="polite"></p>' +
+  '</div>';
+}
+
+function promptMrc721BuyConfirmation(confirmation) {
+  return new Promise(function (resolve) {
+    state.pendingMrc721BuyConfirmation = { resolve: resolve };
+    renderModal(
+      browserText('mrc721Buy.title', 'Buy MRC-721 Item'),
+      mrc721BuyConfirmationHtml(confirmation),
+      browserText('mrc721Buy.confirm', 'Buy Item'),
+      'mrc721-buy-confirm',
+      {
+        cancelLabel: browserText('modal.cancel', 'Cancel'),
+        panelClass: 'browser-pin-write-modal browser-nft-buy-modal'
+      }
+    );
+  });
+}
+
+function settleMrc721BuyConfirmation(approved) {
+  var pending = state.pendingMrc721BuyConfirmation;
+  if (!pending) return false;
+  state.pendingMrc721BuyConfirmation = null;
+  pending.resolve(approved === true);
+  return true;
+}
+
+function setMrc721BuyConfirmationStatus(tone, message) {
+  var root = elements.modalRoot;
+  var note = root && typeof root.querySelector === 'function'
+    ? root.querySelector('[data-browser-mrc721-buy-status]')
+    : null;
+  if (!note) return;
+  note.className = 'browser-pin-write-status is-' + tone;
+  note.textContent = message;
+}
+
+function setMrc721BuyConfirmationSending(sending) {
+  var root = elements.modalRoot;
+  var button = root && typeof root.querySelector === 'function'
+    ? root.querySelector('[data-browser-modal-action="mrc721-buy-confirm"]')
+    : null;
+  if (button) {
+    button.disabled = sending;
+    button.classList.toggle('is-busy', sending);
+    button.textContent = sending
+      ? browserText('mrc721Buy.buying', 'Buying...')
+      : browserText('mrc721Buy.confirm', 'Buy Item');
+  }
+  if (root && typeof root.querySelectorAll === 'function') {
+    var closeButtons = root.querySelectorAll('[data-browser-modal-close]');
+    for (var index = 0; index < closeButtons.length; index += 1) {
+      closeButtons[index].disabled = sending;
+    }
+  }
+}
+
+function setMrc721BuyConfirmationFailed(message) {
+  setMrc721BuyConfirmationSending(false);
+  setMrc721BuyConfirmationStatus('error', message);
+  var root = elements.modalRoot;
+  var button = root && typeof root.querySelector === 'function'
+    ? root.querySelector('[data-browser-modal-action="mrc721-buy-confirm"]')
+    : null;
+  if (button) {
+    button.setAttribute('data-browser-modal-action', 'mrc721-buy-dismiss');
+    button.textContent = browserText('modal.close', 'Close');
+  }
+}
+
+async function submitMrc721Buy(resourceUri, payload) {
+  var phaseOne = await postNftBuyAction({
+    resourceUri: resourceUri,
+    kind: 'mrc721-buy',
+    payload: payload
+  });
+  var structured = structuredMrc721BuyConfirmation(phaseOne);
+  if (!structured) return phaseOne;
+  if (textValue(structured.confirmRequest.resourceUri) !== textValue(resourceUri)) return phaseOne;
+  var confirmationRenewals = 0;
+  while (structured) {
+    var approved = await promptMrc721BuyConfirmation(structured.confirmation);
+    if (!approved) {
+      var cancelled = new Error('MRC-721 purchase was rejected.');
+      cancelled.code = 'user_rejected';
+      throw cancelled;
+    }
+    setMrc721BuyConfirmationSending(true);
+    setMrc721BuyConfirmationStatus('sending', browserText('mrc721Buy.buyingHint', 'Completing the atomic swap and broadcasting the purchase...'));
+    try {
+      var phaseTwo = await postNftBuyAction(structured.confirmRequest);
+      var renewed = structuredMrc721BuyConfirmation(phaseTwo);
+      if (
+        renewed &&
+        confirmationRenewals < 1 &&
+        textValue(renewed.confirmRequest.resourceUri) === textValue(resourceUri)
+      ) {
+        structured = renewed;
+        confirmationRenewals += 1;
+        continue;
+      }
+      if (phaseTwo && phaseTwo.ok === false) {
+        var phaseTwoError = new Error(textValue(phaseTwo.message) || 'MRC-721 purchase confirmation failed.');
+        phaseTwoError.code = textValue(phaseTwo.code) || 'mrc721_buy_failed';
+        throw phaseTwoError;
+      }
+      closeModal();
+      return phaseTwo && phaseTwo.data ? phaseTwo.data : phaseTwo;
+    } catch (error) {
+      var failureMessage = textValue(error && error.message) || 'MRC-721 purchase failed.';
+      setMrc721BuyConfirmationFailed(failureMessage);
+      setStatus('error', failureMessage);
+      if (error && (typeof error === 'object' || typeof error === 'function')) {
+        error.mrc721BuyConfirmation = true;
+      }
+      throw error;
+    }
+  }
+}
+
+async function handleBridgeMrc721Buy(sourceWindow, id, params) {
+  if (isStandaloneHostRuntime() || runtimeFeatures().mrc721Buy !== true) {
+    if (isStandaloneHostRuntime()) openStandaloneUnsupportedModal();
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: 'unsupported_method',
+      message: 'MRC-721 purchase is not supported in this Browser host.'
+    }));
+    return;
+  }
+  var validation = parseMrc721ListingCredential(params);
+  if (!validation.ok) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, validation.error));
+    return;
+  }
+  try {
+    var result = await submitMrc721Buy(currentResourceUri(), validation.value);
+    if (result && result.ok === false) {
+      bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+        code: textValue(result.code) || 'mrc721_buy_failed',
+        message: textValue(result.message) || 'MRC-721 purchase failed.'
+      }));
+      return;
+    }
+    var data = isPlainObject(result) ? result : {};
+    bridgePostMessage(sourceWindow, bridgeResponse(id, true, {
+      txid: textValue(data.txid),
+      itemPinId: textValue(data.itemPinId),
+      priceSats: typeof data.priceSats === 'number' ? data.priceSats : 0,
+      sellerAddress: textValue(data.sellerAddress),
+      buyerAddress: textValue(data.buyerAddress)
+    }));
+  } catch (error) {
+    bridgePostMessage(sourceWindow, bridgeResponse(id, false, {
+      code: error && error.code ? error.code : 'mrc721_buy_failed',
+      message: error && error.message ? error.message : 'MRC-721 purchase failed.'
+    }));
+  }
+}
+
 async function handleBridgeMetafileUpload(sourceWindow, id, params) {
   var validation = validateMetafileUploadParams(params);
   if (!validation.ok) {
@@ -3136,6 +3476,10 @@ function handleBrowserBridgeMessage(event) {
   }
   if (textValue(data.method) === 'browser.nft.buy') {
     handleBridgeNftBuy(sourceWindow, id, data.params);
+    return;
+  }
+  if (textValue(data.method) === 'browser.mrc721.buy') {
+    handleBridgeMrc721Buy(sourceWindow, id, data.params);
     return;
   }
   if (textValue(data.method) === 'metafile.upload') {
@@ -6402,6 +6746,7 @@ function renderModal(title, bodyHtml, confirmLabel, confirmAction) {
 function closeModal() {
   settlePinWriteConfirmation(false);
   settleNftBuyConfirmation(false);
+  settleMrc721BuyConfirmation(false);
   flushPendingActorConsent('dismiss');
   settlePermissionsConfirmation(false);
   flushPendingLlmConsent('dismiss');
@@ -8884,6 +9229,14 @@ async function initialize() {
         return;
       }
       if (action === 'nft-buy-dismiss') {
+        closeModal();
+        return;
+      }
+      if (action === 'mrc721-buy-confirm') {
+        settleMrc721BuyConfirmation(true);
+        return;
+      }
+      if (action === 'mrc721-buy-dismiss') {
         closeModal();
         return;
       }
