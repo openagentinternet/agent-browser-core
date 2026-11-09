@@ -7,7 +7,7 @@ export interface BrowserMenuItemDefinition {
   id: string;
   label: string;
   icon: string;
-  action: 'open-settings' | 'go-forward' | 'reload' | 'force-reload' | 'toggle-bookmark' | 'toggle-drawer' | 'identity';
+  action: 'open-settings' | 'go-forward' | 'reload' | 'force-reload' | 'toggle-bookmark' | 'toggle-element-picker' | 'toggle-drawer' | 'identity';
   settingsTab?: 'baseUrls' | 'templates' | 'nameResolution' | 'cache';
   /** Items shown only on narrow (mobile) layouts; hidden on desktop via CSS. */
   mobileOnly?: boolean;
@@ -54,6 +54,13 @@ export const BROWSER_MENU_SECTIONS: BrowserMenuSectionDefinition[] = [
         label: 'Bookmark this page',
         icon: 'star',
         action: 'toggle-bookmark',
+        mobileOnly: true,
+      },
+      {
+        id: 'element-picker',
+        label: 'Select elements',
+        icon: 'crosshair',
+        action: 'toggle-element-picker',
         mobileOnly: true,
       },
       {

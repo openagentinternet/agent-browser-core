@@ -1217,7 +1217,7 @@ test('Browser menu mobile-only items fold toolbar actions on narrow layouts', as
   assert.ok(mobileSection);
   assert.equal(
     mobileSection.items.map((item) => item.id).join(','),
-    'forward,reload,bookmark,drawer,identity',
+    'forward,reload,bookmark,element-picker,drawer,identity',
   );
   assert.ok(mobileSection.items.every((item) => item.mobileOnly === true));
 
@@ -1225,6 +1225,8 @@ test('Browser menu mobile-only items fold toolbar actions on narrow layouts', as
   const menuHtml = elements['[data-browser-menu]'].innerHTML;
   assert.match(menuHtml, /browser-menu-section-mobile/);
   assert.match(menuHtml, /class="browser-menu-item-mobile" data-browser-menu-item="forward"/);
+  assert.match(menuHtml, /class="browser-menu-item-mobile" data-browser-menu-item="element-picker"/);
+  assert.match(menuHtml, /Select elements/);
   assert.match(menuHtml, /Forward/);
   assert.match(menuHtml, /Reload/);
   assert.match(menuHtml, /Bookmark this page/);
