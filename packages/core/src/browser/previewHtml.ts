@@ -1,5 +1,7 @@
 import { buildMetafileAcceleratedContentUrl } from './metafileContentUrl.js';
 import { normalizeMetafilePinId } from './metafileResolver.js';
+import { injectElementPickerBridge } from './elementPicker.js';
+import { injectHeadScript } from './previewHtmlSupport.js';
 
 // Preview HTML is served by the host, so MetaApps can rely on Agent Internet
 // URIs without embedding host-specific helpers themselves:
@@ -9,7 +11,9 @@ import { normalizeMetafilePinId } from './metafileResolver.js';
 //   silently dropped by the sandboxed preview iframe, so a navigation bridge
 //   script is injected to forward them to the Browser via postMessage;
 // - localStorage/sessionStorage get a memory fallback because the preview
-//   iframe runs in an opaque origin.
+//   iframe runs in an opaque origin;
+// - the element picker bridge ships dormant and only activates when the Browser
+//   chrome enters pick mode for this frame.
 
 const METAFILE_URI_RE = /^metafile:\/\/(.*)$/iu;
 // The captured prefix (start-of-string or whitespace) keeps the match anchored
@@ -256,21 +260,6 @@ export function rewritePreviewHtmlMetafileReferences(html: string, metafileConte
   });
 }
 
-function injectHeadScript(html: string, script: string): string {
-  const headMatch = html.match(/<head\b[^>]*>/iu);
-  if (headMatch?.index !== undefined) {
-    const insertAt = headMatch.index + headMatch[0].length;
-    return `${html.slice(0, insertAt)}${script}${html.slice(insertAt)}`;
-  }
-
-  const firstScriptIndex = html.search(/<script\b/iu);
-  if (firstScriptIndex >= 0) {
-    return `${html.slice(0, firstScriptIndex)}${script}${html.slice(firstScriptIndex)}`;
-  }
-
-  return `${script}${html}`;
-}
-
 export function preparePreviewHtml(input: {
   body: Buffer;
   contentType: string;
@@ -290,5 +279,6 @@ export function preparePreviewHtml(input: {
   if (!html.includes(PREVIEW_VIDEO_PLAY_FALLBACK_MARKER)) {
     html = injectHeadScript(html, PREVIEW_VIDEO_PLAY_FALLBACK);
   }
+  html = injectElementPickerBridge(html);
   return html;
 }
