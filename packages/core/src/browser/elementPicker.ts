@@ -498,25 +498,29 @@ export const ELEMENT_PICKER_SCRIPT_SOURCE = `(function ${ELEMENT_PICKER_BRIDGE_M
   window.__agentBrowserElementPicker = { create: createInstance, CAPS: CAPS };
 
   // iframe mode: auto-create against the whole document and bridge messages.
+  // Wrapped so embedding contexts with a partial DOM (test VMs) evaluate the
+  // source safely; real frames always pass.
   if (window.parent !== window) {
-    var instance = createInstance({
-      root: document.documentElement,
-      onEvent: function (event) {
-        try {
-          window.parent.postMessage({ type: PICKER_EVENT_MESSAGE_TYPE, version: 1, event: event }, '*');
-        } catch (err) { /* parent may be gone — nothing sensible to do */ }
-      }
-    });
-    window.addEventListener('message', function (event) {
-      var data = event.data;
-      if (!data || typeof data.type !== 'string' || data.type.indexOf(PICKER_MESSAGE_PREFIX) !== 0) return;
-      if (data.type === 'agent-browser:picker-enable') instance.enable();
-      else if (data.type === 'agent-browser:picker-disable') instance.disable();
-      else if (data.type === 'agent-browser:picker-add-marker') instance.addMarker(data.markerId, data.label);
-      else if (data.type === 'agent-browser:picker-update-marker') instance.updateMarker(data.markerId, data.label);
-      else if (data.type === 'agent-browser:picker-remove-marker') instance.removeMarker(data.markerId);
-      else if (data.type === 'agent-browser:picker-clear-markers') instance.clearMarkers();
-    });
+    try {
+      var instance = createInstance({
+        root: document.documentElement,
+        onEvent: function (event) {
+          try {
+            window.parent.postMessage({ type: PICKER_EVENT_MESSAGE_TYPE, version: 1, event: event }, '*');
+          } catch (err) { /* parent may be gone — nothing sensible to do */ }
+        }
+      });
+      window.addEventListener('message', function (event) {
+        var data = event.data;
+        if (!data || typeof data.type !== 'string' || data.type.indexOf(PICKER_MESSAGE_PREFIX) !== 0) return;
+        if (data.type === 'agent-browser:picker-enable') instance.enable();
+        else if (data.type === 'agent-browser:picker-disable') instance.disable();
+        else if (data.type === 'agent-browser:picker-add-marker') instance.addMarker(data.markerId, data.label);
+        else if (data.type === 'agent-browser:picker-update-marker') instance.updateMarker(data.markerId, data.label);
+        else if (data.type === 'agent-browser:picker-remove-marker') instance.removeMarker(data.markerId);
+        else if (data.type === 'agent-browser:picker-clear-markers') instance.clearMarkers();
+      });
+    } catch (err) { /* no usable DOM here — the engine stays unavailable */ }
   }
 }());
 `;
