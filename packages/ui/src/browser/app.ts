@@ -8002,14 +8002,18 @@ function pinInspectorRenderMarkdownBlocks(value) {
       return textValue(line) !== '';
     });
     var firstLine = textValue(lines[0]);
+    // A heading may share its blank-line block with the body that follows it
+    // (no blank line between heading and content — common in CJK writing).
+    // Render the heading, then re-render the remaining lines as their own
+    // block instead of dropping them; with no remaining lines this yields ''.
     if (/^###\\s+/.test(firstLine)) {
-      return '<h3>' + pinInspectorInlineMarkdown(firstLine.replace(/^###\\s+/, '')) + '</h3>';
+      return '<h3>' + pinInspectorInlineMarkdown(firstLine.replace(/^###\\s+/, '')) + '</h3>' + pinInspectorRenderMarkdownBlocks(lines.slice(1).join('\\n'));
     }
     if (/^##\\s+/.test(firstLine)) {
-      return '<h2>' + pinInspectorInlineMarkdown(firstLine.replace(/^##\\s+/, '')) + '</h2>';
+      return '<h2>' + pinInspectorInlineMarkdown(firstLine.replace(/^##\\s+/, '')) + '</h2>' + pinInspectorRenderMarkdownBlocks(lines.slice(1).join('\\n'));
     }
     if (/^#\\s+/.test(firstLine)) {
-      return '<h1>' + pinInspectorInlineMarkdown(firstLine.replace(/^#\\s+/, '')) + '</h1>';
+      return '<h1>' + pinInspectorInlineMarkdown(firstLine.replace(/^#\\s+/, '')) + '</h1>' + pinInspectorRenderMarkdownBlocks(lines.slice(1).join('\\n'));
     }
     if (lines.every(function (line) {
       return /^>/.test(textValue(line));

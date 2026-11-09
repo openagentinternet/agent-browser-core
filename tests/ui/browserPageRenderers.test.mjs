@@ -3213,6 +3213,74 @@ test('pin-inspector never recognizes empty-body MetaWeb URIs as links', async ()
   assert.match(html, new RegExp(`browser-pin-link-pill" href="pin://${relatedBarePinId}"`));
 });
 
+test('pin-inspector keeps markdown body content that follows a heading inside the same block', async () => {
+  // Headings written without a blank line before their body (common in CJK
+  // markdown) share one blank-line block with that body. The renderer must
+  // emit the heading AND the following paragraph/list, not the heading alone.
+  const markdown = [
+    '# 结业自陈',
+    '',
+    '## 谁教的我',
+    '设计老师亲自开课，**全部亲手跑通**。',
+    '',
+    '## 三课带走的那一句',
+    '- 第 01 课：五问先于样式',
+    '- 第 02 课：样张上链',
+    '',
+    '## 现在能干什么',
+    '1. 独立写出五问落档',
+    '2. 走通交付全链路',
+  ].join('\n');
+  const payload = JSON.stringify({
+    title: '结业自陈',
+    contentType: 'text/markdown',
+    content: markdown,
+  });
+  const { nodes } = runWithResolve(result({
+    type: 'pin-inspector',
+    contentType: 'application/json',
+    data: {
+      rendererId: 'generic.pin-inspector',
+      version: {
+        requestedPinId: servicePinId,
+        resolvedPinId: buzzPinId,
+        versionSelector: 'latest',
+      },
+      pin: {
+        pinId: buzzPinId,
+        path: '/protocols/simplenote',
+        contentType: 'application/json',
+        chainName: 'btc',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+      payload,
+      rawPayload: payload,
+      rawPinRecord: {
+        path: '/protocols/simplenote',
+        contentType: 'application/json',
+        txid: legacyTxid,
+        genesisTransaction: genesisTxid,
+      },
+    },
+  }, {
+    uri: `pin://${servicePinId}`,
+    normalizedUri: `pin://${servicePinId}`,
+    resourceType: 'pin',
+    title: 'Pin heading body fixture',
+    owner: { kind: 'unknown', name: 'Publisher', verificationState: 'partial' },
+  }));
+
+  await waitFor(() => nodes['[data-browser-viewport]'].innerHTML.includes('browser-pin-markdown'), 'markdown pin render');
+  const html = nodes['[data-browser-viewport]'].innerHTML;
+
+  assert.match(html, /<h1>结业自陈<\/h1>/);
+  assert.match(html, /<h2>谁教的我<\/h2>/);
+  assert.match(html, /<p>设计老师亲自开课，<strong>全部亲手跑通<\/strong>。<\/p>/);
+  assert.match(html, /<h2>三课带走的那一句<\/h2><ul><li>第 01 课：五问先于样式<\/li><li>第 02 课：样张上链<\/li><\/ul>/);
+  assert.match(html, /<h2>现在能干什么<\/h2><ol><li>独立写出五问落档<\/li><li>走通交付全链路<\/li><\/ol>/);
+});
+
 test('pin-inspector renders JSON strings from plain text payloads as structured documents', async () => {
   const rawPayload = '{"content":"7\\n#美食工厂","contentType":"application/json;utf-8","attachments":["metafile://50d939b24815df1afd4c37137eebe15f65dbd71ae2ea505b465558a3f170c342i0.jpg"]}';
   const { nodes } = runWithResolve(result({
