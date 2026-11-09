@@ -585,6 +585,82 @@ export interface BrowserSettingsSnapshot {
 export type BrowserCacheSnapshot = Record<string, unknown>;
 export type BrowserCacheClearResult = Record<string, unknown>;
 
+// Element picker: records the Browser page returns for human-annotated HTML
+// elements. Transport is the page-embedded surface (AgentBrowserTabs
+// getElementSelections / clearElementSelections and the
+// agent-browser:get-element-selections postMessage protocol); these types are
+// the shared shape contract for hosts.
+
+export interface BrowserElementSelectionRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface BrowserElementSelectionLocator {
+  cssSelector: string;
+  cssScope: 'document' | 'browser-pane';
+  xpath: string;
+}
+
+export interface BrowserElementSelectionGeometry {
+  rect: BrowserElementSelectionRect;
+  scrollX: number;
+  scrollY: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
+export interface BrowserElementSelectionStyle {
+  color?: string;
+  backgroundColor?: string;
+  fontSize?: string;
+  fontFamily?: string;
+  fontWeight?: string;
+  display?: string;
+}
+
+export interface BrowserElementSelectionElement {
+  tag: string;
+  id: string;
+  classes: string[];
+  attributes: Record<string, string>;
+  role: string;
+  accessibleName: string;
+  textPreview: string;
+  outerHtmlPreview: string;
+}
+
+export interface BrowserElementSelectionPage {
+  url: string;
+  title: string;
+}
+
+export interface BrowserElementSelectionFrame {
+  url: string;
+}
+
+export interface BrowserElementSelection {
+  markerId: string;
+  name: string;
+  comment: string;
+  capturedAt: string;
+  page: BrowserElementSelectionPage;
+  frame: BrowserElementSelectionFrame;
+  locator: BrowserElementSelectionLocator;
+  element: BrowserElementSelectionElement;
+  geometry: BrowserElementSelectionGeometry;
+  style: BrowserElementSelectionStyle;
+}
+
+export interface BrowserElementSelectionsSnapshot {
+  tabId: string;
+  uri: string;
+  title: string;
+  selections: BrowserElementSelection[];
+}
+
 export interface BrowserActorInput {
   actorId?: string;
 }
