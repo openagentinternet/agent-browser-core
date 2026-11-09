@@ -8,7 +8,7 @@ import { LLM_PROVIDERS, GENERIC_ICON } from './llmProviders.js';
 import { BROWSER_LIBRARY_REQUEST_TYPES } from './library.js';
 import { BROWSER_UI_VERSION } from './version.js';
 import { BROWSER_ACTOR_KIND_GROUPS } from '@openagentinternet/agent-browser-host-contract';
-import { BOT_HOMEPAGE_TEMPLATES } from '@openagentinternet/agent-browser-core';
+import { BOT_HOMEPAGE_TEMPLATES, ELEMENT_PICKER_SCRIPT_SOURCE } from '@openagentinternet/agent-browser-core';
 
 export interface BrowserPagePanelDefinition {
   title: string;
@@ -87,6 +87,9 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
           <button type="button" class="browser-icon-button browser-bookmark-star" data-browser-bookmark-star aria-label="Bookmark this page" title="Bookmark this page" disabled>
             <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
           </button>
+          <button type="button" class="browser-icon-button browser-picker-toggle" data-browser-picker-toggle aria-label="Select elements" title="Select elements on this page" aria-pressed="false" disabled>
+            <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><circle cx="12" cy="12" r="3.2"></circle><path d="M12 2v4.2M12 17.8V22M2 12h4.2M17.8 12H22"></path></svg>
+          </button>
           <button type="button" class="browser-icon-button browser-auto-write-indicator" data-browser-auto-write aria-label="This app can write automatically" title="This app can write to approved protocols automatically. Click to revoke." hidden>
             <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5zm-3 8V7a3 3 0 1 1 6 0v3H9z"></path></svg>
           </button>
@@ -126,6 +129,7 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
           <span data-browser-status-renderer>renderer: unsupported</span>
           <button type="button" data-browser-status-txid>TXID: -</button>
         </footer>
+        <div class="browser-picker-panel" data-browser-picker-panel role="dialog" aria-label="Element annotation" hidden></div>
         <div class="browser-modal" data-browser-modal-root hidden></div>
         <div class="browser-tab-context-menu" data-browser-tab-context-menu role="menu" hidden></div>
         <div class="browser-toast" data-browser-toast role="status" aria-live="polite" hidden></div>
@@ -145,6 +149,10 @@ var botHomepageTemplateIds = ${JSON.stringify(BOT_HOMEPAGE_TEMPLATES.map((templa
 var llmProviders = ${JSON.stringify(LLM_PROVIDERS)};
 var llmGenericIcon = ${JSON.stringify(GENERIC_ICON)};
 var browserUiVersion = ${JSON.stringify(BROWSER_UI_VERSION)};
+// Element picker engine, shared verbatim with the preview HTML injection
+// (core preparePreviewHtml). Its source contains no backticks and no dollar
+// brace sequences by contract, so it is safe to interpolate raw here.
+${ELEMENT_PICKER_SCRIPT_SOURCE}
 // Known Actor kinds grouped for display (human / bot). Kinds that are not in
 // this map stay neutral — see actorKindGroup()/actorKindBadgeHtml().
 var browserActorKindGroups = ${JSON.stringify(BROWSER_ACTOR_KIND_GROUPS)};
@@ -230,6 +238,15 @@ var state = {
   activePermissions: {},
   pendingPermissionsConfirmation: null,
   autoWriteResourceUri: '',
+  // Element picker: per-tab marker records (tabId -> BrowserElementSelection[])
+  // plus pick-mode state. Selection data is chrome-side state, exactly like
+  // tab content; hosts read it through AgentBrowserTabs.
+  elementSelections: {},
+  elementMarkerSeq: 0,
+  pickerModeTabId: null,
+  pickerEngine: null,
+  pickerEditingMarkerId: '',
+  pickerPendingElement: null,
   // UI-only mirror of running App Sessions for the current actor, used to drive
   // the chrome session indicator + revoke entry. Authorization and real session
   // state live on the host; this resets on page reload.
@@ -549,6 +566,457 @@ function getTabInfo(tabId) {
   };
 }
 
+// --- Element picker ----------------------------------------------------------
+// Humans mark elements on the content open in the active tab so a host
+// MetaBot can learn exactly which element they mean. The engine runs in two
+// hosts: inside the sandboxed content frame (metaapp:// and
+// preview-metaapp://localhost pages, driven over postMessage) or directly
+// against the pane subtree (bot pages and pin-inspector payloads, where
+// content renders in chrome DOM). Unsupported renderers keep the toolbar
+// button disabled. Selection records live in state.elementSelections (per
+// tab) and are served to hosts via AgentBrowserTabs.getElementSelections.
+
+var PICKER_MAX_MARKERS = 50;
+
+function pickerHostMode() {
+  var rendererType = textValue(state.current && state.current.renderer && state.current.renderer.type);
+  if (rendererType === 'bot-page' || rendererType === 'pin-inspector') return 'pane';
+  return 'frame';
+}
+
+function pickerSupportedForCurrent() {
+  var current = state.current;
+  if (!current || !current.renderer) return false;
+  var rendererType = textValue(current.renderer.type);
+  if (rendererType === 'bot-page' || rendererType === 'pin-inspector') return true;
+  // html-iframe is supported only for frames served by our own preview
+  // pipeline (metaapp:// / preview-metaapp://localhost artifacts). Remote
+  // frames (remote preview-metaapp hosts, metafile CDN documents) cannot
+  // carry the injected bridge.
+  if (rendererType === 'html-iframe') {
+    return textValue(current.renderer.url).indexOf('/api/browser/preview-assets/') !== -1;
+  }
+  return false;
+}
+
+function pickerModeActive() {
+  return state.pickerModeTabId !== null && state.pickerModeTabId === state.activeTabId;
+}
+
+function tabElementSelections(tabId) {
+  var key = String(tabId);
+  if (!state.elementSelections[key]) state.elementSelections[key] = [];
+  return state.elementSelections[key];
+}
+
+function findElementSelection(tabId, markerId) {
+  var selections = state.elementSelections[String(tabId)];
+  if (!selections) return null;
+  for (var i = 0; i < selections.length; i += 1) {
+    if (selections[i].markerId === markerId) return selections[i];
+  }
+  return null;
+}
+
+function emitElementSelectionsChanged(reason, tabId) {
+  var count = (state.elementSelections[String(tabId)] || []).length;
+  emitHostEvent('element-selections-changed', { reason: reason, tabId: tabId, count: count });
+}
+
+function buildElementSelectionRecord(tab, elementInfo, markerId, name, comment) {
+  var info = tabToInfo(tab);
+  var locator = elementInfo.locator || {};
+  return {
+    markerId: markerId,
+    name: name,
+    comment: comment,
+    capturedAt: new Date().toISOString(),
+    page: { url: info.uri, title: info.title },
+    frame: {
+      url: pickerHostMode() === 'frame'
+        ? textValue(state.current && state.current.renderer && state.current.renderer.url)
+        : ''
+    },
+    locator: {
+      cssSelector: textValue(locator.cssSelector),
+      cssScope: locator.cssScope === 'browser-pane' ? 'browser-pane' : 'document',
+      xpath: textValue(locator.xpath)
+    },
+    element: {
+      tag: textValue(elementInfo.tag),
+      id: textValue(elementInfo.id),
+      classes: Array.isArray(elementInfo.classes) ? elementInfo.classes.map(String).slice(0, 40) : [],
+      attributes: elementInfo.attributes && typeof elementInfo.attributes === 'object' ? elementInfo.attributes : {},
+      role: textValue(elementInfo.role),
+      accessibleName: textValue(elementInfo.accessibleName),
+      textPreview: textValue(elementInfo.textPreview),
+      outerHtmlPreview: textValue(elementInfo.outerHtmlPreview)
+    },
+    geometry: elementInfo.geometry && typeof elementInfo.geometry === 'object'
+      ? elementInfo.geometry
+      : { rect: { x: 0, y: 0, width: 0, height: 0 }, scrollX: 0, scrollY: 0, viewportWidth: 0, viewportHeight: 0 },
+    style: elementInfo.style && typeof elementInfo.style === 'object' ? elementInfo.style : {}
+  };
+}
+
+function addTabElementSelection(tabId, record) {
+  var selections = tabElementSelections(tabId);
+  if (selections.length >= PICKER_MAX_MARKERS) return null;
+  selections.push(record);
+  emitElementSelectionsChanged('marker-added', tabId);
+  return record;
+}
+
+function updateTabElementSelection(tabId, markerId, patch) {
+  var record = findElementSelection(tabId, markerId);
+  if (!record) return null;
+  if (patch && typeof patch.name === 'string') record.name = patch.name;
+  if (patch && typeof patch.comment === 'string') record.comment = patch.comment;
+  emitElementSelectionsChanged('marker-updated', tabId);
+  return record;
+}
+
+function removeTabElementSelection(tabId, markerId) {
+  var selections = state.elementSelections[String(tabId)];
+  if (!selections) return false;
+  for (var i = 0; i < selections.length; i += 1) {
+    if (selections[i].markerId === markerId) {
+      selections.splice(i, 1);
+      emitElementSelectionsChanged('marker-removed', tabId);
+      return true;
+    }
+  }
+  return false;
+}
+
+function clearTabElementSelections(tabId, options) {
+  var key = String(tabId);
+  var selections = state.elementSelections[key];
+  if (!selections || !selections.length) {
+    delete state.elementSelections[key];
+    return;
+  }
+  state.elementSelections[key] = [];
+  if (!options || options.silent !== true) {
+    emitElementSelectionsChanged('cleared', tabId);
+  }
+}
+
+function pickerFrameWindow() {
+  return pickerHostMode() === 'frame' ? currentBrowserHtmlFrameWindow() : null;
+}
+
+function pickerPostFrame(type, payload) {
+  var frameWindow = pickerFrameWindow();
+  if (!frameWindow) return false;
+  var message = { type: type, version: 1 };
+  if (payload) {
+    for (var key in payload) {
+      if (Object.prototype.hasOwnProperty.call(payload, key)) message[key] = payload[key];
+    }
+  }
+  bridgePostMessage(frameWindow, message);
+  return true;
+}
+
+function destroyPanePickerEngine() {
+  if (!state.pickerEngine) return;
+  try { state.pickerEngine.dispose(); } catch (error) { /* pane already gone */ }
+  state.pickerEngine = null;
+}
+
+function ensurePanePickerEngine() {
+  if (state.pickerEngine) return state.pickerEngine;
+  if (!window.__agentBrowserElementPicker || typeof window.__agentBrowserElementPicker.create !== 'function') return null;
+  var pane = activeViewportPane();
+  if (!pane) return null;
+  state.pickerEngine = window.__agentBrowserElementPicker.create({
+    root: pane,
+    onEvent: handlePickerEngineEvent
+  });
+  return state.pickerEngine;
+}
+
+function handlePickerEngineEvent(event) {
+  if (!event || typeof event.type !== 'string') return;
+  if (event.type === 'pick') {
+    state.pickerEditingMarkerId = '';
+    state.pickerPendingElement = event.element || null;
+    renderPickerPanel();
+  } else if (event.type === 'marker-click') {
+    openPickerPanelForMarker(textValue(event.markerId));
+  } else if (event.type === 'escape') {
+    if (state.pickerPendingElement) closePickerPanel();
+    else exitPickerMode();
+  }
+}
+
+function enterPickerMode() {
+  if (pickerModeActive()) return;
+  if (!pickerSupportedForCurrent()) {
+    showToast(browserText('picker.unsupported', 'Element picking is not available for this content.'));
+    return;
+  }
+  var tab = activeTab();
+  if (!tab) return;
+  if (pickerHostMode() === 'frame') {
+    if (!pickerPostFrame('agent-browser:picker-enable')) {
+      showToast(browserText('picker.unsupported', 'Element picking is not available for this content.'));
+      return;
+    }
+  } else {
+    var engine = ensurePanePickerEngine();
+    if (!engine) {
+      showToast(browserText('picker.unsupported', 'Element picking is not available for this content.'));
+      return;
+    }
+    engine.enable();
+  }
+  state.pickerModeTabId = tab.id;
+  renderPickerToggle();
+}
+
+function exitPickerMode() {
+  if (state.pickerModeTabId === null) return;
+  state.pickerModeTabId = null;
+  closePickerPanel();
+  if (pickerHostMode() === 'frame') {
+    pickerPostFrame('agent-browser:picker-disable');
+  } else if (state.pickerEngine) {
+    state.pickerEngine.disable();
+  }
+  renderPickerToggle();
+}
+
+// Pick mode dies with the tab it belongs to: navigation repaints the pane
+// (stale locators + orphaned badges) and tab close detaches the engine root.
+function exitPickerModeForTab(tabId) {
+  if (state.pickerModeTabId !== tabId) return;
+  state.pickerModeTabId = null;
+  closePickerPanel();
+  destroyPanePickerEngine();
+  renderPickerToggle();
+}
+
+function togglePickerMode() {
+  if (pickerModeActive()) exitPickerMode();
+  else enterPickerMode();
+}
+
+function openPickerPanelForMarker(markerId) {
+  var tabId = state.pickerModeTabId !== null ? state.pickerModeTabId : state.activeTabId;
+  var record = findElementSelection(tabId, markerId);
+  if (!record) return;
+  state.pickerEditingMarkerId = markerId;
+  state.pickerPendingElement = record.element;
+  renderPickerPanel();
+}
+
+function closePickerPanel() {
+  state.pickerEditingMarkerId = '';
+  state.pickerPendingElement = null;
+  if (elements.pickerPanel) {
+    elements.pickerPanel.hidden = true;
+    elements.pickerPanel.innerHTML = '';
+  }
+}
+
+function pickerPanelFieldValue(attribute) {
+  var field = elements.pickerPanel && typeof elements.pickerPanel.querySelector === 'function'
+    ? elements.pickerPanel.querySelector('[' + attribute + ']')
+    : null;
+  return field && typeof field.value === 'string' ? field.value.trim() : '';
+}
+
+function savePickerMarker() {
+  var tabId = state.pickerModeTabId;
+  var pending = state.pickerPendingElement;
+  if (tabId === null || !pending) {
+    closePickerPanel();
+    return;
+  }
+  var nameValue = pickerPanelFieldValue('data-browser-picker-name');
+  var commentValue = pickerPanelFieldValue('data-browser-picker-comment');
+  if (state.pickerEditingMarkerId) {
+    var updated = updateTabElementSelection(tabId, state.pickerEditingMarkerId, { name: nameValue, comment: commentValue });
+    if (updated) {
+      if (pickerHostMode() === 'frame') {
+        pickerPostFrame('agent-browser:picker-update-marker', { markerId: updated.markerId, label: updated.name });
+      } else if (state.pickerEngine) {
+        state.pickerEngine.updateMarker(updated.markerId, updated.name);
+      }
+    }
+  } else {
+    state.elementMarkerSeq += 1;
+    var markerId = 'marker-' + state.elementMarkerSeq;
+    var name = nameValue || ('Marker ' + state.elementMarkerSeq);
+    var record = buildElementSelectionRecord(activeTab(), pending, markerId, name, commentValue);
+    if (!addTabElementSelection(tabId, record)) {
+      showToast(browserText('picker.limit', 'Marker limit reached (' + PICKER_MAX_MARKERS + ').'));
+      return;
+    }
+    var painted = false;
+    if (pickerHostMode() === 'frame') {
+      painted = pickerPostFrame('agent-browser:picker-add-marker', { markerId: markerId, label: name });
+    } else if (state.pickerEngine) {
+      painted = state.pickerEngine.addMarker(markerId, name);
+    }
+    if (!painted) {
+      showToast(browserText('picker.stale', 'Element is no longer present; annotation kept without an on-page badge.'));
+    }
+  }
+  closePickerPanel();
+}
+
+function removePickerMarker(markerId) {
+  var tabId = state.pickerModeTabId;
+  if (tabId === null || !markerId) return;
+  if (removeTabElementSelection(tabId, markerId)) {
+    if (pickerHostMode() === 'frame') {
+      pickerPostFrame('agent-browser:picker-remove-marker', { markerId: markerId });
+    } else if (state.pickerEngine) {
+      state.pickerEngine.removeMarker(markerId);
+    }
+  }
+  closePickerPanel();
+}
+
+function renderPickerToggle() {
+  if (!elements.pickerToggle) return;
+  var supported = pickerSupportedForCurrent();
+  var active = pickerModeActive();
+  elements.pickerToggle.disabled = !supported && !active;
+  if (active) elements.pickerToggle.classList.add('is-active');
+  else elements.pickerToggle.classList.remove('is-active');
+  elements.pickerToggle.setAttribute('aria-pressed', active ? 'true' : 'false');
+  elements.pickerToggle.setAttribute('aria-label', active ? 'Exit element selection' : 'Select elements');
+  elements.pickerToggle.setAttribute('title', active ? 'Exit element selection (Esc)' : 'Select elements on this page');
+}
+
+function pickerDetailRow(label, value) {
+  return '<div class="browser-picker-detail-row"><span class="browser-picker-detail-label">' + escapeHtml(label) + '</span><span class="browser-picker-detail-value">' + escapeHtml(value) + '</span></div>';
+}
+
+function renderPickerPanel() {
+  var panel = elements.pickerPanel;
+  if (!panel) return;
+  var pending = state.pickerPendingElement;
+  if (!pickerModeActive() || !pending) {
+    panel.hidden = true;
+    panel.innerHTML = '';
+    return;
+  }
+  var record = state.pickerEditingMarkerId
+    ? findElementSelection(state.pickerModeTabId, state.pickerEditingMarkerId)
+    : null;
+  var elementInfo = record ? record.element : pending;
+  var geometry = record ? record.geometry : (pending.geometry || {});
+  var locator = record ? record.locator : (pending.locator || {});
+  var style = record ? record.style : (pending.style || {});
+  var tag = textValue(elementInfo.tag);
+  var title = record ? browserText('picker.editTitle', 'Edit marker') : browserText('picker.newTitle', 'Annotate');
+  var selections = tabElementSelections(state.pickerModeTabId);
+  var headerNumber = selections.length + 1;
+  if (record) {
+    for (var i = 0; i < selections.length; i += 1) {
+      if (selections[i].markerId === record.markerId) headerNumber = i + 1;
+    }
+  }
+  var sections = '';
+  sections += '<details open class="browser-picker-section"><summary>Locator &amp; Geometry</summary><div class="browser-picker-section-body">';
+  sections += pickerDetailRow('CSS selector', textValue(locator.cssSelector));
+  sections += pickerDetailRow('XPath', textValue(locator.xpath));
+  sections += pickerDetailRow('Selector scope', locator.cssScope === 'browser-pane' ? 'browser pane' : 'page document');
+  sections += pickerDetailRow('Rect', geometry && geometry.rect
+    ? geometry.rect.x + ', ' + geometry.rect.y + ' · ' + geometry.rect.width + '×' + geometry.rect.height
+    : '-');
+  sections += pickerDetailRow('Viewport', geometry ? ((geometry.viewportWidth || 0) + '×' + (geometry.viewportHeight || 0)) : '-');
+  sections += '</div></details>';
+  sections += '<details class="browser-picker-section"><summary>Semantics &amp; State</summary><div class="browser-picker-section-body">';
+  sections += pickerDetailRow('Role', textValue(elementInfo.role) || '-');
+  sections += pickerDetailRow('Accessible name', textValue(elementInfo.accessibleName) || '-');
+  sections += pickerDetailRow('Text', textValue(elementInfo.textPreview) || '-');
+  var attributeKeys = elementInfo.attributes && typeof elementInfo.attributes === 'object' ? Object.keys(elementInfo.attributes) : [];
+  sections += pickerDetailRow('Attributes', attributeKeys.length
+    ? attributeKeys.map(function (key) { return key + '="' + elementInfo.attributes[key] + '"'; }).join('  ')
+    : '-');
+  sections += pickerDetailRow('Outer HTML', textValue(elementInfo.outerHtmlPreview) || '-');
+  sections += '</div></details>';
+  sections += '<details class="browser-picker-section"><summary>Page &amp; Capture</summary><div class="browser-picker-section-body">';
+  if (record) {
+    sections += pickerDetailRow('Page URI', record.page.url);
+    sections += pickerDetailRow('Page title', record.page.title || '-');
+    sections += pickerDetailRow('Captured at', record.capturedAt || '-');
+  } else {
+    var tab = activeTab();
+    var info = tab ? tabToInfo(tab) : null;
+    sections += pickerDetailRow('Page URI', info ? info.uri : '-');
+    sections += pickerDetailRow('Captured at', new Date().toISOString());
+  }
+  if (pickerHostMode() === 'frame') {
+    var frameUrl = record ? record.frame.url : textValue(state.current && state.current.renderer && state.current.renderer.url);
+    sections += pickerDetailRow('Frame URL', frameUrl || '-');
+  }
+  sections += '</div></details>';
+  sections += '<details class="browser-picker-section"><summary>Style</summary><div class="browser-picker-section-body">';
+  sections += pickerDetailRow('Color', textValue(style.color) || '-');
+  sections += pickerDetailRow('Background', textValue(style.backgroundColor) || '-');
+  sections += pickerDetailRow('Font', textValue(style.fontSize) || '-');
+  sections += pickerDetailRow('Display', textValue(style.display) || '-');
+  sections += '</div></details>';
+  panel.innerHTML = ''
+    + '<div class="browser-picker-panel-head">'
+    + '<span class="browser-picker-badge">' + headerNumber + '</span>'
+    + '<span class="browser-picker-panel-title">' + escapeHtml(title) + '</span>'
+    + '<span class="browser-picker-tag">' + escapeHtml(tag || '?') + '</span>'
+    + '<button type="button" class="browser-picker-panel-close" data-browser-picker-panel-close aria-label="Close">' + iconHtml('close') + '</button>'
+    + '</div>'
+    + '<div class="browser-picker-name-row">'
+    + '<label class="browser-picker-name-label" for="browser-picker-name-input">Name</label>'
+    + '<input id="browser-picker-name-input" data-browser-picker-name type="text" value="' + escapeHtml(record ? record.name : '') + '" placeholder="Marker ' + headerNumber + '" />'
+    + '</div>'
+    + sections
+    + '<div class="browser-picker-comment-row">'
+    + '<label class="browser-picker-comment-label" for="browser-picker-comment-input">Comment</label>'
+    + '<textarea id="browser-picker-comment-input" data-browser-picker-comment rows="3" placeholder="Describe what should change (optional)">' + escapeHtml(record ? record.comment : '') + '</textarea>'
+    + '</div>'
+    + '<div class="browser-picker-panel-actions">'
+    + (record ? '<button type="button" class="browser-picker-remove" data-browser-picker-marker-remove>' + browserText('picker.remove', 'Remove') + '</button>' : '')
+    + '<button type="button" class="browser-picker-cancel" data-browser-picker-panel-cancel>' + browserText('picker.cancel', 'Cancel') + '</button>'
+    + '<button type="button" class="browser-picker-save" data-browser-picker-panel-save>' + (record ? browserText('picker.update', 'Update') : browserText('picker.save', 'Save')) + '</button>'
+    + '</div>';
+  panel.hidden = false;
+}
+
+// Host-facing read API: a tab's element annotations, cloned so callers cannot
+// mutate browser state. Returns null when no tab matches, mirroring getTabInfo.
+function getElementSelections(tabId) {
+  var tab = resolveTabForRead(tabId);
+  if (!tab) return null;
+  var info = tabToInfo(tab);
+  var selections = state.elementSelections[String(tab.id)] || [];
+  var cloned;
+  try {
+    cloned = JSON.parse(JSON.stringify(selections));
+  } catch (error) {
+    cloned = [];
+  }
+  return { tabId: info.id, uri: info.uri, title: info.title, selections: cloned };
+}
+
+function clearElementSelections(tabId) {
+  var tab = resolveTabForRead(tabId);
+  if (!tab) return null;
+  clearTabElementSelections(tab.id);
+  // On-page badges live inside the pane; only the active tab's badges can be
+  // addressed reliably (background panes may repaint or detach at any time).
+  if (tab.id === state.activeTabId) {
+    if (pickerHostMode() === 'frame') pickerPostFrame('agent-browser:picker-clear-markers');
+    else if (state.pickerEngine) state.pickerEngine.clearMarkers();
+  }
+  return { tabId: tab.id, cleared: true };
+}
+
 // Create + activate a new tab. If uri is provided, navigate the new tab to it;
 // otherwise show the welcome page. When a uri is provided and a tab already
 // shows that URI, switch to the existing tab instead of duplicating it (external
@@ -647,6 +1115,10 @@ function closeTab(id) {
   }
   state.tabs.splice(idx, 1);
   removeTabPane(id);
+  // The pane is gone: drop the closed tab's element markers and (silently —
+  // hosts cannot query a closed tab) release a pane-mode picker engine.
+  exitPickerModeForTab(id);
+  clearTabElementSelections(id, { silent: true });
   emitHostEvent('tab-closed', { tabId: id });
   if (!state.tabs.length) {
     var fresh = createTab();
@@ -704,6 +1176,9 @@ function switchTab(id) {
     // consent prompt (which names the previous tab's resource) is denied.
     flushPendingActorConsent('invalidate');
     flushPendingLlmConsent('invalidate');
+    // Pick mode is scoped to the tab it was started on: leave it behind (the
+    // previous tab's markers stay painted and reappear with the tab).
+    exitPickerMode();
   }
   state.activeTabId = tab.id;
   applyActiveTabState();
@@ -748,6 +1223,7 @@ function syncToolbarForActiveTab() {
   if (elements.back) elements.back.disabled = !tab || tab.historyIndex <= 0;
   if (elements.forward) elements.forward.disabled = !tab || tab.historyIndex >= (tab ? tab.history.length - 1 : -1);
   renderBookmarkStar();
+  renderPickerToggle();
   // The reload button's spinning state belongs to the active tab.
   syncLoadingButton();
   renderAddressIcon();
@@ -3366,6 +3842,15 @@ function handleBridgeSimpleMsgCompose(sourceWindow, id, params) {
 // host/test harnesses that capture only the last listener per event working.
 function handleBrowserMessage(event) {
   var data = event && event.data && typeof event.data === 'object' ? event.data : null;
+  // Content frame -> chrome element picker events. Only accept them from the
+  // ACTIVE tab's own frame so a background tab's app cannot forge picks.
+  if (data && data.type === 'agent-browser:picker-event' && data.version === 1) {
+    var pickerFrameWindow = currentBrowserHtmlFrameWindow();
+    if (pickerFrameWindow && event.source === pickerFrameWindow) {
+      handlePickerEngineEvent(data.event);
+    }
+    return;
+  }
   // Host -> Browser theme messages are accepted only from window.parent.
   if (data && isBrowserThemeMessage(data)) {
     if (window && window.parent && event.source === window.parent) {
@@ -3413,6 +3898,32 @@ function handleBrowserMessage(event) {
         postToHost(hostResponse('agent-browser:get-tab-info:response', infoRequestId, true, tabInfo));
       } else {
         postToHost(hostResponse('agent-browser:get-tab-info:response', infoRequestId, false, {
+          code: 'tab_not_found',
+          message: 'No browser tab matches the requested tabId.'
+        }));
+      }
+      return;
+    }
+    if (data.type === 'agent-browser:get-element-selections') {
+      var selectionsRequestId = data.requestId !== undefined && data.requestId !== null ? data.requestId : data.id;
+      var selectionsSnapshot = getElementSelections(data.tabId);
+      if (selectionsSnapshot) {
+        postToHost(hostResponse('agent-browser:get-element-selections:response', selectionsRequestId, true, selectionsSnapshot));
+      } else {
+        postToHost(hostResponse('agent-browser:get-element-selections:response', selectionsRequestId, false, {
+          code: 'tab_not_found',
+          message: 'No browser tab matches the requested tabId.'
+        }));
+      }
+      return;
+    }
+    if (data.type === 'agent-browser:clear-element-selections') {
+      var clearSelectionsRequestId = data.requestId !== undefined && data.requestId !== null ? data.requestId : data.id;
+      var clearSelectionsResult = clearElementSelections(data.tabId);
+      if (clearSelectionsResult) {
+        postToHost(hostResponse('agent-browser:clear-element-selections:response', clearSelectionsRequestId, true, clearSelectionsResult));
+      } else {
+        postToHost(hostResponse('agent-browser:clear-element-selections:response', clearSelectionsRequestId, false, {
           code: 'tab_not_found',
           message: 'No browser tab matches the requested tabId.'
         }));
@@ -3678,6 +4189,7 @@ function initials(value) {
 function iconHtml(name) {
   var icons = {
     activity: '<path d="M4 12h4l2-6 4 12 2-6h4"></path>',
+    crosshair: '<circle cx="12" cy="12" r="3.2"></circle><path d="M12 2v4.2M12 17.8V22M2 12h4.2M17.8 12H22"></path>',
     bot: '<rect x="5" y="7" width="14" height="10" rx="3"></rect><path d="M9 7V5h6v2M9 12h.1M15 12h.1"></path>',
     bookmark: '<path d="M7 4h10v16l-5-3-5 3V4z"></path>',
     star: '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path>',
@@ -3803,6 +4315,8 @@ function bindElements() {
     modalRoot: document.querySelector('[data-browser-modal-root]'),
     tabContextMenu: document.querySelector('[data-browser-tab-context-menu]'),
     bookmarkStar: document.querySelector('[data-browser-bookmark-star]'),
+    pickerToggle: document.querySelector('[data-browser-picker-toggle]'),
+    pickerPanel: document.querySelector('[data-browser-picker-panel]'),
     autoWriteIndicator: document.querySelector('[data-browser-auto-write]'),
     appSessionIndicator: document.querySelector('[data-browser-app-session]'),
     toast: document.querySelector('[data-browser-toast]'),
@@ -4724,6 +5238,8 @@ async function handleBrowserMenuAction(itemId) {
     });
   } else if (item.action === 'toggle-bookmark') {
     toggleBookmark();
+  } else if (item.action === 'toggle-element-picker') {
+    togglePickerMode();
   } else if (item.action === 'toggle-drawer') {
     toggleDrawer();
   } else if (item.action === 'identity') {
@@ -5356,6 +5872,7 @@ function renderCurrent() {
   var paintedTab = activeTab();
   if (paintedTab) paintedTab.painted = true;
   renderBookmarkStar();
+  renderPickerToggle();
   renderAddressIcon();
   syncPanelState();
 }
@@ -8852,6 +9369,10 @@ async function resolveUri(uri, options) {
     resolvedTab.status = 'resolved';
     resolvedTab.error = null;
     state.lastResolveError = null;
+    // Navigation invalidates this tab's element markers: the pane is about to
+    // repaint, so both the records and the on-page badges would be stale.
+    exitPickerModeForTab(resolvedTab.id);
+    clearTabElementSelections(resolvedTab.id, { silent: true });
     recordVisit(result);
     emitHostEvent('navigation-committed', {
       tabId: resolvedTab.id,
@@ -9466,6 +9987,34 @@ async function initialize() {
   }
   if (elements.drawerToggle) elements.drawerToggle.addEventListener('click', toggleDrawer);
   if (elements.bookmarkStar) elements.bookmarkStar.addEventListener('click', toggleBookmark);
+  if (elements.pickerToggle) elements.pickerToggle.addEventListener('click', togglePickerMode);
+  if (elements.pickerPanel) {
+    elements.pickerPanel.addEventListener('click', function (event) {
+      var target = event && event.target;
+      if (!target || typeof target.closest !== 'function') return;
+      if (target.closest('[data-browser-picker-panel-close]') || target.closest('[data-browser-picker-panel-cancel]')) {
+        closePickerPanel();
+        return;
+      }
+      if (target.closest('[data-browser-picker-panel-save]')) {
+        savePickerMarker();
+        return;
+      }
+      if (target.closest('[data-browser-picker-marker-remove]')) {
+        removePickerMarker(state.pickerEditingMarkerId);
+        return;
+      }
+    });
+  }
+  document.addEventListener('keydown', function (event) {
+    if (!event || event.key !== 'Escape') return;
+    if (state.pickerModeTabId === null) return;
+    if (state.pickerPendingElement) {
+      closePickerPanel();
+      return;
+    }
+    exitPickerMode();
+  });
   if (elements.usingChip) elements.usingChip.addEventListener('click', handleUsingIdentityClick);
   if (elements.resourceChip) elements.resourceChip.addEventListener('click', function (event) {
     if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
@@ -9642,6 +10191,8 @@ globalThis.renderBookmarkStar = renderBookmarkStar;
 globalThis.addBookmark = addBookmark;
 globalThis.removeBookmark = removeBookmark;
 globalThis.toggleBookmark = toggleBookmark;
+globalThis.togglePickerMode = togglePickerMode;
+globalThis.renderPickerToggle = renderPickerToggle;
 globalThis.confirmRemoveBookmark = confirmRemoveBookmark;
 globalThis.showToast = showToast;
 globalThis.loadRuntime = loadRuntime;
@@ -9663,7 +10214,9 @@ globalThis.AgentBrowserTabs = {
   getTabs: getTabs,
   getActiveTab: getActiveTab,
   getTabContent: getTabContent,
-  getTabInfo: getTabInfo
+  getTabInfo: getTabInfo,
+  getElementSelections: getElementSelections,
+  clearElementSelections: clearElementSelections
 };
 globalThis.AgentBrowserLibrary = {
   getSnapshot: getLibrarySnapshot,
