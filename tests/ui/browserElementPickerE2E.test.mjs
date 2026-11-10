@@ -80,7 +80,12 @@ async function startServer() {
     };
     if (url.startsWith('/api/browser/runtime')) return sendJson(runtimePayload());
     if (url.startsWith('/api/browser/resolve')) {
-      const uri = decodeURIComponent((url.split('uri=')[1] || '').replace(/\+/g, ' '));
+      const uri = new URL(url, 'http://127.0.0.1').searchParams.get('uri') || '';
+      if (uri === 'metaid://idq1p0zzdyaedg8xsuczqe4vkljdmu07rna7tf278z') {
+        const payload = previewFramePayload(uri);
+        payload.data.renderer.url = `http://${request.headers.host}/browser-cache/metaapp-preview/preview-1/index.html`;
+        return sendJson(payload);
+      }
       if (uri.startsWith('metaid://')) return sendJson(botPagePayload(uri, 'Alice Bot'));
       if (uri.startsWith('preview-metaapp://localhost')) {
         const payload = previewFramePayload(uri);
@@ -107,6 +112,37 @@ async function startServer() {
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => resolve(server));
   });
+}
+
+async function assertPickerPanelNearTarget(page, frameMode) {
+  const layout = await page.evaluate((isFrame) => {
+    const panel = document.querySelector('[data-browser-picker-panel]');
+    const rect = globalThis.state.pickerPendingElement.geometry.rect;
+    let left = rect.x;
+    let top = rect.y;
+    if (isFrame) {
+      const frame = document.querySelector('.browser-tab-pane:not([hidden]) iframe.browser-html-frame');
+      const frameRect = frame.getBoundingClientRect();
+      left += frameRect.left;
+      top += frameRect.top;
+    }
+    const target = { left, top, right: left + rect.width, bottom: top + rect.height };
+    const panelRect = panel.getBoundingClientRect();
+    const overlapWidth = Math.max(0, Math.min(panelRect.right, target.right + 2) - Math.max(panelRect.left, target.left - 2));
+    const overlapHeight = Math.max(0, Math.min(panelRect.bottom, target.bottom + 2) - Math.max(panelRect.top, target.top - 2));
+    const xGap = Math.max(target.left - panelRect.right, panelRect.left - target.right, 0);
+    const yGap = Math.max(target.top - panelRect.bottom, panelRect.top - target.bottom, 0);
+    return {
+      overlap: overlapWidth * overlapHeight,
+      near: Math.max(xGap, yGap) <= 24,
+      rightStyle: panel.style.right,
+      inside: panelRect.left >= 0 && panelRect.top >= 0 && panelRect.right <= window.innerWidth && panelRect.bottom <= window.innerHeight,
+    };
+  }, frameMode);
+  assert.equal(layout.rightStyle, 'auto', 'panel is positioned from the target, not the Browser right edge');
+  assert.equal(layout.overlap, 0, 'panel does not cover the selected element or its outline');
+  assert.equal(layout.near, true, 'panel remains adjacent to the selected element');
+  assert.equal(layout.inside, true, 'panel stays inside the Browser viewport');
 }
 
 test('element picker works end to end in chrome-DOM and iframe modes (e2e)', async () => {
@@ -138,6 +174,7 @@ test('element picker works end to end in chrome-DOM and iframe modes (e2e)', asy
       target.click();
     });
     await page.waitForSelector('[data-browser-picker-panel]:not([hidden])', { timeout: 5000 });
+    await assertPickerPanelNearTarget(page, false);
     await page.fill('[data-browser-picker-name]', 'Bot name');
     await page.fill('[data-browser-picker-comment]', 'Make the name larger');
     await page.click('[data-browser-picker-panel-save]');
@@ -175,6 +212,7 @@ test('element picker works end to end in chrome-DOM and iframe modes (e2e)', asy
     await frame.click('#app-btn');
 
     await page.waitForSelector('[data-browser-picker-panel]:not([hidden])', { timeout: 5000 });
+    await assertPickerPanelNearTarget(page, true);
     const panelText = await page.locator('[data-browser-picker-panel]').textContent();
     assert.match(panelText, /page document/, 'frame picks report document-scoped selectors');
     await page.fill('[data-browser-picker-name]', 'App save button');
@@ -330,6 +368,23 @@ test('host-local preview picker works in duplicate URI frames (e2e)', async () =
     await page.evaluate((tabId) => AgentBrowserTabs.switchTab(tabId), secondTabId);
     const restoredSecondFrame = await activeFrame();
     await restoredSecondFrame.waitForFunction(() => document.querySelector('.__ab-picker-badge')?.textContent === 'Preview two', null, { timeout: 5000 });
+
+    const customMetaIdUri = 'metaid://idq1p0zzdyaedg8xsuczqe4vkljdmu07rna7tf278z';
+    await page.evaluate((value) => globalThis.resolveUri(value), customMetaIdUri);
+    await page.waitForFunction(() => document.querySelector('[data-browser-status-state]')?.textContent === 'resolved', null, { timeout: 10000 });
+    assert.equal(await page.evaluate(() => globalThis.state.current.resourceType), 'metaapp');
+    assert.equal(await page.locator('[data-browser-picker-toggle]').isDisabled(), false, 'metaid alias of a local MetaApp enables picking');
+    await page.click('[data-browser-picker-toggle]');
+    const aliasFrame = await activeFrame();
+    await aliasFrame.waitForSelector('#app-btn', { timeout: 10000 });
+    await aliasFrame.click('#app-btn');
+    await page.waitForSelector('[data-browser-picker-panel]:not([hidden])', { timeout: 5000 });
+    await page.fill('[data-browser-picker-name]', 'Custom MetaID homepage');
+    await page.click('[data-browser-picker-panel-save]');
+    const aliasSnapshot = await page.evaluate(() => AgentBrowserTabs.getElementSelections());
+    assert.equal(aliasSnapshot.uri, customMetaIdUri);
+    assert.equal(aliasSnapshot.selections[0].name, 'Custom MetaID homepage');
+    assert.equal(aliasSnapshot.selections[0].locator.cssScope, 'document');
   } finally {
     await browser.close();
     await new Promise((resolve) => server.close(resolve));

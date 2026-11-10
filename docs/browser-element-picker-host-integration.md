@@ -15,8 +15,9 @@ the read API. Turning selections into chat context / prompts is host-side work.
 
 - The human enters pick mode from the Browser toolbar (crosshair button next
   to the bookmark star, or Browser menu → "Select elements" on mobile), clicks
-  elements, fills the annotation panel, and confirms. Markers are painted as
-  blue outlines with numbered badges on the page.
+  elements, fills the annotation panel, and confirms. The panel opens beside,
+  above, or below the target without covering it or its outline when space
+  allows. Markers are painted as blue outlines with numbered badges on the page.
 - The host reads the annotations through the same surfaces as tabs:
 
 | Surface | Item | Purpose |
@@ -50,7 +51,8 @@ the read API. Turning selections into chat context / prompts is host-side work.
   when that tab becomes active again. There is no persistence across page
   reloads — read the selections before they are invalidated.
 - **Supported content:** `metaapp://` (zip or single-file HTML served through
-  the local preview pipeline), `preview-metaapp://localhost`, built-in bot
+  the local preview pipeline), `metaid://` custom homepages whose resolved
+  `resourceType` is `metaapp`, `preview-metaapp://localhost`, built-in bot
   pages, `pin://` (pin-inspector payload rendering). Host-local preview routes
   on a loopback HTTP(S) origin are supported when their HTML is prepared with
   `preparePreviewHtml`; the route need not be `/api/browser/preview-assets/`.
