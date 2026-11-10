@@ -45,13 +45,16 @@ the read API. Turning selections into chat context / prompts is host-side work.
   `locator.cssScope` field (see below).
 - **Markers are per tab and short-lived by design.** Navigation, reload, and
   back/forward clear a tab's markers (a stale CSS/XPath locator would mislead
-  the MetaBot); closing a tab clears them too. Switching tabs keeps each tab's
-  markers painted. There is no persistence across page reloads — read the
-  selections before they are invalidated.
+  the MetaBot); closing a tab clears them too. Switching or opening tabs hides
+  the previous tab's markers and pick mode; its records and markers reappear
+  when that tab becomes active again. There is no persistence across page
+  reloads — read the selections before they are invalidated.
 - **Supported content:** `metaapp://` (zip or single-file HTML served through
   the local preview pipeline), `preview-metaapp://localhost`, built-in bot
-  pages, `pin://` (pin-inspector payload rendering). The toolbar button is
-  disabled with everything else (`preview-metaapp://<remote-host>`,
+  pages, `pin://` (pin-inspector payload rendering). Host-local preview routes
+  on a loopback HTTP(S) origin are supported when their HTML is prepared with
+  `preparePreviewHtml`; the route need not be `/api/browser/preview-assets/`.
+  The toolbar button is disabled with everything else (`preview-metaapp://<remote-host>`,
   `metafile://` HTML documents rendered from the CDN, PDF/media renderers) and
   nested iframes inside a picked page are not reached (v1).
 - **Caps per record** (so hosts can bound prompts): text preview 500 chars,

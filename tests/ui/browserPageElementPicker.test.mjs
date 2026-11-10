@@ -156,7 +156,9 @@ function previewFramePayload(uri) {
       renderer: {
         type: 'html-iframe',
         contentType: 'text/html',
-        url: '/api/browser/preview-assets/preview-1/index.html',
+        url: String(uri).startsWith('metaapp://idbots') || String(uri).startsWith('preview-metaapp://localhost')
+          ? 'http://127.0.0.1:47701/browser-cache/metaapp-preview/preview-1/index.html'
+          : '/api/browser/preview-assets/preview-1/index.html',
         data: { record: {} },
       },
       status: { state: 'resolved', verificationState: 'unverified', message: '' },
@@ -211,7 +213,7 @@ function createPickerContext(options = {}) {
   const resolveResponse = (uri) => {
     if (String(uri).startsWith('metaid://')) return botPagePayload(uri, 'Alice Bot');
     if (uri === 'metaapp://remote') return remoteFramePayload(uri);
-    if (String(uri).startsWith('metaapp://')) return previewFramePayload(uri);
+    if (String(uri).startsWith('metaapp://') || String(uri).startsWith('preview-metaapp://localhost')) return previewFramePayload(uri);
     if (String(uri).startsWith('metafile://')) return imagePayload(uri);
     throw new Error(`Unexpected resolve uri ${uri}`);
   };
@@ -257,9 +259,11 @@ function createPickerContext(options = {}) {
       engineLog.push({ root: opts.root, hasOnEvent: typeof opts.onEvent === 'function' });
       return {
         enabled: false,
+        visible: true,
         enable() { this.enabled = true; engineLog.push('enable'); },
         disable() { this.enabled = false; engineLog.push('disable'); },
         isEnabled() { return this.enabled; },
+        setVisible(visible) { this.visible = visible; engineLog.push(['setVisible', visible]); },
         addMarker(markerId, label) { engineLog.push(['addMarker', markerId, label]); return true; },
         updateMarker(markerId, label) { engineLog.push(['updateMarker', markerId, label]); return true; },
         removeMarker(markerId) { engineLog.push(['removeMarker', markerId]); return true; },
@@ -303,7 +307,13 @@ test('picker toolbar button enables for supported content and stays disabled oth
   assert.equal(elements['[data-browser-picker-toggle]'].disabled, true, 'image renderers do not support picking');
 
   await resolveTo(context, 'metaapp://765570486edfc94bb0b393bfb8c48d100fb84be9fcf2b9b0b39df68e997135c1i0');
-  assert.equal(elements['[data-browser-picker-toggle]'].disabled, false, 'local preview frames support picking');
+  assert.equal(elements['[data-browser-picker-toggle]'].disabled, false, 'standalone local preview frames support picking');
+
+  await resolveTo(context, 'metaapp://idbots-local');
+  assert.equal(elements['[data-browser-picker-toggle]'].disabled, false, 'host-local MetaApp preview URLs support picking regardless of route');
+
+  await resolveTo(context, 'preview-metaapp://localhost/Users/a/app/index.html');
+  assert.equal(elements['[data-browser-picker-toggle]'].disabled, false, 'host-local preview-metaapp URLs support picking');
 
   // Remote frame (no preview-assets path) is unsupported.
   await resolveTo(context, 'metaapp://remote');
@@ -414,6 +424,49 @@ test('frame-mode pick flow drives the injected bridge over postMessage', async (
   elements['[data-browser-picker-toggle]'].click();
   assert.equal(context.state.pickerModeTabId, null);
   assert.ok(postedFrameMessages.some((message) => message.type === 'agent-browser:picker-disable'), 'disable sent to frame');
+});
+
+test('new and duplicate tabs hide previous pane markers and use independent engines', async () => {
+  const { context, engineLog } = createPickerContext();
+  await waitFor(() => context.state.runtime, 'runtime load');
+  const uri = 'metaid://idq1alice';
+  await resolveTo(context, uri);
+
+  context.togglePickerMode();
+  pickerOnEvent(context)({ type: 'pick', element: PICK_INFO });
+  panelClick(context, '[data-browser-picker-panel-save]');
+  const firstEngine = context.state.pickerEngine;
+  const firstRoot = context.activeViewportPane();
+
+  const secondTabId = context.AgentBrowserTabs.openTab(uri, { dedupe: false });
+  await waitFor(() => context.state.status === 'resolved' && context.state.activeTabId === secondTabId, 'duplicate tab resolve');
+  assert.equal(context.state.pickerModeTabId, null, 'opening a tab exits the previous tab pick mode');
+  assert.equal(firstEngine.enabled, false, 'previous pane engine is disabled');
+  assert.equal(firstEngine.visible, false, 'previous pane markers are hidden');
+  assert.equal(context.AgentBrowserTabs.getElementSelections(1).selections.length, 1, 'previous tab records survive');
+
+  context.togglePickerMode();
+  const secondEngine = context.state.pickerEngine;
+  const secondRoot = context.activeViewportPane();
+  assert.notEqual(secondEngine, firstEngine, 'duplicate URI tab must not reuse the first pane engine');
+  assert.notEqual(secondRoot, firstRoot, 'each tab engine binds to its own pane');
+  assert.equal(engineLog.filter((entry) => entry && entry.root).length, 2);
+
+  pickerOnEvent(context)({ type: 'pick', element: PICK_INFO });
+  panelClick(context, '[data-browser-picker-panel-save]');
+  assert.equal(context.AgentBrowserTabs.getElementSelections(secondTabId).selections.length, 1);
+  assert.equal(context.AgentBrowserTabs.getElementSelections(1).selections.length, 1);
+
+  context.AgentBrowserTabs.switchTab(1);
+  assert.equal(secondEngine.visible, false, 'second tab markers hide in the background');
+  assert.equal(firstEngine.visible, true, 'first tab markers reappear');
+  assert.equal(context.state.pickerEngine, firstEngine, 'active engine follows the tab');
+  assert.equal(context.state.pickerModeTabId, null);
+
+  context.AgentBrowserTabs.switchTab(secondTabId);
+  assert.equal(firstEngine.visible, false);
+  assert.equal(secondEngine.visible, true);
+  assert.equal(context.state.pickerEngine, secondEngine);
 });
 
 test('navigation and tab close clear markers; switchTab keeps them per tab', async () => {
