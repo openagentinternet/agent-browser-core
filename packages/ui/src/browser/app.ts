@@ -598,7 +598,7 @@ function pickerSupportedForCurrent() {
     var rendererUrl = textValue(current.renderer.url);
     if (rendererUrl.indexOf('/api/browser/preview-assets/') !== -1) return true;
     var resourceUri = textValue(current.uri || current.normalizedUri).toLowerCase();
-    var localMetaApp = resourceUri.indexOf('metaapp://') === 0;
+    var localMetaApp = textValue(current.resourceType) === 'metaapp' || resourceUri.indexOf('metaapp://') === 0;
     var localPreview = resourceUri === 'preview-metaapp://localhost'
       || resourceUri.indexOf('preview-metaapp://localhost/') === 0;
     if (!localMetaApp && !localPreview) return false;

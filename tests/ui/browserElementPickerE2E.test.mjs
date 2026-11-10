@@ -80,7 +80,12 @@ async function startServer() {
     };
     if (url.startsWith('/api/browser/runtime')) return sendJson(runtimePayload());
     if (url.startsWith('/api/browser/resolve')) {
-      const uri = decodeURIComponent((url.split('uri=')[1] || '').replace(/\+/g, ' '));
+      const uri = new URL(url, 'http://127.0.0.1').searchParams.get('uri') || '';
+      if (uri === 'metaid://idq1p0zzdyaedg8xsuczqe4vkljdmu07rna7tf278z') {
+        const payload = previewFramePayload(uri);
+        payload.data.renderer.url = `http://${request.headers.host}/browser-cache/metaapp-preview/preview-1/index.html`;
+        return sendJson(payload);
+      }
       if (uri.startsWith('metaid://')) return sendJson(botPagePayload(uri, 'Alice Bot'));
       if (uri.startsWith('preview-metaapp://localhost')) {
         const payload = previewFramePayload(uri);
@@ -330,6 +335,23 @@ test('host-local preview picker works in duplicate URI frames (e2e)', async () =
     await page.evaluate((tabId) => AgentBrowserTabs.switchTab(tabId), secondTabId);
     const restoredSecondFrame = await activeFrame();
     await restoredSecondFrame.waitForFunction(() => document.querySelector('.__ab-picker-badge')?.textContent === 'Preview two', null, { timeout: 5000 });
+
+    const customMetaIdUri = 'metaid://idq1p0zzdyaedg8xsuczqe4vkljdmu07rna7tf278z';
+    await page.evaluate((value) => globalThis.resolveUri(value), customMetaIdUri);
+    await page.waitForFunction(() => document.querySelector('[data-browser-status-state]')?.textContent === 'resolved', null, { timeout: 10000 });
+    assert.equal(await page.evaluate(() => globalThis.state.current.resourceType), 'metaapp');
+    assert.equal(await page.locator('[data-browser-picker-toggle]').isDisabled(), false, 'metaid alias of a local MetaApp enables picking');
+    await page.click('[data-browser-picker-toggle]');
+    const aliasFrame = await activeFrame();
+    await aliasFrame.waitForSelector('#app-btn', { timeout: 10000 });
+    await aliasFrame.click('#app-btn');
+    await page.waitForSelector('[data-browser-picker-panel]:not([hidden])', { timeout: 5000 });
+    await page.fill('[data-browser-picker-name]', 'Custom MetaID homepage');
+    await page.click('[data-browser-picker-panel-save]');
+    const aliasSnapshot = await page.evaluate(() => AgentBrowserTabs.getElementSelections());
+    assert.equal(aliasSnapshot.uri, customMetaIdUri);
+    assert.equal(aliasSnapshot.selections[0].name, 'Custom MetaID homepage');
+    assert.equal(aliasSnapshot.selections[0].locator.cssScope, 'document');
   } finally {
     await browser.close();
     await new Promise((resolve) => server.close(resolve));

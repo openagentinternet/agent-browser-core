@@ -156,7 +156,7 @@ function previewFramePayload(uri) {
       renderer: {
         type: 'html-iframe',
         contentType: 'text/html',
-        url: String(uri).startsWith('metaapp://idbots') || String(uri).startsWith('preview-metaapp://localhost')
+        url: String(uri).startsWith('metaapp://idbots') || String(uri).startsWith('preview-metaapp://localhost') || uri === 'metaid://idq1custommetaapp'
           ? 'http://127.0.0.1:47701/browser-cache/metaapp-preview/preview-1/index.html'
           : '/api/browser/preview-assets/preview-1/index.html',
         data: { record: {} },
@@ -211,6 +211,7 @@ function createPickerContext(options = {}) {
     postMessage(message) { postedFrameMessages.push(message); },
   };
   const resolveResponse = (uri) => {
+    if (uri === 'metaid://idq1custommetaapp') return previewFramePayload(uri);
     if (String(uri).startsWith('metaid://')) return botPagePayload(uri, 'Alice Bot');
     if (uri === 'metaapp://remote') return remoteFramePayload(uri);
     if (String(uri).startsWith('metaapp://') || String(uri).startsWith('preview-metaapp://localhost')) return previewFramePayload(uri);
@@ -314,6 +315,10 @@ test('picker toolbar button enables for supported content and stays disabled oth
 
   await resolveTo(context, 'preview-metaapp://localhost/Users/a/app/index.html');
   assert.equal(elements['[data-browser-picker-toggle]'].disabled, false, 'host-local preview-metaapp URLs support picking');
+
+  await resolveTo(context, 'metaid://idq1custommetaapp');
+  assert.equal(context.state.current.resourceType, 'metaapp', 'the metaid alias resolves to a custom MetaApp homepage');
+  assert.equal(elements['[data-browser-picker-toggle]'].disabled, false, 'metaid aliases of host-local MetaApps support picking');
 
   // Remote frame (no preview-assets path) is unsupported.
   await resolveTo(context, 'metaapp://remote');

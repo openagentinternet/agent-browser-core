@@ -50,7 +50,8 @@ the read API. Turning selections into chat context / prompts is host-side work.
   when that tab becomes active again. There is no persistence across page
   reloads — read the selections before they are invalidated.
 - **Supported content:** `metaapp://` (zip or single-file HTML served through
-  the local preview pipeline), `preview-metaapp://localhost`, built-in bot
+  the local preview pipeline), `metaid://` custom homepages whose resolved
+  `resourceType` is `metaapp`, `preview-metaapp://localhost`, built-in bot
   pages, `pin://` (pin-inspector payload rendering). Host-local preview routes
   on a loopback HTTP(S) origin are supported when their HTML is prepared with
   `preparePreviewHtml`; the route need not be `/api/browser/preview-assets/`.
