@@ -248,6 +248,7 @@ export const ELEMENT_PICKER_SCRIPT_SOURCE = `(function ${ELEMENT_PICKER_BRIDGE_M
     var markers = {};
     var markerOrder = [];
     var repositionScheduled = false;
+    var layerVisible = true;
 
     var layer = doc.createElement('div');
     layer.id = OVERLAY_LAYER_ID;
@@ -468,6 +469,15 @@ export const ELEMENT_PICKER_SCRIPT_SOURCE = `(function ${ELEMENT_PICKER_BRIDGE_M
       return enabled;
     }
 
+    function setVisible(visible) {
+      if (disposed) return;
+      var nextVisible = Boolean(visible);
+      if (layerVisible === nextVisible) return;
+      layerVisible = nextVisible;
+      layer.style.display = nextVisible ? 'block' : 'none';
+      if (nextVisible) scheduleReposition();
+    }
+
     function dispose() {
       if (disposed) return;
       disposed = true;
@@ -487,6 +497,7 @@ export const ELEMENT_PICKER_SCRIPT_SOURCE = `(function ${ELEMENT_PICKER_BRIDGE_M
       enable: enable,
       disable: disable,
       isEnabled: isEnabled,
+      setVisible: setVisible,
       addMarker: addMarker,
       updateMarker: updateMarker,
       removeMarker: removeMarker,

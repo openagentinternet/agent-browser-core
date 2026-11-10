@@ -82,13 +82,18 @@ async function startServer() {
     if (url.startsWith('/api/browser/resolve')) {
       const uri = decodeURIComponent((url.split('uri=')[1] || '').replace(/\+/g, ' '));
       if (uri.startsWith('metaid://')) return sendJson(botPagePayload(uri, 'Alice Bot'));
+      if (uri.startsWith('preview-metaapp://localhost')) {
+        const payload = previewFramePayload(uri);
+        payload.data.renderer.url = `http://${request.headers.host}/browser-cache/metaapp-preview/preview-1/index.html`;
+        return sendJson(payload);
+      }
       if (uri.startsWith('metaapp://')) return sendJson(previewFramePayload(uri));
       response.writeHead(404, { 'content-type': 'application/json' });
       return response.end(JSON.stringify({ ok: false, message: 'unknown uri' }));
     }
     if (url.startsWith('/api/browser/settings')) return sendJson({ ok: true, data: { browser: {}, effectiveBrowser: {}, defaults: {} } });
     if (url.startsWith('/api/browser/cache')) return sendJson({ ok: true, data: { cacheRoot: '/tmp', artifactCount: 0, pinRecordCount: 0, totalBytes: 0, artifacts: [] } });
-    if (url.startsWith('/api/browser/preview-assets/')) {
+    if (url.startsWith('/api/browser/preview-assets/') || url.startsWith('/browser-cache/metaapp-preview/')) {
       response.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
       return response.end(previewFrameHtml());
     }
@@ -196,6 +201,135 @@ test('element picker works end to end in chrome-DOM and iframe modes (e2e)', asy
       const panel = document.querySelector('[data-browser-picker-panel]');
       return panel && panel.hidden === true;
     }, null, { timeout: 5000 });
+  } finally {
+    await browser.close();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('pane picker markers and engines follow duplicate URI tabs (e2e)', async () => {
+  const playwright = await import('playwright');
+  const server = await startServer();
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const browser = await playwright.chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(baseUrl + '/ui/browser', { waitUntil: 'load' });
+    await page.waitForFunction(() => Boolean(globalThis.AgentBrowserTabs), null, { timeout: 10000 });
+    await page.waitForFunction(() => document.querySelector('[data-browser-viewport]')?.innerHTML.includes('browser-welcome'), null, { timeout: 10000 });
+
+    const uri = 'metaid://idq1alice';
+    await page.evaluate((value) => globalThis.resolveUri(value), uri);
+    await page.waitForFunction(() => document.querySelector('[data-browser-status-state]')?.textContent === 'resolved', null, { timeout: 10000 });
+    const firstTabId = await page.evaluate(() => AgentBrowserTabs.getActiveTab().id);
+    const pickActivePaneElement = () => page.evaluate(() => {
+      const pane = document.querySelector('[data-tab-pane]:not([hidden])');
+      const target = pane?.querySelector('h1, h2, h3, strong, b, div, span');
+      if (!target) throw new Error('no pickable element in active pane');
+      target.click();
+    });
+
+    await page.click('[data-browser-picker-toggle]');
+    await pickActivePaneElement();
+    await page.waitForSelector('[data-browser-picker-panel]:not([hidden])', { timeout: 5000 });
+    await page.fill('[data-browser-picker-name]', 'First tab marker');
+    await page.click('[data-browser-picker-panel-save]');
+    await page.waitForSelector('.__ab-picker-badge:visible', { timeout: 5000 });
+
+    const secondTabId = await page.evaluate((value) => AgentBrowserTabs.openTab(value, { dedupe: false }), uri);
+    await page.waitForFunction((tabId) => {
+      const active = AgentBrowserTabs.getActiveTab();
+      const pane = document.querySelector(`[data-tab-pane="${tabId}"]`);
+      return active.id === tabId && active.uri && pane && !pane.hasAttribute('hidden');
+    }, secondTabId, { timeout: 10000 });
+    assert.equal(await page.locator('.__ab-picker-marker:visible').count(), 0, 'opening a tab hides the previous tab markers');
+    assert.equal(await page.locator('[data-browser-picker-toggle]').getAttribute('aria-pressed'), 'false');
+
+    await page.click('[data-browser-picker-toggle]');
+    await pickActivePaneElement();
+    await page.waitForSelector('[data-browser-picker-panel]:not([hidden])', { timeout: 5000 });
+    await page.fill('[data-browser-picker-name]', 'Second tab marker');
+    await page.click('[data-browser-picker-panel-save]');
+    await page.waitForSelector('.__ab-picker-badge:visible', { timeout: 5000 });
+    assert.equal(await page.locator('.__ab-picker-badge:visible').textContent(), 'Second tab marker');
+    assert.equal(await page.evaluate((tabId) => AgentBrowserTabs.getElementSelections(tabId).selections.length, firstTabId), 1);
+    assert.equal(await page.evaluate((tabId) => AgentBrowserTabs.getElementSelections(tabId).selections.length, secondTabId), 1);
+
+    await page.evaluate((tabId) => AgentBrowserTabs.switchTab(tabId), firstTabId);
+    assert.equal(await page.locator('.__ab-picker-badge:visible').textContent(), 'First tab marker');
+    assert.equal(await page.locator('.__ab-picker-marker:visible').count(), 1, 'only the active tab marker is visible');
+    assert.equal(await page.locator('[data-browser-picker-toggle]').getAttribute('aria-pressed'), 'false');
+
+    await page.evaluate((tabId) => AgentBrowserTabs.switchTab(tabId), secondTabId);
+    assert.equal(await page.locator('.__ab-picker-badge:visible').textContent(), 'Second tab marker');
+    assert.equal(await page.locator('.__ab-picker-marker:visible').count(), 1);
+  } finally {
+    await browser.close();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test('host-local preview picker works in duplicate URI frames (e2e)', async () => {
+  const playwright = await import('playwright');
+  const server = await startServer();
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const browser = await playwright.chromium.launch();
+  try {
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+    await page.goto(baseUrl + '/ui/browser', { waitUntil: 'load' });
+    await page.waitForFunction(() => Boolean(globalThis.AgentBrowserTabs), null, { timeout: 10000 });
+    await page.waitForFunction(() => document.querySelector('[data-browser-viewport]')?.innerHTML.includes('browser-welcome'), null, { timeout: 10000 });
+
+    const uri = 'preview-metaapp://localhost/Users/a/app/index.html';
+    await page.evaluate((value) => globalThis.resolveUri(value), uri);
+    await page.waitForFunction(() => document.querySelector('[data-browser-status-state]')?.textContent === 'resolved', null, { timeout: 10000 });
+    assert.equal(await page.locator('[data-browser-picker-toggle]').isDisabled(), false, 'IDBots-style loopback preview URL enables picking');
+    const firstTabId = await page.evaluate(() => AgentBrowserTabs.getActiveTab().id);
+    const activeFrame = async () => {
+      const element = await page.$('.browser-tab-pane:not([hidden]) iframe.browser-html-frame');
+      assert.ok(element, 'active preview frame missing');
+      const frame = await element.contentFrame();
+      assert.ok(frame, 'active preview content window missing');
+      return frame;
+    };
+
+    await page.click('[data-browser-picker-toggle]');
+    const firstFrame = await activeFrame();
+    await firstFrame.waitForSelector('#app-btn', { timeout: 10000 });
+    await firstFrame.click('#app-btn');
+    await page.waitForSelector('[data-browser-picker-panel]:not([hidden])', { timeout: 5000 });
+    await page.fill('[data-browser-picker-name]', 'Preview one');
+    await page.click('[data-browser-picker-panel-save]');
+    await firstFrame.waitForSelector('.__ab-picker-badge', { timeout: 5000 });
+
+    const secondTabId = await page.evaluate((value) => AgentBrowserTabs.openTab(value, { dedupe: false }), uri);
+    await page.waitForFunction((tabId) => {
+      const active = AgentBrowserTabs.getActiveTab();
+      const pane = document.querySelector(`[data-tab-pane="${tabId}"]`);
+      return active.id === tabId && active.uri && pane && !pane.hasAttribute('hidden') && pane.querySelector('iframe.browser-html-frame');
+    }, secondTabId, { timeout: 10000 });
+    assert.equal(await page.locator(`[data-tab-pane="${firstTabId}"]`).isHidden(), true, 'first preview pane is hidden');
+    assert.equal(await page.locator('[data-browser-picker-toggle]').getAttribute('aria-pressed'), 'false');
+
+    await page.click('[data-browser-picker-toggle]');
+    const secondFrame = await activeFrame();
+    await secondFrame.waitForSelector('#app-btn', { timeout: 10000 });
+    await secondFrame.click('#app-btn');
+    await page.waitForSelector('[data-browser-picker-panel]:not([hidden])', { timeout: 5000 });
+    await page.fill('[data-browser-picker-name]', 'Preview two');
+    await page.click('[data-browser-picker-panel-save]');
+    await secondFrame.waitForFunction(() => document.querySelector('.__ab-picker-badge')?.textContent === 'Preview two', null, { timeout: 5000 });
+    assert.equal(await page.evaluate((tabId) => AgentBrowserTabs.getElementSelections(tabId).selections.length, firstTabId), 1);
+    assert.equal(await page.evaluate((tabId) => AgentBrowserTabs.getElementSelections(tabId).selections.length, secondTabId), 1);
+
+    await page.evaluate((tabId) => AgentBrowserTabs.switchTab(tabId), firstTabId);
+    const restoredFirstFrame = await activeFrame();
+    await restoredFirstFrame.waitForFunction(() => document.querySelector('.__ab-picker-badge')?.textContent === 'Preview one', null, { timeout: 5000 });
+    assert.equal(await page.locator(`[data-tab-pane="${secondTabId}"]`).isHidden(), true, 'second preview markers hide with its pane');
+
+    await page.evaluate((tabId) => AgentBrowserTabs.switchTab(tabId), secondTabId);
+    const restoredSecondFrame = await activeFrame();
+    await restoredSecondFrame.waitForFunction(() => document.querySelector('.__ab-picker-badge')?.textContent === 'Preview two', null, { timeout: 5000 });
   } finally {
     await browser.close();
     await new Promise((resolve) => server.close(resolve));

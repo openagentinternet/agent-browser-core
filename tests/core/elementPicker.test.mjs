@@ -132,6 +132,11 @@ test('element picker engine drives pick, markers, and disposal in a real DOM (e2
     assert.ok(markerClick, 'marker-click event missing');
     assert.equal(markerClick.markerId, 'm1');
 
+    await page.evaluate(() => window.__picker.setVisible(false));
+    assert.equal(await page.locator('.__ab-picker-marker:visible').count(), 0, 'hidden engine suppresses its marker layer');
+    await page.evaluate(() => window.__picker.setVisible(true));
+    assert.equal(await page.locator('.__ab-picker-marker:visible').count(), 1, 'visible engine restores its marker layer');
+
     // Rename flows into the badge.
     await page.evaluate(() => window.__picker.updateMarker('m1', 'Renamed'));
     assert.equal(await page.locator('.__ab-picker-badge').textContent(), 'Renamed');

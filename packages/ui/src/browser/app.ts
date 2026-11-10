@@ -244,6 +244,7 @@ var state = {
   elementSelections: {},
   elementMarkerSeq: 0,
   pickerModeTabId: null,
+  panePickerEngines: {},
   pickerEngine: null,
   pickerEditingMarkerId: '',
   pickerPendingElement: null,
@@ -311,6 +312,7 @@ function applyActiveTabState() {
   state.error = tab.error;
   state.enrichToken = tab.enrichToken;
   state.actorId = tab.actorId || '';
+  syncPanePickerEngineVisibility();
   syncAutoWriteContext();
   renderUsingIdentity();
   // Re-sync the shared toolbar (back/forward, address bar, bookmark star) so
@@ -589,12 +591,27 @@ function pickerSupportedForCurrent() {
   if (!current || !current.renderer) return false;
   var rendererType = textValue(current.renderer.type);
   if (rendererType === 'bot-page' || rendererType === 'pin-inspector') return true;
-  // html-iframe is supported only for frames served by our own preview
-  // pipeline (metaapp:// / preview-metaapp://localhost artifacts). Remote
-  // frames (remote preview-metaapp hosts, metafile CDN documents) cannot
-  // carry the injected bridge.
+  // Local preview HTML carries the injected picker bridge. Standalone uses a
+  // fixed preview-assets route; other hosts may serve the same prepared HTML
+  // from their own loopback route.
   if (rendererType === 'html-iframe') {
-    return textValue(current.renderer.url).indexOf('/api/browser/preview-assets/') !== -1;
+    var rendererUrl = textValue(current.renderer.url);
+    if (rendererUrl.indexOf('/api/browser/preview-assets/') !== -1) return true;
+    var resourceUri = textValue(current.uri || current.normalizedUri).toLowerCase();
+    var localMetaApp = resourceUri.indexOf('metaapp://') === 0;
+    var localPreview = resourceUri === 'preview-metaapp://localhost'
+      || resourceUri.indexOf('preview-metaapp://localhost/') === 0;
+    if (!localMetaApp && !localPreview) return false;
+    try {
+      var previewUrl = new URL(rendererUrl);
+      var loopback = previewUrl.hostname === '127.0.0.1'
+        || previewUrl.hostname === 'localhost'
+        || previewUrl.hostname === '[::1]'
+        || previewUrl.hostname === '::1';
+      return (previewUrl.protocol === 'http:' || previewUrl.protocol === 'https:') && loopback;
+    } catch (error) {
+      return false;
+    }
   }
   return false;
 }
@@ -719,22 +736,45 @@ function pickerPostFrame(type, payload) {
   return true;
 }
 
-function destroyPanePickerEngine() {
-  if (!state.pickerEngine) return;
-  try { state.pickerEngine.dispose(); } catch (error) { /* pane already gone */ }
+function syncPanePickerEngineVisibility() {
+  var activeKey = String(state.activeTabId);
   state.pickerEngine = null;
+  for (var key in state.panePickerEngines) {
+    if (!Object.prototype.hasOwnProperty.call(state.panePickerEngines, key)) continue;
+    var engine = state.panePickerEngines[key];
+    var isActive = key === activeKey;
+    engine.setVisible(isActive);
+    if (isActive) state.pickerEngine = engine;
+  }
+}
+
+function destroyPanePickerEngine(tabId) {
+  var key = String(tabId);
+  var engine = state.panePickerEngines[key];
+  if (!engine) return;
+  try { engine.dispose(); } catch (error) { /* pane already gone */ }
+  delete state.panePickerEngines[key];
+  if (state.pickerEngine === engine) state.pickerEngine = null;
 }
 
 function ensurePanePickerEngine() {
-  if (state.pickerEngine) return state.pickerEngine;
+  var tab = activeTab();
+  if (!tab) return null;
+  var key = String(tab.id);
+  if (state.panePickerEngines[key]) {
+    state.pickerEngine = state.panePickerEngines[key];
+    return state.pickerEngine;
+  }
   if (!window.__agentBrowserElementPicker || typeof window.__agentBrowserElementPicker.create !== 'function') return null;
   var pane = activeViewportPane();
   if (!pane) return null;
-  state.pickerEngine = window.__agentBrowserElementPicker.create({
+  var engine = window.__agentBrowserElementPicker.create({
     root: pane,
     onEvent: handlePickerEngineEvent
   });
-  return state.pickerEngine;
+  state.panePickerEngines[key] = engine;
+  syncPanePickerEngineVisibility();
+  return engine;
 }
 
 function handlePickerEngineEvent(event) {
@@ -791,11 +831,13 @@ function exitPickerMode() {
 // Pick mode dies with the tab it belongs to: navigation repaints the pane
 // (stale locators + orphaned badges) and tab close detaches the engine root.
 function exitPickerModeForTab(tabId) {
-  if (state.pickerModeTabId !== tabId) return;
-  state.pickerModeTabId = null;
-  closePickerPanel();
-  destroyPanePickerEngine();
-  renderPickerToggle();
+  var wasPicking = state.pickerModeTabId === tabId;
+  if (wasPicking) {
+    state.pickerModeTabId = null;
+    closePickerPanel();
+  }
+  destroyPanePickerEngine(tabId);
+  if (wasPicking) renderPickerToggle();
 }
 
 function togglePickerMode() {
@@ -1073,6 +1115,7 @@ function openTab(uri, actorIdOrOptions, options) {
     // resource a pending identity consent prompt names.
     flushPendingActorConsent('invalidate');
     flushPendingLlmConsent('invalidate');
+    exitPickerMode();
   }
   state.activeTabId = tab.id;
   applyActiveTabState();
