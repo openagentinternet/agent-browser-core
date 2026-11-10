@@ -939,6 +939,69 @@ function pickerDetailRow(label, value) {
   return '<div class="browser-picker-detail-row"><span class="browser-picker-detail-label">' + escapeHtml(label) + '</span><span class="browser-picker-detail-value">' + escapeHtml(value) + '</span></div>';
 }
 
+function positionPickerPanel(record) {
+  var panel = elements.pickerPanel;
+  if (!panel) return;
+  var source = record || state.pickerPendingElement;
+  var rect = source && source.geometry && source.geometry.rect;
+  if (!rect) {
+    panel.style.left = 'auto';
+    panel.style.right = '18px';
+    panel.style.top = '118px';
+    return;
+  }
+  var targetLeft = Number(rect.x) || 0;
+  var targetTop = Number(rect.y) || 0;
+  if (pickerHostMode() === 'frame') {
+    var pane = activeViewportPane();
+    var frame = pane && typeof pane.querySelector === 'function'
+      ? pane.querySelector('iframe.browser-html-frame')
+      : null;
+    if (frame && typeof frame.getBoundingClientRect === 'function') {
+      var frameRect = frame.getBoundingClientRect();
+      targetLeft += frameRect.left;
+      targetTop += frameRect.top;
+    }
+  }
+  var targetRight = targetLeft + Math.max(0, Number(rect.width) || 0);
+  var targetBottom = targetTop + Math.max(0, Number(rect.height) || 0);
+  var margin = 18;
+  var gap = 12;
+  var viewportWidth = window.innerWidth || 1280;
+  var viewportHeight = window.innerHeight || 800;
+  var panelWidth = panel.offsetWidth || Math.min(340, viewportWidth - margin * 2);
+  var panelHeight = panel.offsetHeight || Math.min(420, viewportHeight - margin * 2);
+  var avoidLeft = targetLeft - 6;
+  var avoidRight = targetRight + 6;
+  var avoidTop = targetTop - 22;
+  var avoidBottom = targetBottom + 6;
+  var candidates = [
+    { left: targetRight + gap, top: targetTop },
+    { left: targetLeft - panelWidth - gap, top: targetTop },
+    { left: targetLeft, top: targetBottom + gap },
+    { left: targetLeft, top: targetTop - panelHeight - gap }
+  ];
+  var bestLeft = margin;
+  var bestTop = margin;
+  var bestOverlap = Infinity;
+  for (var i = 0; i < candidates.length; i += 1) {
+    var left = Math.max(margin, Math.min(candidates[i].left, viewportWidth - panelWidth - margin));
+    var top = Math.max(margin, Math.min(candidates[i].top, viewportHeight - panelHeight - margin));
+    var overlapWidth = Math.max(0, Math.min(left + panelWidth, avoidRight) - Math.max(left, avoidLeft));
+    var overlapHeight = Math.max(0, Math.min(top + panelHeight, avoidBottom) - Math.max(top, avoidTop));
+    var overlap = overlapWidth * overlapHeight;
+    if (overlap < bestOverlap) {
+      bestOverlap = overlap;
+      bestLeft = left;
+      bestTop = top;
+    }
+    if (overlap === 0) break;
+  }
+  panel.style.left = Math.round(bestLeft) + 'px';
+  panel.style.top = Math.round(bestTop) + 'px';
+  panel.style.right = 'auto';
+}
+
 function renderPickerPanel() {
   var panel = elements.pickerPanel;
   if (!panel) return;
@@ -1028,6 +1091,7 @@ function renderPickerPanel() {
     + '<button type="button" class="browser-picker-save" data-browser-picker-panel-save>' + (record ? browserText('picker.update', 'Update') : browserText('picker.save', 'Save')) + '</button>'
     + '</div>';
   panel.hidden = false;
+  positionPickerPanel(record);
 }
 
 // Host-facing read API: a tab's element annotations, cloned so callers cannot

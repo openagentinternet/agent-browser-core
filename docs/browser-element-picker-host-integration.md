@@ -15,8 +15,9 @@ the read API. Turning selections into chat context / prompts is host-side work.
 
 - The human enters pick mode from the Browser toolbar (crosshair button next
   to the bookmark star, or Browser menu → "Select elements" on mobile), clicks
-  elements, fills the annotation panel, and confirms. Markers are painted as
-  blue outlines with numbered badges on the page.
+  elements, fills the annotation panel, and confirms. The panel opens beside,
+  above, or below the target without covering it or its outline when space
+  allows. Markers are painted as blue outlines with numbered badges on the page.
 - The host reads the annotations through the same surfaces as tabs:
 
 | Surface | Item | Purpose |

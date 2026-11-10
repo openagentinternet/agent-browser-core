@@ -114,6 +114,37 @@ async function startServer() {
   });
 }
 
+async function assertPickerPanelNearTarget(page, frameMode) {
+  const layout = await page.evaluate((isFrame) => {
+    const panel = document.querySelector('[data-browser-picker-panel]');
+    const rect = globalThis.state.pickerPendingElement.geometry.rect;
+    let left = rect.x;
+    let top = rect.y;
+    if (isFrame) {
+      const frame = document.querySelector('.browser-tab-pane:not([hidden]) iframe.browser-html-frame');
+      const frameRect = frame.getBoundingClientRect();
+      left += frameRect.left;
+      top += frameRect.top;
+    }
+    const target = { left, top, right: left + rect.width, bottom: top + rect.height };
+    const panelRect = panel.getBoundingClientRect();
+    const overlapWidth = Math.max(0, Math.min(panelRect.right, target.right + 2) - Math.max(panelRect.left, target.left - 2));
+    const overlapHeight = Math.max(0, Math.min(panelRect.bottom, target.bottom + 2) - Math.max(panelRect.top, target.top - 2));
+    const xGap = Math.max(target.left - panelRect.right, panelRect.left - target.right, 0);
+    const yGap = Math.max(target.top - panelRect.bottom, panelRect.top - target.bottom, 0);
+    return {
+      overlap: overlapWidth * overlapHeight,
+      near: Math.max(xGap, yGap) <= 24,
+      rightStyle: panel.style.right,
+      inside: panelRect.left >= 0 && panelRect.top >= 0 && panelRect.right <= window.innerWidth && panelRect.bottom <= window.innerHeight,
+    };
+  }, frameMode);
+  assert.equal(layout.rightStyle, 'auto', 'panel is positioned from the target, not the Browser right edge');
+  assert.equal(layout.overlap, 0, 'panel does not cover the selected element or its outline');
+  assert.equal(layout.near, true, 'panel remains adjacent to the selected element');
+  assert.equal(layout.inside, true, 'panel stays inside the Browser viewport');
+}
+
 test('element picker works end to end in chrome-DOM and iframe modes (e2e)', async () => {
   const playwright = await import('playwright');
   const server = await startServer();
@@ -143,6 +174,7 @@ test('element picker works end to end in chrome-DOM and iframe modes (e2e)', asy
       target.click();
     });
     await page.waitForSelector('[data-browser-picker-panel]:not([hidden])', { timeout: 5000 });
+    await assertPickerPanelNearTarget(page, false);
     await page.fill('[data-browser-picker-name]', 'Bot name');
     await page.fill('[data-browser-picker-comment]', 'Make the name larger');
     await page.click('[data-browser-picker-panel-save]');
@@ -180,6 +212,7 @@ test('element picker works end to end in chrome-DOM and iframe modes (e2e)', asy
     await frame.click('#app-btn');
 
     await page.waitForSelector('[data-browser-picker-panel]:not([hidden])', { timeout: 5000 });
+    await assertPickerPanelNearTarget(page, true);
     const panelText = await page.locator('[data-browser-picker-panel]').textContent();
     assert.match(panelText, /page document/, 'frame picks report document-scoped selectors');
     await page.fill('[data-browser-picker-name]', 'App save button');

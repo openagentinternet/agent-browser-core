@@ -13,6 +13,7 @@ class FakeElement {
     this._innerHTML = '';
     this.hidden = false;
     this.disabled = false;
+    this.style = {};
     this.attrs = {};
     this.listeners = new Map();
     this.children = [];
@@ -391,6 +392,31 @@ test('pane-mode pick flow: enter, pick, save, rename via badge, host read API', 
   assert.equal(context.state.pickerModeTabId, null);
   assert.equal(context.state.pickerEngine.enabled, false);
   assert.equal(context.AgentBrowserTabs.getElementSelections().selections.length, 2);
+});
+
+test('picker panel follows the target and chooses a non-overlapping side', async () => {
+  const { context, elements } = createPickerContext();
+  await waitFor(() => context.state.runtime, 'runtime load');
+  await resolveTo(context, 'metaid://idq1alice');
+  context.togglePickerMode();
+  context.window.innerWidth = 1280;
+  context.window.innerHeight = 800;
+  const panel = elements['[data-browser-picker-panel]'];
+  panel.offsetWidth = 340;
+  panel.offsetHeight = 300;
+
+  pickerOnEvent(context)({ type: 'pick', element: PICK_INFO });
+  assert.equal(panel.style.left, '142px', 'panel sits just right of the target when space allows');
+  assert.equal(panel.style.top, '20px');
+  assert.equal(panel.style.right, 'auto', 'panel is not pinned to the Browser right edge');
+
+  const rightSideInfo = {
+    ...PICK_INFO,
+    geometry: { ...PICK_INFO.geometry, rect: { x: 1100, y: 20, width: 120, height: 36 } },
+  };
+  pickerOnEvent(context)({ type: 'pick', element: rightSideInfo });
+  assert.equal(panel.style.left, '748px', 'panel moves left instead of covering a right-side target');
+  assert.equal(panel.style.top, '20px');
 });
 
 function pickerOnEvent(context) {
