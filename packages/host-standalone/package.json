@@ -1,6 +1,6 @@
 {
   "name": "@openagentinternet/agent-browser-host-standalone",
-  "version": "0.10.2",
+  "version": "0.11.0",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -85,11 +85,11 @@
     }
   },
   "dependencies": {
-    "@openagentinternet/agent-browser-core": "0.10.2",
-    "@openagentinternet/agent-browser-host-contract": "0.10.2",
-    "@openagentinternet/agent-browser-name-resolvers": "0.10.2",
-    "@openagentinternet/agent-browser-ui": "0.10.2",
-    "@openagentinternet/agent-browser-renderers": "0.10.2"
+    "@openagentinternet/agent-browser-core": "0.11.0",
+    "@openagentinternet/agent-browser-host-contract": "0.11.0",
+    "@openagentinternet/agent-browser-name-resolvers": "0.11.0",
+    "@openagentinternet/agent-browser-ui": "0.11.0",
+    "@openagentinternet/agent-browser-renderers": "0.11.0"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"
