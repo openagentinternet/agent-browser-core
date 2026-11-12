@@ -488,7 +488,11 @@ export interface BrowserOwnerAffinity {
 export type BrowserResolutionState = 'resolved' | 'loading' | 'not_found' | 'error';
 export type BrowserVerificationState = 'verified' | 'partial' | 'unverified';
 export type BrowserResourceType = 'bot' | 'metaapp' | 'document' | 'image' | 'pdf' | 'protocol' | 'conversation' | 'pin' | 'unsupported' | 'unknown';
-export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'audio' | 'protocol-pin' | 'pin-inspector' | 'host-action' | 'unsupported';
+export type BrowserRendererType = 'bot-page' | 'html-iframe' | 'pdf' | 'image' | 'video' | 'audio' | 'protocol-pin' | 'pin-inspector' | 'host-action' | 'file-viewer' | 'unsupported';
+
+// Query parameter hosts use to hand the resolved Browser theme to local file
+// viewer pages (preview-file:// markdown/text/code/csv).
+export const FILE_VIEWER_THEME_QUERY_PARAM = 'abcTheme';
 export type BrowserResolveActionKind = 'private-chat' | 'service-list' | 'service-call' | 'copy' | 'proof' | 'creator' | 'open-conversation';
 
 export interface BrowserResolutionStatus {

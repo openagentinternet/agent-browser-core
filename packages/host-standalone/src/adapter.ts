@@ -13,9 +13,11 @@ import {
   type BrowserConfigContainer,
   type BrowserNameAliasProvider,
   type BrowserResolveResult,
+  type PreviewFileLocalResolveResult,
   type PreviewMetaAppLocalResolveResult,
   type BrowserSettingsSnapshot as CoreBrowserSettingsSnapshot,
   resolveMetaAppPinToRecord,
+  classifyLocalFile,
 } from '@openagentinternet/agent-browser-core';
 import {
   browserFailure,
@@ -42,6 +44,11 @@ import {
   type BrowserTrustedActionResult,
 } from '@openagentinternet/agent-browser-host-contract';
 import { createBrowserNameAliasProviders } from '@openagentinternet/agent-browser-name-resolvers';
+import {
+  LOCAL_FILE_VIEWER_MAX_BYTES,
+  renderLocalFileViewerHtml,
+} from '@openagentinternet/agent-browser-renderers/local-file-viewer';
+import { FILE_VIEWER_THEME_QUERY_PARAM } from '@openagentinternet/agent-browser-host-contract';
 import {
   createStandaloneMetaAppArtifactCacheStore,
   normalizeMetaAppModifyHistory,
@@ -83,11 +90,15 @@ const PROTOCOL_GRANT_PATH_PATTERN = /^\/protocols\/[A-Za-z0-9_-]+$/u;
 export interface StandaloneBrowserPreviewAsset {
   body: Buffer | string;
   contentType: string;
+  headers?: Record<string, string>;
 }
 
 export interface StandaloneBrowserPreviewAssetInput {
   previewId: string;
   assetPath: string;
+  // Raw query string of the asset request ('?abc-viewer=1&abcTheme=dark'),
+  // used by the local file viewer route.
+  search?: string;
 }
 
 export interface StandaloneBrowserHostAdapter extends BrowserHostAdapter {
@@ -174,6 +185,9 @@ export interface CreateStandaloneBrowserHostAdapterInput {
   // bridge answers session_not_found (list/status/control) or an explicit
   // capability error (start), so the host can still boot without a runner.
   appSession?: StandaloneAppSessionHandler;
+  // Opt-in for preview-file:// local file preview (off by default; set by the
+  // --enable-preview-file CLI flag / BROWSER_ENABLE_PREVIEW_FILE env).
+  enablePreviewFile?: boolean;
   // Base URL of the dedicated preview-content origin (e.g. an ephemeral
   // loopback port). When set, MetaApp preview URLs are emitted as absolute
   // URLs on that origin so the sandboxed app frame keeps its own real,
@@ -189,6 +203,9 @@ interface PreviewSession {
   createdAt: number;
   source: 'cache' | 'local';
   cacheKey?: string;
+  // Set for preview-file:// viewer sessions (markdown/text/code/csv); the
+  // index file is then rendered as sanitized viewer HTML, not served raw.
+  viewer?: boolean;
 }
 
 interface StandalonePermissionGrantRecord {
@@ -535,6 +552,9 @@ export function createStandaloneBrowserHostAdapter(
   const fetchImpl = input.fetch ?? globalThis.fetch;
   const now = input.now ?? Date.now;
   let config = createStandaloneConfig();
+  if (input.enablePreviewFile === true && config.browser) {
+    config.browser = { ...config.browser, enablePreviewFile: true };
+  }
   let cacheClearedAt: number | null = null;
   const previewSessions = new Map<string, PreviewSession>();
   // Session-scoped protocol write grants, keyed by the Browser page session id
@@ -570,6 +590,7 @@ export function createStandaloneBrowserHostAdapter(
     indexFile: string;
     source: 'cache' | 'local';
     cacheKey?: string;
+    viewer?: boolean;
   }): { previewId: string; localPreviewUrl: string } {
     const previewId = `standalone-${randomUUID()}`;
     previewSessions.set(previewId, {
@@ -578,6 +599,7 @@ export function createStandaloneBrowserHostAdapter(
       createdAt: now(),
       source: input.source,
       ...(input.cacheKey ? { cacheKey: input.cacheKey } : {}),
+      ...(input.viewer ? { viewer: true } : {}),
     });
     const previewPath = `/api/browser/preview-assets/${encodeURIComponent(previewId)}/${encodeAssetPath(input.indexFile)}`;
     const previewBase = previewOriginRegistration.ephemeralBaseUrl
@@ -633,6 +655,44 @@ export function createStandaloneBrowserHostAdapter(
     const session = createPreviewSessionForArtifact({ artifactDir, indexFile, source: 'local' });
     const contentType = contentTypeForPath(indexFile) || 'text/html';
     return { localPreviewUrl: session.localPreviewUrl, previewId: session.previewId, contentType };
+  }
+
+  // preview-file://localhost: read a live local file. Same unrestricted-path
+  // local-dev policy as preview-metaapp, gated by enablePreviewFile in core.
+  async function resolveLocalFilePreviewPath(input: { path: string }): Promise<PreviewFileLocalResolveResult> {
+    let filePath = input.path;
+    // Windows drive form: /C:/x/y -> C:/x/y
+    if (process.platform === 'win32' && /^\/[A-Za-z]:[\/]/.test(filePath)) {
+      filePath = filePath.slice(1);
+    }
+    let stats;
+    try {
+      stats = await fs.stat(filePath);
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException)?.code;
+      if (code === 'ENOENT') {
+        throw new Error(`Local path not found: ${filePath}`);
+      }
+      if (code === 'EACCES') {
+        throw new Error(`Permission denied: ${filePath}`);
+      }
+      throw error;
+    }
+    if (stats.isDirectory()) {
+      throw new Error('preview-file needs a file path; use preview-metaapp:// for directories.');
+    }
+
+    const fileClass = classifyLocalFile(filePath);
+    const session = createPreviewSessionForArtifact({
+      artifactDir: path.dirname(filePath),
+      indexFile: path.basename(filePath),
+      source: 'local',
+      viewer: fileClass.viewer,
+    });
+    const localPreviewUrl = fileClass.viewer
+      ? `${session.localPreviewUrl}?abc-viewer=1`
+      : session.localPreviewUrl;
+    return { localPreviewUrl, contentType: fileClass.contentType };
   }
 
   async function resolveZipPreviewArtifact(input: {
@@ -714,6 +774,7 @@ export function createStandaloneBrowserHostAdapter(
       fetch: resolveFetch,
       nameAliasProviders,
       previewMetaAppLocalResolve: resolveLocalPreviewPath,
+      previewFileLocalResolve: resolveLocalFilePreviewPath,
       metaAppResolve: (pinId) => resolveMetaAppPinToRecord({
         pinId,
         fetch: resolveFetch,
@@ -1293,9 +1354,44 @@ export function createStandaloneBrowserHostAdapter(
     if (filePath !== artifactRoot && !filePath.startsWith(`${artifactRoot}${path.sep}`)) {
       return browserFailure('invalid_argument', 'Preview asset path is outside the app package.');
     }
+    const fileClass = classifyLocalFile(filePath);
+    const query = new URLSearchParams(normalizeText(assetInput.search));
+    const isSessionIndexFile = filePath === path.resolve(artifactRoot, session.indexFile);
+    if (session.viewer && isSessionIndexFile && query.get('abc-viewer') === '1' && fileClass.viewer) {
+      try {
+        const stats = await fs.stat(filePath);
+        const readable = Math.min(stats.size, LOCAL_FILE_VIEWER_MAX_BYTES);
+        const handle = await fs.open(filePath, 'r');
+        try {
+          const buffer = Buffer.alloc(readable);
+          await handle.read(buffer, 0, readable, 0);
+          const theme = query.get(FILE_VIEWER_THEME_QUERY_PARAM);
+          const body = renderLocalFileViewerHtml({
+            fileName: path.basename(filePath),
+            kind: fileClass.kind as 'markdown' | 'text' | 'code' | 'csv',
+            ...(fileClass.language ? { language: fileClass.language } : {}),
+            text: buffer.toString('utf8'),
+            ...(theme === 'light' || theme === 'dark' ? { theme } : {}),
+            truncated: stats.size > LOCAL_FILE_VIEWER_MAX_BYTES,
+          });
+          return browserSuccess({
+            body,
+            contentType: 'text/html; charset=utf-8',
+            headers: {
+              'content-security-policy': "default-src 'none'; img-src 'self' data: blob: http: https:; media-src 'self'; style-src 'unsafe-inline'",
+            },
+          });
+        } finally {
+          await handle.close();
+        }
+      } catch {
+        return browserFailure('browser_resource_not_found', 'Preview asset was not found.');
+      }
+    }
     try {
       const body = await fs.readFile(filePath);
-      const contentType = contentTypeForPath(filePath);
+      const detected = contentTypeForPath(filePath);
+      const contentType = detected !== 'application/octet-stream' ? detected : fileClass.contentType;
       const browserConfig = resolveBrowserConfig(config, env);
       return browserSuccess({
         body: preparePreviewHtml({ body, contentType, metafileContentBaseUrl: browserConfig.metafileContentBaseUrl }),

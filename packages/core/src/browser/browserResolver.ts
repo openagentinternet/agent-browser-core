@@ -7,6 +7,8 @@ import { resolveMetafilePinToResource } from './metafileResolver.js';
 import { buildMetaAppResolveResult } from './metaAppResolver.js';
 import { resolvePreviewMetaAppResource } from './previewMetaAppResolver.js';
 import { parsePreviewMetaAppUri } from './previewMetaAppUri.js';
+import { resolvePreviewFileResource } from './previewFileResolver.js';
+import { parsePreviewFileUri } from './previewFileUri.js';
 import {
   aliasBrowserResolveResult,
   isSupportedNameAliasId,
@@ -22,6 +24,7 @@ import {
   type BrowserNameAliasProvider,
   type BrowserResolveResult,
   type MetaAppGalleryRecord,
+  type PreviewFileLocalResolve,
   type PreviewMetaAppLocalResolve,
 } from './types.js';
 
@@ -33,6 +36,7 @@ export interface ResolveBrowserResourceInput {
   metaAppResolve?: (pinId: string) => Promise<BrowserCommandResult<MetaAppGalleryRecord>>;
   mapResolve?: (uri: string, parsed: ParsedBrowserUri) => Promise<BrowserCommandResult<BrowserResolveResult>>;
   previewMetaAppLocalResolve?: PreviewMetaAppLocalResolve;
+  previewFileLocalResolve?: PreviewFileLocalResolve;
   nameAliasProviders?: BrowserNameAliasProvider[];
   skipNameAliasResolution?: boolean;
 }
@@ -463,6 +467,15 @@ export async function resolveBrowserResource(input: ResolveBrowserResourceInput)
       parsed: previewParsed,
       config: input.config,
       previewMetaAppLocalResolve: input.previewMetaAppLocalResolve,
+    });
+  }
+
+  if (parsed.scheme === 'preview-file') {
+    const previewParsed = parsePreviewFileUri(parsed.normalizedUri);
+    return resolvePreviewFileResource({
+      parsed: previewParsed,
+      config: input.config,
+      previewFileLocalResolve: input.previewFileLocalResolve,
     });
   }
 

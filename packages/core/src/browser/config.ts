@@ -54,6 +54,9 @@ export function createDefaultBrowserConfig(): BrowserBaseConfig {
     },
     localMode: false,
     enablePreviewMetaApp: true,
+    // Local file preview reads arbitrary paths on the host machine, so it
+    // stays opt-in: hosts must set enablePreviewFile explicitly.
+    enablePreviewFile: false,
   };
 }
 
@@ -106,5 +109,8 @@ export function resolveBrowserConfig(
     enablePreviewMetaApp: normalizeBoolean(env.METABOT_BROWSER_DISABLE_PREVIEW_METAAPP) === true
       ? false
       : (typeof browser.enablePreviewMetaApp === 'boolean' ? browser.enablePreviewMetaApp : defaults.enablePreviewMetaApp),
+    enablePreviewFile: typeof browser.enablePreviewFile === 'boolean'
+      ? browser.enablePreviewFile
+      : defaults.enablePreviewFile,
   };
 }

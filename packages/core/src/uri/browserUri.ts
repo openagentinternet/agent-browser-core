@@ -5,8 +5,9 @@ import {
 } from '../browser/metaAppLaunchContext.js';
 import { parsePinUri } from '../browser/pinUri.js';
 import { parsePreviewMetaAppUri } from '../browser/previewMetaAppUri.js';
+import { parsePreviewFileUri, previewFileUriFromFileUri } from '../browser/previewFileUri.js';
 
-export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile' | 'map' | 'pin' | 'preview-metaapp';
+export type BrowserUriScheme = 'metaid' | 'metaapp' | 'metafile' | 'map' | 'pin' | 'preview-metaapp' | 'preview-file';
 
 export interface ParsedBrowserUri {
   originalUri: string;
@@ -17,7 +18,8 @@ export interface ParsedBrowserUri {
   launchContext?: MetaAppLaunchContext;
 }
 
-const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'metafile', 'map', 'pin', 'preview-metaapp']);
+const SUPPORTED_SCHEMES = new Set<BrowserUriScheme>(['metaid', 'metaapp', 'metafile', 'map', 'pin', 'preview-metaapp', 'preview-file']);
+const FILE_URI_ALIAS_SCHEMES = new Set(['file']);
 const BARE_PIN_ID_PATTERN = /^[0-9a-f]{64}i[0-9]+$/iu;
 const BARE_DOMAIN_ALIAS_PATTERN = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/iu;
 const GLOBAL_META_ID_CHARSET = 'qpzry9x8gf2tvdw0s3jn54khce6mua7l';
@@ -183,7 +185,20 @@ export function parseBrowserUri(input: string): ParsedBrowserUri {
     throw new Error('Enter a complete Agent Internet URI such as metaid://idq1example, metaapp://{pinId}, or pin://{pinId}.');
   }
 
-  const scheme = schemeMatch[1].toLowerCase() as BrowserUriScheme;
+  const rawScheme = schemeMatch[1].toLowerCase();
+  // file:///abs/path (and file://localhost/abs/path) is an alias of
+  // preview-file://localhost/abs/path; non-localhost hosts are rejected by
+  // the preview-file parser.
+  if (FILE_URI_ALIAS_SCHEMES.has(rawScheme)) {
+    const parsed = parsePreviewFileUri(previewFileUriFromFileUri(originalUri));
+    return {
+      originalUri,
+      normalizedUri: parsed.normalizedUri,
+      scheme: 'preview-file',
+      id: parsed.path,
+    };
+  }
+  const scheme = rawScheme as BrowserUriScheme;
   if (!SUPPORTED_SCHEMES.has(scheme)) {
     throw new Error(`Unsupported URI scheme: ${schemeMatch[1]}.`);
   }
@@ -215,6 +230,16 @@ export function parseBrowserUri(input: string): ParsedBrowserUri {
 
   if (scheme === 'preview-metaapp') {
     const parsed = parsePreviewMetaAppUri(originalUri);
+    return {
+      originalUri,
+      normalizedUri: parsed.normalizedUri,
+      scheme,
+      id: parsed.path,
+    };
+  }
+
+  if (scheme === 'preview-file') {
+    const parsed = parsePreviewFileUri(originalUri);
     return {
       originalUri,
       normalizedUri: parsed.normalizedUri,

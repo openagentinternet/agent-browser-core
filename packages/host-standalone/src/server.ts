@@ -163,13 +163,14 @@ async function servePreviewAssetRequest(
     sendJson(res, 405, browserFailure('method_not_allowed', 'Expected GET.'));
     return true;
   }
-  const result = await adapter.resolvePreviewAsset(previewAsset);
+  const result = await adapter.resolvePreviewAsset({ ...previewAsset, search: url.search });
   if (!result.ok) {
     sendJson(res, statusForBrowserResult(result), result);
     return true;
   }
   sendText(res, 200, result.data.body, result.data.contentType, {
     'access-control-allow-origin': '*',
+    ...(result.data.headers ?? {}),
   });
   return true;
 }

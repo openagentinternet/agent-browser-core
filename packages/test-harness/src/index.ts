@@ -15,7 +15,7 @@ export interface BrowserHostConformanceInput {
 
 const RESOURCE_TYPES = ['bot', 'metaapp', 'document', 'image', 'pdf', 'protocol', 'conversation', 'pin', 'unsupported', 'unknown'];
 const OWNER_KINDS = ['bot', 'metaapp-publisher', 'wallet-user', 'unknown'];
-const RENDERER_TYPES = ['bot-page', 'html-iframe', 'pdf', 'image', 'video', 'protocol-pin', 'pin-inspector', 'host-action', 'unsupported'];
+const RENDERER_TYPES = ['bot-page', 'html-iframe', 'pdf', 'image', 'video', 'protocol-pin', 'pin-inspector', 'host-action', 'file-viewer', 'unsupported'];
 const RESOLUTION_STATES = ['resolved', 'loading', 'not_found', 'error'];
 const VERIFICATION_STATES = ['verified', 'partial', 'unverified'];
 const RESOURCE_ACTION_KINDS = ['private-chat', 'service-list', 'service-call', 'copy', 'proof', 'creator', 'open-conversation'];

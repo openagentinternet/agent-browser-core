@@ -11,6 +11,7 @@
   "references": [
     { "path": "../host-contract" },
     { "path": "../core" },
-    { "path": "../ui" }
+    { "path": "../ui" },
+    { "path": "../renderers" }
   ]
 }

@@ -24,13 +24,26 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist-cjs/index.js"
+    },
+    "./local-file-viewer": {
+      "types": "./dist/localFileViewer.d.ts",
+      "import": "./dist/localFileViewer.js",
+      "require": "./dist-cjs/localFileViewer.js"
     }
   },
   "dependencies": {
     "@openagentinternet/agent-browser-host-contract": "0.10.2",
+    "highlight.js": "11.12.0",
     "marked": "^18.0.5"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json"
+  },
+  "typesVersions": {
+    "*": {
+      "local-file-viewer": [
+        "./dist/localFileViewer.d.ts"
+      ]
+    }
   }
 }
