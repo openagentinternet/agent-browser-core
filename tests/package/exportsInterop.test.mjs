@@ -30,6 +30,13 @@ const PACKAGES = [
     },
   },
   {
+    name: '@openagentinternet/agent-browser-renderers/local-file-viewer',
+    exports: {
+      LOCAL_FILE_VIEWER_MAX_BYTES: 'number',
+      renderLocalFileViewerHtml: 'function',
+    },
+  },
+  {
     name: '@openagentinternet/agent-browser-name-resolvers',
     exports: {
       createEnsOpenAgentInternetResolver: 'function',

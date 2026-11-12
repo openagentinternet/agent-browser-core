@@ -20,6 +20,8 @@ export {
 export { parseMapUri, type ParsedMapUri } from './browser/mapUri.js';
 export { parsePinUri, type ParsedPinUri } from './browser/pinUri.js';
 export { parsePreviewMetaAppUri, type ParsedPreviewMetaAppUri } from './browser/previewMetaAppUri.js';
+export { parsePreviewFileUri, previewFileUriFromFileUri, type ParsedPreviewFileUri } from './browser/previewFileUri.js';
+export { classifyLocalFile, type LocalFileClassification, type LocalFileKind } from './browser/localFileClassification.js';
 export {
   buildBotHomepageEnvelope,
   type BuildBotHomepageEnvelopeInput,
@@ -41,6 +43,7 @@ export * from './browser/metafileResolver.js';
 export * from './browser/metaAppResolver.js';
 export * from './browser/metaAppPinResolver.js';
 export * from './browser/previewMetaAppResolver.js';
+export * from './browser/previewFileResolver.js';
 export * from './browser/previewHtml.js';
 export * from './browser/elementPicker.js';
 export * from './browser/nameAlias.js';

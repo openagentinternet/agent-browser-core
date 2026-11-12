@@ -4160,6 +4160,25 @@ function applyResolvedTheme(resolved) {
   if (!root || typeof root.setAttribute !== 'function') return;
   root.setAttribute('data-browser-resolved-theme', resolved);
   root.style.colorScheme = resolved;
+  refreshFileViewerFrames(resolved);
+}
+
+// file-viewer documents are static; a theme change only needs the abcTheme
+// query param on the frame URL to be rewritten, not a full re-resolve.
+function refreshFileViewerFrames(resolved) {
+  if (typeof document.querySelectorAll !== 'function') return;
+  var frames = document.querySelectorAll('iframe.browser-file-viewer');
+  if (!frames || !frames.length) return;
+  for (var i = 0; i < frames.length; i += 1) {
+    var frame = frames[i];
+    var src = frame && typeof frame.getAttribute === 'function' ? frame.getAttribute('src') : '';
+    if (!src) continue;
+    try {
+      var parsed = new URL(src, window.location.href || undefined);
+      parsed.searchParams.set(FILE_VIEWER_THEME_QUERY_PARAM, resolved);
+      frame.setAttribute('src', parsed.toString());
+    } catch (error) {}
+  }
 }
 
 function unbindThemeMedia() {
@@ -9337,8 +9356,15 @@ var MEDIA_STAGE_STYLE = '<style>' +
   'html[data-browser-resolved-theme="dark"] .browser-media-stage .browser-pin-media-preview.is-error { background: #3a2022; color: #f0a0a0; }' +
   '</style>';
 
-function renderMediaStage(renderer, kind) {
+function renderMediaStage(renderer, kind, resolvedUrl) {
   var pinId = textValue(renderer.data && renderer.data.pinId);
+  // Local file previews (and any non-metafile host media) carry a direct URL
+  // instead of a metafile pin id; play it with a plain media element.
+  var directUrl = textValue(resolvedUrl || renderer.url);
+  if (directUrl && !pinId) {
+    var tag = kind === 'video' ? 'video' : 'audio';
+    return MEDIA_STAGE_STYLE + '<section class="browser-media-stage"><div class="browser-pin-media-preview browser-pin-media-preview-' + kind + '"><' + tag + ' controls src="' + escapeHtml(directUrl) + '"></' + tag + '></div></section>';
+  }
   var reference = pinId ? 'metafile://' + pinId : '';
   var slotAttr = kind === 'video' ? 'data-browser-video-preview' : 'data-browser-audio-preview';
   var refAttr = reference ? ' data-browser-media-ref="' + escapeHtml(reference) + '"' : '';
@@ -9391,6 +9417,31 @@ function htmlFrameSandbox(url) {
   }
 }
 
+var FILE_VIEWER_THEME_QUERY_PARAM = 'abcTheme';
+
+function resolvedBrowserTheme() {
+  var theme = textValue(state.currentTheme) || 'system';
+  if (theme === 'dark' || theme === 'light') return theme;
+  return prefersColorSchemeDark() ? 'dark' : 'light';
+}
+
+function fileViewerUrl(rawUrl) {
+  var url = textValue(rawUrl);
+  if (!url) return url;
+  try {
+    var parsed = new URL(url, window.location.href || undefined);
+    parsed.searchParams.set(FILE_VIEWER_THEME_QUERY_PARAM, resolvedBrowserTheme());
+    return parsed.toString();
+  } catch (error) {
+    return url;
+  }
+}
+
+var FILE_VIEWER_STYLE = '<style>' +
+  '.browser-file-viewer { display: block; width: 100%; height: 100%; border: 0; background: #fff; }' +
+  'html[data-browser-resolved-theme="dark"] .browser-file-viewer { background: #0e1420; }' +
+  '</style>';
+
 function isMetaAppUri(resource) {
   // Delegate autoplay only to canonical MetaApp documents; ordinary web frames
   // stay under the browser's default autoplay policy.
@@ -9408,8 +9459,14 @@ function renderRenderer(current) {
   if (type === 'pin-inspector') {
     return renderPinInspectorPage(current);
   }
-  if (['html-iframe', 'pdf', 'image'].includes(type) && !url) {
+  if (['html-iframe', 'pdf', 'image', 'file-viewer'].includes(type) && !url) {
     return renderBlockedRenderer('Renderer URL blocked.');
+  }
+  if (type === 'file-viewer') {
+    // The host serves a fully sanitized static viewer document (no scripts at
+    // all), so the frame only gets popup escape, never allow-scripts or
+    // allow-same-origin.
+    return FILE_VIEWER_STYLE + '<iframe class="browser-file-viewer" sandbox="allow-popups allow-popups-to-escape-sandbox" src="' + escapeHtml(fileViewerUrl(url)) + '"></iframe>';
   }
   if (type === 'html-iframe') {
     var autoplay = isMetaAppUri(current) ? ' allow="autoplay"' : '';
@@ -9428,7 +9485,7 @@ function renderRenderer(current) {
     return '<img class="browser-image" src="' + escapeHtml(url) + '" alt="" />';
   }
   if (type === 'video' || type === 'audio') {
-    return renderMediaStage(renderer, type);
+    return renderMediaStage(renderer, type, url);
   }
   return '<section class="browser-empty-state" data-browser-unsupported-renderer><h2>Unsupported renderer</h2><p>' + escapeHtml(renderer.error || 'Unsupported renderer.') + '</p>' + (url ? '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener">Download file</a>' : '') + '</section>';
 }

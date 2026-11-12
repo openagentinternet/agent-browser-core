@@ -271,6 +271,39 @@ a local-development tool and must not be exposed by a public production host.
 Read [Preview MetaApp Protocol](./preview-metaapp-protocol.md) for URI forms,
 examples, and the production-disable control.
 
+### Local file preview (preview-file://)
+
+`preview-file://localhost/<absolute path>` renders a single local file in the
+Browser: markdown/text/code/csv through a sanitized static `file-viewer`
+document, html through `html-iframe`, and pdf/image/video/audio through their
+native renderers. `file:///abs/path` input normalizes to the same URI.
+Unsupported extensions resolve to an `unsupported` renderer with an error and
+no URL — never a download link. It is **off by default** and must stay off on
+public deployments.
+
+To support it a host must:
+
+- Set `enablePreviewFile: true` in the browser config (standalone CLI:
+  `--enable-preview-file` or `BROWSER_ENABLE_PREVIEW_FILE=1`).
+- Pass `previewFileLocalResolve` to `resolveBrowserResource`. The callback
+  receives `{ path }`, stats the file (directories are rejected — point users
+  at `preview-metaapp://` instead; on win32 strip the leading slash before a
+  drive letter), and returns `{ localPreviewUrl, contentType? }` pointing at a
+  host route that can serve the file and its siblings.
+- Serve the raw file with the `classifyLocalFile(path).contentType` MIME.
+- For viewer kinds (`classifyLocalFile(...).viewer === true`), mark the preview
+  session and flag the index URL with `?abc-viewer=1`. When that flagged index
+  file is requested, read at most `LOCAL_FILE_VIEWER_MAX_BYTES` (2 MiB),
+  utf8-decode it, and respond with `renderLocalFileViewerHtml(...)` from
+  `@openagentinternet/agent-browser-renderers/local-file-viewer` as `text/html; charset=utf-8`
+  under `Content-Security-Policy: default-src 'none'; img-src 'self' data:
+  blob: http: https:; media-src 'self'; style-src 'unsafe-inline'`. The Browser
+  appends the `abcTheme` query param (`FILE_VIEWER_THEME_QUERY_PARAM`); pass it
+  through as `theme`.
+
+See `docs/superpowers/specs/2026-11-12-preview-file-protocol-design.md` for the
+full classification table and resolver contract.
+
 ### Standalone acceptance and host conformance
 
 Use the standalone host as an executable reference for page delivery and API

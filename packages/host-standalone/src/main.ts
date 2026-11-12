@@ -55,11 +55,17 @@ export async function main(argv: string[] = process.argv.slice(2), env: NodeJS.P
   const host = readOption(argv, '--host') ?? env.BROWSER_HOST ?? '127.0.0.1';
   const port = parsePort(readOption(argv, '--port') ?? env.BROWSER_PORT ?? '8787');
   const previewBaseUrl = parsePreviewBaseUrl(readOption(argv, '--preview-base-url') ?? env.BROWSER_PREVIEW_BASE_URL ?? '');
+  // preview-file:// local file preview is opt-in: --enable-preview-file or
+  // BROWSER_ENABLE_PREVIEW_FILE=1. Off by default so public standalone
+  // deployments never expose the host filesystem.
+  const enablePreviewFile = argv.includes('--enable-preview-file')
+    || (env.BROWSER_ENABLE_PREVIEW_FILE ?? '').trim() === '1';
   const assetsRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'assets');
   const server = createStandaloneBrowserServer({
     env,
     assetsRoot,
     ...(previewBaseUrl ? { previewContentBaseUrl: previewBaseUrl } : {}),
+    ...(enablePreviewFile ? { enablePreviewFile: true } : {}),
   });
 
   await new Promise<void>((resolve, reject) => {
