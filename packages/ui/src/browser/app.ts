@@ -55,6 +55,12 @@ export function buildBrowserPageDefinition(): BrowserPageDefinition {
           </div>
         </div>
         <header class="browser-topbar" data-browser-topbar>
+          <div class="browser-tabs-wrap">
+            <button type="button" class="browser-icon-button browser-tabs-trigger" data-browser-tabs-trigger aria-label="Tabs" title="Tabs" aria-haspopup="menu" aria-expanded="false">
+              <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><rect x="8" y="8" width="12" height="12" rx="2.5"></rect><path d="M16 8V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7.5A2.5 2.5 0 0 0 6 16h2"></path><text class="browser-tabs-count" data-browser-tabs-count x="14" y="14" text-anchor="middle" dominant-baseline="central">1</text></svg>
+            </button>
+            <div class="browser-tabs-panel" data-browser-tabs-panel role="menu" hidden></div>
+          </div>
           <nav class="browser-nav" aria-label="Browser navigation">
             <button type="button" class="browser-icon-button" data-browser-back aria-label="Back" title="Back">
               <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false"><path d="M15 6l-6 6 6 6"></path></svg>
@@ -213,6 +219,7 @@ var state = {
   ownerPanelOpen: false,
   actorPanelOpen: false,
   appPanelOpen: false,
+  tabsPanelOpen: false,
   pendingAppShare: null,
   appShareSending: false,
   // Cache Management two-step confirmation: pending scope ('' | 'pin' | 'all')
@@ -1421,6 +1428,66 @@ function renderTabs() {
   // it stays right after the newest tab instead of being pushed to the row end.
   tabsHtml += '<button type="button" class="browser-tab-new" data-browser-tab-new aria-label="New tab" title="New tab">+</button>';
   elements.tabsContainer.innerHTML = tabsHtml;
+  if (elements.tabsCount) elements.tabsCount.textContent = String(state.tabs.length);
+  if (state.tabsPanelOpen) renderTabsPanel();
+}
+
+// --- Mobile tab switcher panel ---------------------------------------------
+// Below 768px the tabstrip is hidden and tab switching moves into a dropdown
+// opened from the toolbar's Tabs button (mirrors the mobile actor/owner panel
+// pattern: fixed, full-width, below the topbar). Rows keep the strip order
+// (pinned first); the URI line disambiguates same-title tabs.
+function tabRowUri(tab) {
+  if (tab.current) return textValue(tab.current.uri) || textValue(tab.current.normalizedUri);
+  if (tab.historyIndex >= 0) return textValue(tab.history[tab.historyIndex]);
+  return '';
+}
+
+function renderTabsPanel() {
+  if (!elements.tabsPanel) return;
+  var closeLabel = browserText('tab.closeTab', 'Close tab');
+  var rowsHtml = stripTabs().map(function (tab) {
+    var isActive = tab.id === state.activeTabId;
+    var marker = tab.pinned ? iconHtml('pin') : (isActive ? iconHtml('check') : '');
+    return '<div class="browser-tab-listitem">' +
+      '<button type="button" role="menuitem" class="browser-tab-row' + (isActive ? ' is-active' : '') + '" data-browser-tab-row="' + tab.id + '">' +
+        '<span class="browser-tab-row-marker" aria-hidden="true">' + marker + '</span>' +
+        '<span class="browser-tab-row-text"><span class="browser-tab-row-title">' + escapeHtml(tabDisplayLabel(tab)) + '</span>' +
+        '<span class="browser-tab-row-uri">' + escapeHtml(tabRowUri(tab)) + '</span></span>' +
+      '</button>' +
+      '<button type="button" class="browser-tab-row-close" data-browser-tab-row-close="' + tab.id + '" aria-label="' + escapeHtml(closeLabel) + '" title="' + escapeHtml(closeLabel) + '">×</button>' +
+    '</div>';
+  }).join('');
+  elements.tabsPanel.innerHTML =
+    '<div class="browser-tabs-panel-head"><span>' + escapeHtml(browserText('tabsPanel.heading', 'Tabs')) + '</span><span>' + state.tabs.length + '</span></div>' +
+    rowsHtml +
+    '<div class="browser-tabs-panel-divider" role="separator"></div>' +
+    '<button type="button" class="browser-tabs-panel-new" data-browser-tabs-new>' + escapeHtml(browserText('tab.newTab', 'New Tab')) + '</button>';
+}
+
+function closeTabsPanel() {
+  state.tabsPanelOpen = false;
+  if (elements.tabsPanel) elements.tabsPanel.hidden = true;
+  if (elements.tabsTrigger && typeof elements.tabsTrigger.setAttribute === 'function') {
+    elements.tabsTrigger.setAttribute('aria-expanded', 'false');
+  }
+}
+
+function openTabsPanel() {
+  state.tabsPanelOpen = true;
+  renderTabsPanel();
+  if (elements.tabsPanel) elements.tabsPanel.hidden = false;
+  if (elements.tabsTrigger && typeof elements.tabsTrigger.setAttribute === 'function') {
+    elements.tabsTrigger.setAttribute('aria-expanded', 'true');
+  }
+}
+
+function toggleTabsPanel() {
+  if (state.tabsPanelOpen) {
+    closeTabsPanel();
+  } else {
+    openTabsPanel();
+  }
 }
 
 // --- Tab context menu / pin / rename / undo-close ---------------------------
@@ -1683,6 +1750,7 @@ function handleGlobalKeydown(event) {
   if (!event) return;
   if (event.key === 'Escape') {
     closeTabContextMenu();
+    closeTabsPanel();
     return;
   }
   var key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
@@ -4326,6 +4394,8 @@ function iconHtml(name) {
     external: '<path d="M14 5h5v5"></path><path d="M10 14L19 5"></path><path d="M19 14v4a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h4"></path>',
     follow: '<path d="M16 20v-1a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v1"></path><circle cx="10" cy="8" r="4"></circle><path d="M19 8v6"></path><path d="M16 11h6"></path>',
     history: '<path d="M3 12a9 9 0 1 0 3-6.7"></path><path d="M3 4v5h5M12 7v5l3 2"></path>',
+    check: '<path d="M4 12.5l5 5L20 7"></path>',
+    pin: '<path d="M9 4h6l-1 7 3 3v2H7v-2l3-3-1-7z"></path><path d="M12 16v5"></path>',
     layout: '<rect x="4" y="5" width="16" height="14" rx="2"></rect><path d="M4 10h16M9 10v9"></path>',
     info: '<circle cx="12" cy="12" r="9"></circle><path d="M12 11v6"></path><circle class="browser-info-dot" cx="12" cy="7.5" r="1.1"></circle>',
     link: '<path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"></path><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"></path>',
@@ -4448,7 +4518,10 @@ function bindElements() {
     toast: document.querySelector('[data-browser-toast]'),
     tabstrip: document.querySelector('[data-browser-tabstrip]'),
     tabsContainer: document.querySelector('[data-browser-tabs-container]'),
-    tabNew: document.querySelector('[data-browser-tab-new]')
+    tabNew: document.querySelector('[data-browser-tab-new]'),
+    tabsTrigger: document.querySelector('[data-browser-tabs-trigger]'),
+    tabsPanel: document.querySelector('[data-browser-tabs-panel]'),
+    tabsCount: document.querySelector('[data-browser-tabs-count]')
   };
 }
 
@@ -10048,6 +10121,36 @@ async function initialize() {
       });
     });
   }
+  if (elements.tabsTrigger) {
+    elements.tabsTrigger.addEventListener('click', function (event) {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      toggleTabsPanel();
+    });
+  }
+  if (elements.tabsPanel) {
+    elements.tabsPanel.addEventListener('click', function (event) {
+      if (event && typeof event.stopPropagation === 'function') event.stopPropagation();
+      var newTarget = closestWithAttribute(event && event.target, 'data-browser-tabs-new');
+      if (newTarget) {
+        closeTabsPanel();
+        openTab();
+        return;
+      }
+      var rowClose = closestWithAttribute(event && event.target, 'data-browser-tab-row-close');
+      if (rowClose) {
+        // Closing a row keeps the panel open so several tabs can be closed in
+        // one pass; renderTabs() re-renders the live list.
+        closeTab(Number(rowClose.getAttribute('data-browser-tab-row-close')));
+        return;
+      }
+      var rowTarget = closestWithAttribute(event && event.target, 'data-browser-tab-row');
+      if (rowTarget) {
+        var rowTabId = Number(rowTarget.getAttribute('data-browser-tab-row'));
+        closeTabsPanel();
+        switchTab(rowTabId);
+      }
+    });
+  }
   document.addEventListener('error', function (event) {
     var target = event && event.target;
     if (target && target.classList && target.classList.contains('browser-avatar-image')) {
@@ -10233,6 +10336,7 @@ async function initialize() {
     if (state.ownerPanelOpen) closeOwnerPanel();
     if (state.actorPanelOpen) closeStandaloneActorPanel();
     if (state.appPanelOpen) closeAppPanel();
+    if (state.tabsPanelOpen) closeTabsPanel();
     closeReloadPopover();
     closeTabContextMenu();
   });

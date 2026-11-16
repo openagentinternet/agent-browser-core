@@ -33,6 +33,21 @@ test('Browser root API renders the mature fixed chrome shell asynchronously', as
   assert.match(html, /data-browser-status-strip/);
   assert.match(html, /data-browser-modal-root/);
   assert.match(html, /TXID: -/);
+  assert.match(html, /data-browser-tabs-trigger/);
+  assert.match(html, /data-browser-tabs-panel/);
+  assert.match(html, /data-browser-tabs-count/);
+  assert.match(html, /data-browser-tabs-trigger[\s\S]*?data-browser-back/, 'the Tabs trigger sits before the Back button');
+});
+
+test('Browser mobile chrome drops the tabstrip and status strip rows at <=768px', () => {
+  // The Tabs wrap is desktop-hidden; at the mobile breakpoint the shell grid
+  // zeroes the strip rows and the Tabs panel becomes a fixed full-width sheet.
+  assert.match(template, /\.browser-tabs-wrap \{\n        display: none;/);
+  assert.match(template, /@media \(max-width: 768px\) \{[\s\S]*?grid-template-rows: 0 auto auto minmax\(0, 1fr\) 0;/);
+  assert.match(template, /@media \(max-width: 768px\) \{[\s\S]*?\.browser-tabstrip,\n        \.browser-status-strip \{\n          display: none;/);
+  assert.match(template, /@media \(max-width: 768px\) \{[\s\S]*?\.browser-picker-toggle \{\n          display: none;/);
+  assert.match(template, /@media \(max-width: 768px\) \{[\s\S]*?\.browser-tabs-wrap \{\n          display: flex;/);
+  assert.match(template, /@media \(max-width: 768px\) \{[\s\S]*?\.browser-tabs-panel \{\n          position: fixed;/);
 });
 
 test('Browser root API uses the generated mature inline CSS template', async () => {
