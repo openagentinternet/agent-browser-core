@@ -95,11 +95,14 @@ function createElements() {
     '[data-browser-modal-root]', '[data-browser-toast]', '[data-browser-tabstrip]',
     '[data-browser-tabs-container]', '[data-browser-tab-new]',
     '[data-browser-tab-context-menu]',
+    '[data-browser-tabs-trigger]', '[data-browser-tabs-panel]', '[data-browser-tabs-count]',
   ];
   for (const s of selectors) els[s] = new FakeElement();
   // The served page markup starts the context menu hidden (hidden attribute);
   // mirror that on the harness element.
   els['[data-browser-tab-context-menu]'].hidden = true;
+  // The mobile tabs panel is likewise hidden until its trigger opens it.
+  els['[data-browser-tabs-panel]'].hidden = true;
   return els;
 }
 
@@ -1062,4 +1065,92 @@ test('bridge open-tab message accepts a label pass-through', async () => {
   assert.equal(tabs.length, before + 1);
   assert.equal(tabs.find((tab) => tab.title === 'Carol Bot' || tab.label === 'Carol Launched').label, 'Carol Launched',
     'the opened tab carries the label');
+});
+
+test('mobile tabs trigger opens a panel listing every tab with the live count', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'second tab resolve');
+
+  const trigger = elements['[data-browser-tabs-trigger]'];
+  const panel = elements['[data-browser-tabs-panel]'];
+  assert.equal(panel.hidden, true, 'panel starts hidden');
+  assert.equal(elements['[data-browser-tabs-count]'].textContent, '2', 'badge tracks tab count');
+
+  trigger.listeners.get('click')({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(panel.hidden, false, 'trigger opens the panel');
+  assert.equal(trigger.attrs['aria-expanded'], 'true');
+  assert.match(panel.innerHTML, /Alice Bot/);
+  assert.match(panel.innerHTML, /data-browser-tab-row="1"/);
+  assert.match(panel.innerHTML, /data-browser-tab-row="2"/);
+  assert.match(panel.innerHTML, /is-active/, 'one row carries the active marker');
+  assert.match(panel.innerHTML, /data-browser-tabs-new/, 'panel offers a new-tab action');
+});
+
+test('mobile tabs panel row click switches the active tab and closes the panel', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'second tab resolve');
+  assert.equal(context.AgentBrowserTabs.getActiveTab().id, 2);
+
+  const panel = elements['[data-browser-tabs-panel]'];
+  elements['[data-browser-tabs-trigger]'].listeners.get('click')({ preventDefault() {}, stopPropagation() {} });
+  const rowTarget = new FakeElement();
+  rowTarget.setAttribute('data-browser-tab-row', '1');
+  panel.listeners.get('click')({ preventDefault() {}, stopPropagation() {}, target: rowTarget });
+  assert.equal(context.AgentBrowserTabs.getActiveTab().id, 1, 'row click switches tabs');
+  assert.equal(panel.hidden, true, 'panel closes after switching');
+  assert.equal(elements['[data-browser-tabs-trigger]'].attrs['aria-expanded'], 'false');
+});
+
+test('mobile tabs panel close button drops the tab but keeps the panel open', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+  context.AgentBrowserTabs.openTab('metaid://idq1bob');
+  await waitFor(() => fetchCalls.length === 3, 'second tab resolve');
+
+  const panel = elements['[data-browser-tabs-panel]'];
+  elements['[data-browser-tabs-trigger]'].listeners.get('click')({ preventDefault() {}, stopPropagation() {} });
+  const closeTarget = new FakeElement();
+  closeTarget.setAttribute('data-browser-tab-row-close', '2');
+  panel.listeners.get('click')({ preventDefault() {}, stopPropagation() {}, target: closeTarget });
+  assert.equal(context.AgentBrowserTabs.getTabs().length, 1, 'tab 2 closed');
+  assert.equal(panel.hidden, false, 'panel stays open so several tabs can be closed');
+  assert.equal(elements['[data-browser-tabs-count]'].textContent, '1', 'badge updates after close');
+  assert.doesNotMatch(panel.innerHTML, /data-browser-tab-row="2"/, 'closed row removed from the live list');
+});
+
+test('mobile tabs panel new-tab action opens an empty tab and closes the panel', async () => {
+  const { context, elements, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+
+  const panel = elements['[data-browser-tabs-panel]'];
+  elements['[data-browser-tabs-trigger]'].listeners.get('click')({ preventDefault() {}, stopPropagation() {} });
+  const newTarget = new FakeElement();
+  newTarget.setAttribute('data-browser-tabs-new', '');
+  panel.listeners.get('click')({ preventDefault() {}, stopPropagation() {}, target: newTarget });
+  assert.equal(context.AgentBrowserTabs.getTabs().length, 2, 'a new tab was opened');
+  assert.equal(context.AgentBrowserTabs.getActiveTab().id, 2, 'the new tab is active');
+  assert.equal(panel.hidden, true, 'panel closes after opening a tab');
+});
+
+test('outside click and Escape both dismiss the mobile tabs panel', async () => {
+  const { context, elements, documentListeners, fetchCalls } = createBrowserContext({ search: '?uri=metaid%3A%2F%2Fidq1alice' });
+  await waitFor(() => fetchCalls.length === 2, 'initial resolve');
+
+  const panel = elements['[data-browser-tabs-panel]'];
+  const trigger = elements['[data-browser-tabs-trigger]'];
+  trigger.listeners.get('click')({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(panel.hidden, false);
+  for (const handler of documentListeners.get('click') || []) handler();
+  assert.equal(panel.hidden, true, 'outside click closes the panel');
+
+  trigger.listeners.get('click')({ preventDefault() {}, stopPropagation() {} });
+  assert.equal(panel.hidden, false, 'panel reopened');
+  for (const handler of documentListeners.get('keydown') || []) {
+    handler({ key: 'Escape', preventDefault() {} });
+  }
+  assert.equal(panel.hidden, true, 'Escape closes the panel');
 });
