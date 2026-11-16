@@ -1,0 +1,617 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ABC Mobile Chrome · Tab Menu Proposal</title>
+<style>
+  :root {
+    /* === tokens copied verbatim from BROWSER_INDEX_HTML dark theme === */
+    --browser-bg: #0b1220;
+    --browser-window: #111a2b;
+    --browser-surface: #16202f;
+    --browser-surface2: #1b2638;
+    --browser-panel: #131d2e;
+    --browser-border: #2b3850;
+    --browser-border-strong: #3a4a66;
+    --browser-text: #e6edf6;
+    --browser-muted: #9fb0c8;
+    --browser-dim: #74859f;
+    --browser-accent: #5b90ff;
+    --browser-accent-soft: #1f3052;
+    --browser-success: #34d39c;
+    --browser-warning: #f0b14b;
+    --browser-danger: #f08585;
+    --browser-shadow: 0 18px 44px rgba(0, 0, 0, .5), 0 2px 10px rgba(0, 0, 0, .35);
+    --browser-radius: 8px;
+    --sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #070b13;
+    color: #c8d6ea;
+    font: 14px/1.55 var(--sans);
+    padding: 36px 28px 64px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page-head { max-width: 1280px; margin: 0 auto 26px; }
+  .page-head h1 { font-size: 20px; font-weight: 700; color: #e6edf6; letter-spacing: .01em; }
+  .page-head p { margin-top: 6px; font-size: 13px; color: #8a9ab8; max-width: 720px; }
+  .page-head code { font-family: var(--mono); font-size: 12px; color: #8db4ff; }
+
+  .stage {
+    max-width: 1280px;
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 36px;
+    align-items: flex-start;
+  }
+
+  .scene { display: grid; gap: 12px; justify-items: center; }
+  .scene-label { font-size: 12px; font-weight: 700; color: #9fb0c8; letter-spacing: .08em; text-transform: uppercase; }
+  .scene-caption { font-size: 12px; color: #74859f; max-width: 340px; text-align: center; line-height: 1.6; }
+  .scene-caption b { color: #c8d6ea; }
+
+  /* ---------- phone frame ---------- */
+  .phone {
+    position: relative;
+    width: 384px;
+    height: 700px;
+    border-radius: 26px;
+    border: 1px solid #26344f;
+    background: var(--browser-bg);
+    overflow: hidden;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, .55), 0 4px 18px rgba(0, 0, 0, .4);
+  }
+
+  /* ---------- browser chrome (replica of served page, mobile ≤768px rules) ---------- */
+  .shell { height: 100%; display: flex; flex-direction: column; background: var(--browser-bg); color: var(--browser-text); font: 14px/1.45 var(--sans); }
+
+  .tabstrip {
+    height: 38px;
+    flex: none;
+    display: flex;
+    align-items: stretch;
+    border-bottom: 1px solid var(--browser-border);
+    background: linear-gradient(#131d2e, #0f1828);
+    color: var(--browser-muted);
+    user-select: none;
+  }
+  .tabstrip-brand { display: inline-flex; align-items: center; flex: none; padding: 0 8px; color: #c8d6ea; }
+  .tabstrip-brand svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.6; }
+  .tabstrip-tabs { flex: 1; display: flex; align-items: stretch; gap: 2px; min-width: 0; overflow: hidden; padding: 4px 2px 0; }
+  .tab {
+    display: inline-flex; align-items: center; gap: 6px;
+    min-width: 72px; max-width: 160px; padding: 0 6px;
+    border: 1px solid transparent; border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    color: #8a9ab8; cursor: pointer; position: relative;
+  }
+  .tab.is-active { background: var(--browser-window); color: var(--browser-text); border-color: var(--browser-border); margin-bottom: -1px; font-weight: 600; }
+  .tab-title { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+  .tab-close { flex: none; width: 22px; height: 22px; display: inline-flex; align-items: center; justify-content: center; border: none; background: transparent; color: #6b7a94; font-size: 18px; border-radius: 4px; cursor: pointer; }
+  .tab-new { flex: none; width: 34px; margin: 4px 2px 0; border: none; background: transparent; color: #8a9ab8; font-size: 18px; border-radius: 6px; cursor: pointer; }
+
+  .topbar {
+    flex: none;
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--browser-border);
+    background: var(--browser-window);
+    position: relative;
+  }
+  .nav { display: inline-flex; align-items: center; gap: 5px; flex: none; }
+
+  .icon-button {
+    width: 40px; height: 40px; flex: none;
+    border: 1px solid var(--browser-border); border-radius: 7px;
+    background: var(--browser-surface); color: #c2d0e6;
+    display: inline-flex; align-items: center; justify-content: center;
+    cursor: pointer; padding: 0; position: relative;
+    transition: border-color .14s ease, background-color .14s ease, color .14s ease;
+  }
+  .icon-button:hover, .icon-button[aria-expanded="true"] { border-color: #4f6188; background: #1f3052; }
+  .icon-button svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  /* NEW: tabs menu trigger — stacked squares + count inside front square */
+  .tabs-trigger .tabs-count { font: 700 9.5px/1 var(--sans); fill: currentColor; }
+  .tabs-trigger[aria-expanded="true"] { color: var(--browser-accent); }
+
+  .address-form {
+    position: relative; flex: 1 1 auto; min-width: 0;
+    display: grid; grid-template-columns: 30px minmax(0,1fr) 34px; align-items: center;
+    height: 44px;
+    border: 1px solid var(--browser-border-strong); border-radius: 8px;
+    background: var(--browser-surface);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.03), 0 1px 2px rgba(0,0,0,.3);
+  }
+  .address-icon { display: inline-flex; align-items: center; justify-content: center; width: 100%; height: 100%; border: 0; background: transparent; color: var(--browser-dim); }
+  .address-icon svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+  .address-form input { width: 100%; min-width: 0; height: 40px; border: 0; background: transparent; color: #e6edf6; font: 13px/1.2 var(--mono); padding: 0 8px 0 0; outline: none; }
+  .address-submit { width: 28px; height: 28px; border: 0; border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; margin-right: 4px; padding: 0; background: #1b2638; color: #c2d0e6; cursor: pointer; }
+  .address-submit svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+
+  .resource-chip { flex: none; height: 40px; border: 1px solid var(--browser-border); border-radius: 8px; background: var(--browser-surface); display: inline-flex; align-items: center; justify-content: center; padding: 3px; cursor: pointer; }
+  .chip-avatar { width: 34px; height: 34px; border-radius: 7px; background: #1f3052; color: #c2d0e6; display: inline-flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+
+  .viewport { flex: 1 1 auto; min-height: 0; overflow: auto; position: relative; background: var(--browser-bg); }
+  .status-strip {
+    flex: none; height: 32px; border-top: 1px solid var(--browser-border);
+    background: #131d2e; display: flex; align-items: center; gap: 8px;
+    padding: 0 10px; color: var(--browser-muted);
+    font: 11px/1.25 var(--mono); overflow: hidden; white-space: nowrap;
+  }
+
+  /* ---------- NEW: tabs dropdown panel (mirrors mobile .browser-actor-panel: fixed, full-width, below topbar) ---------- */
+  .tabs-panel {
+    position: absolute; top: 60px; left: 8px; right: 8px; z-index: 40;
+    border: 1px solid var(--browser-border); border-radius: 10px;
+    background: var(--browser-surface); box-shadow: var(--browser-shadow);
+    padding: 6px;
+    display: flex; flex-direction: column;
+  }
+  /* NOTE: no entry animation on this panel — composited animations (opacity or
+     transform) on an absolutely-positioned element over the position:relative
+     scroll viewport cause compositing-order bleed in Chrome screenshots. */
+  .tabs-panel-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px 8px; color: var(--browser-dim); font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+  .tab-row {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    min-height: 46px; padding: 7px 8px 7px 10px;
+    border: 0; border-radius: 8px; background: transparent;
+    color: #c2d0e6; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer;
+  }
+  .tab-row:hover { background: #1f3052; }
+  .tab-row.is-active { background: var(--browser-accent-soft); color: var(--browser-text); box-shadow: inset 2px 0 0 var(--browser-accent); }
+  .tab-row .tab-row-text { flex: 1; min-width: 0; display: grid; gap: 1px; }
+  .tab-row .tab-row-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab-row .tab-row-uri { font: 11px/1.3 var(--mono); font-weight: 400; color: var(--browser-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tab-row .tab-row-pin { flex: none; width: 14px; color: var(--browser-dim); display: inline-flex; }
+  .tab-row .tab-row-pin svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+  .tab-row .tab-row-close { flex: none; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: transparent; color: var(--browser-dim); font-size: 17px; cursor: pointer; }
+  .tab-row .tab-row-close:hover { background: rgba(31,41,55,.4); color: #e6edf7; }
+  .tabs-panel-divider { height: 1px; margin: 4px 8px; background: var(--browser-border); }
+  .tabs-panel-new {
+    display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+    min-height: 40px; border: 0; border-radius: 8px; background: transparent;
+    color: var(--browser-accent); font-size: 13px; font-weight: 700; cursor: pointer;
+  }
+  .tabs-panel-new:hover { background: #1f3052; }
+
+  /* variant: bottom sheet */
+  .sheet-scrim { position: absolute; inset: 0; z-index: 39; background: rgba(0,0,0,.45); }
+  .tabs-sheet {
+    position: absolute; left: 0; right: 0; bottom: 0; z-index: 40;
+    border: 1px solid var(--browser-border); border-bottom: none; border-radius: 16px 16px 0 0;
+    background: var(--browser-surface); box-shadow: var(--browser-shadow);
+    padding: 4px 8px 14px; display: flex; flex-direction: column;
+    max-height: 62%; overflow-y: auto;
+  }
+  .tabs-sheet-grabber { width: 36px; height: 4px; border-radius: 2px; background: var(--browser-border-strong); margin: 8px auto 2px; }
+
+  /* chrome menu replica (⋮) */
+  .chrome-menu {
+    position: absolute; top: 56px; right: 8px; z-index: 38;
+    width: 220px; border: 1px solid var(--browser-border); border-radius: 8px;
+    background: var(--browser-surface); box-shadow: var(--browser-shadow); padding: 6px;
+  }
+  .chrome-menu button { width: 100%; min-height: 34px; border: 0; border-radius: 6px; display: grid; grid-template-columns: 20px minmax(0,1fr); align-items: center; gap: 8px; padding: 7px 8px; text-align: left; background: transparent; color: #c2d0e6; font-size: 12px; font-weight: 650; cursor: pointer; }
+  .chrome-menu button:hover { background: #1f3052; }
+  .chrome-menu button svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+  .chrome-menu .menu-hl { color: #8db4ff; }
+
+  /* fake page content */
+  .fake-page { padding: 18px 16px; display: grid; gap: 14px; }
+  .fake-card { border: 1px solid var(--browser-border); border-radius: 14px; background: var(--browser-surface); padding: 18px; display: grid; gap: 10px; }
+  .fake-avatar-row { display: flex; align-items: center; gap: 12px; }
+  .fake-avatar { width: 48px; height: 48px; border-radius: 12px; background: #1f3052; color: #c2d0e6; display: inline-flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; }
+  .fake-h { font-size: 19px; font-weight: 700; color: #f0f5fb; }
+  .fake-sub { font-size: 12px; color: var(--browser-muted); }
+  .fake-line { height: 10px; border-radius: 5px; background: var(--browser-surface2); }
+  .fake-line.w60 { width: 60%; } .fake-line.w85 { width: 85%; } .fake-line.w45 { width: 45%; }
+
+  /* annotation markers */
+  .marker {
+    position: absolute; z-index: 50;
+    width: 22px; height: 22px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 800; font-style: normal;
+    box-shadow: 0 2px 8px rgba(0,0,0,.5);
+  }
+  .marker.kill { background: #b84040; color: #fff; }
+  .marker.new  { background: #2f9e6e; color: #fff; }
+  .marker.info { background: #3b6fd8; color: #fff; }
+
+  .ruler {
+    position: absolute; z-index: 49; left: 0; right: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  .ruler span { font: 700 10px/1 var(--mono); padding: 3px 8px; border-radius: 4px; }
+  .ruler.cut { top: 0; height: 38px; background: rgba(240, 133, 133, .10); border-bottom: 1px dashed rgba(240,133,133,.55); }
+  .ruler.cut span { background: rgba(184,64,64,.9); color: #fff; }
+  .ruler.gain { background: rgba(52,211,156,.08); border-bottom: 1px dashed rgba(52,211,156,.4); }
+  .ruler.gain span { background: rgba(47,158,110,.9); color: #fff; }
+
+  /* notes panel */
+  .notes {
+    max-width: 1280px; margin: 40px auto 0;
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;
+  }
+  .note-card { border: 1px solid #26344f; border-radius: 14px; background: #0d1524; padding: 18px 20px; }
+  .note-card h2 { font-size: 13px; font-weight: 700; color: #e6edf6; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 10px; }
+  .note-card ul { list-style: none; display: grid; gap: 8px; }
+  .note-card li { font-size: 13px; color: #9fb0c8; line-height: 1.6; padding-left: 16px; position: relative; }
+  .note-card li::before { content: ''; position: absolute; left: 0; top: 8px; width: 6px; height: 6px; border-radius: 50%; background: #3b6fd8; }
+  .note-card li b { color: #d7e3f0; }
+  .note-card li .q { color: #f0b14b; }
+</style>
+</head>
+<body>
+
+<div class="page-head">
+  <h1>ABC 移动端 Chrome 精简 — 交互原型</h1>
+  <p>方案核心：移动端（≤768px，沿用现有断点）整条移除顶部 tab 栏（-38px），改为在地址栏左侧放一个 <code>Tabs</code> 按钮；点击后从顶部展开全宽 tab 列表面板（与移动端现有 owner/actor 面板的 fixed 全宽模式一致）。元素选取按钮收进右侧 ⋮ 菜单（菜单里本就有 “Select elements” 项）。桌面端完全不变。<b>四台机器均可在浏览器里直接点按体验。</b></p>
+</div>
+
+<div class="stage">
+
+  <!-- ============ A · 现状 ============ -->
+  <div class="scene">
+    <div class="scene-label">现状 · Before</div>
+    <div class="phone">
+      <div class="shell">
+        <div class="tabstrip">
+          <div class="tabstrip-brand">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.2 2.3 3.3 5 3.3 8S14.2 17.7 12 20M12 4C9.8 6.3 8.7 9 8.7 12s1.1 5.7 3.3 8"/></svg>
+          </div>
+          <div class="tabstrip-tabs">
+            <div class="tab is-active"><span class="tab-title">Agent Internet Browser</span><button class="tab-close">×</button></div>
+            <button class="tab-new">+</button>
+          </div>
+        </div>
+        <div class="topbar">
+          <nav class="nav">
+            <button class="icon-button" title="Back"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+          </nav>
+          <form class="address-form" onsubmit="return false">
+            <button class="address-icon" tabindex="-1"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"/></svg></button>
+            <input value="metaid://idq1example" readonly />
+            <button class="address-submit"><svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></button>
+          </form>
+          <button class="icon-button" title="Select elements" style="position:relative"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v4.2M12 17.8V22M2 12h4.2M17.8 12H22"/></svg><i class="marker kill" style="top:-7px;right:-7px">2</i></button>
+          <button class="resource-chip"><span class="chip-avatar">R</span></button>
+          <button class="icon-button"><svg viewBox="0 0 24 24" style="stroke-width:3"><path d="M12 5.5h.01M12 12h.01M12 18.5h.01"/></svg></button>
+        </div>
+        <div class="viewport">
+          <div class="fake-page">
+            <div class="fake-card">
+              <div class="fake-avatar-row"><span class="fake-avatar">A</span><div><div class="fake-h">Alice's Page</div><div class="fake-sub">metaid://idq1alice9f3k2</div></div></div>
+              <div class="fake-line w85"></div><div class="fake-line w60"></div><div class="fake-line w45"></div>
+            </div>
+            <div class="fake-card"><div class="fake-line w60"></div><div class="fake-line w85"></div><div class="fake-line w45"></div></div>
+          </div>
+        </div>
+        <div class="status-strip"><span>ready</span><span style="flex:1"></span><span>TXID: 8f3a…c21d</span></div>
+      </div>
+      <i class="marker kill" style="top:8px;right:8px">1</i>
+      <div class="ruler cut"><span>tabstrip 38px</span></div>
+    </div>
+    <div class="scene-caption"><b>1</b> 整条 tab 栏：占 38px，多 tab 时还会挤压标题<br/><b>2</b> 元素选取按钮：占一格，⋮ 菜单中已有同功能项</div>
+  </div>
+
+  <!-- ============ B · 方案 ============ -->
+  <div class="scene">
+    <div class="scene-label">方案 · 移除 tab 栏 + Tab 菜单</div>
+    <div class="phone" data-proto="dropdown">
+      <div class="shell">
+        <div class="topbar">
+          <div class="tabs-wrap" style="position:relative;display:flex">
+            <button class="icon-button tabs-trigger" data-tabs-trigger title="Tabs" aria-expanded="false" style="position:relative">
+              <svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7.5A2.5 2.5 0 0 0 6 16h2"/><text class="tabs-count" x="14" y="14" text-anchor="middle" dominant-baseline="central">4</text></svg>
+              <i class="marker new" style="top:-7px;right:-7px">1</i>
+            </button>
+          </div>
+          <nav class="nav">
+            <button class="icon-button" title="Back"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+          </nav>
+          <form class="address-form" onsubmit="return false">
+            <button class="address-icon" tabindex="-1"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"/></svg></button>
+            <input data-addr value="metaid://idq1alice9f3k2" readonly />
+            <button class="address-submit"><svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></button>
+          </form>
+          <button class="resource-chip"><span class="chip-avatar">R</span></button>
+          <button class="icon-button" data-menu-trigger><svg viewBox="0 0 24 24" style="stroke-width:3"><path d="M12 5.5h.01M12 12h.01M12 18.5h.01"/></svg></button>
+        </div>
+        <div class="viewport">
+          <div class="fake-page">
+            <div class="fake-card">
+              <div class="fake-avatar-row"><span class="fake-avatar">A</span><div><div class="fake-h">Alice's Page</div><div class="fake-sub">metaid://idq1alice9f3k2</div></div></div>
+              <div class="fake-line w85"></div><div class="fake-line w60"></div><div class="fake-line w45"></div>
+            </div>
+            <div class="fake-card"><div class="fake-line w60"></div><div class="fake-line w85"></div><div class="fake-line w45"></div></div>
+            <div class="fake-card"><div class="fake-line w85"></div><div class="fake-line w45"></div></div>
+          </div>
+        </div>
+        <div class="status-strip"><span>ready</span><span style="flex:1"></span><span>TXID: 8f3a…c21d</span></div>
+      </div>
+      <div class="ruler gain" style="top:60px;height:38px"><span>+38px 可视面积（原 tab 栏高度）</span></div>
+    </div>
+    <div class="scene-caption"><b>1</b> 新增 Tabs 按钮（叠层方块 + 数量角标，Safari/Chrome 惯例），点击展开 tab 列表 — <b>点一下试试</b>；⋮ 菜单也可点开看 “Select elements” 仍在</div>
+  </div>
+
+  <!-- ============ C · 面板展开 ============ -->
+  <div class="scene">
+    <div class="scene-label">方案 · Tab 面板展开</div>
+    <div class="phone" data-proto="dropdown-open">
+      <div class="shell">
+        <div class="topbar">
+          <div class="tabs-wrap" style="position:relative;display:flex">
+            <button class="icon-button tabs-trigger" data-tabs-trigger title="Tabs" aria-expanded="true">
+              <svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7.5A2.5 2.5 0 0 0 6 16h2"/><text class="tabs-count" x="14" y="14" text-anchor="middle" dominant-baseline="central">4</text></svg>
+            </button>
+          </div>
+          <nav class="nav">
+            <button class="icon-button" title="Back"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+          </nav>
+          <form class="address-form" onsubmit="return false">
+            <button class="address-icon" tabindex="-1"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"/></svg></button>
+            <input data-addr value="metaid://idq1alice9f3k2" readonly />
+            <button class="address-submit"><svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></button>
+          </form>
+          <button class="resource-chip"><span class="chip-avatar">R</span></button>
+          <button class="icon-button" data-menu-trigger><svg viewBox="0 0 24 24" style="stroke-width:3"><path d="M12 5.5h.01M12 12h.01M12 18.5h.01"/></svg></button>
+        </div>
+        <div class="viewport">
+          <div class="fake-page">
+            <div class="fake-card">
+              <div class="fake-avatar-row"><span class="fake-avatar">A</span><div><div class="fake-h">Alice's Page</div><div class="fake-sub">metaid://idq1alice9f3k2</div></div></div>
+              <div class="fake-line w85"></div><div class="fake-line w60"></div><div class="fake-line w45"></div>
+            </div>
+          </div>
+        </div>
+        <div class="status-strip"><span>ready</span><span style="flex:1"></span><span>TXID: 8f3a…c21d</span></div>
+        <!-- tabs dropdown: same fixed full-width pattern as mobile owner/actor panels -->
+        <div class="tabs-panel" data-tabs-panel>
+          <div class="tabs-panel-head"><span>Tabs</span><span data-tabs-total>4</span></div>
+          <div data-tabs-list></div>
+          <div class="tabs-panel-divider"></div>
+          <button class="tabs-panel-new" data-tabs-new>＋ New tab</button>
+        </div>
+      </div>
+    </div>
+    <div class="scene-caption">点列表行切换 tab、× 关闭、底部 “＋ New tab” 新建 —— 都可实际点击；面板复用移动端现有 fixed 全宽菜单模式（同 actor/owner 面板）</div>
+  </div>
+
+  <!-- ============ D · 变体:底部弹出 ============ -->
+  <div class="scene">
+    <div class="scene-label">变体 · 底部弹出（可选）</div>
+    <div class="phone" data-proto="sheet">
+      <div class="shell">
+        <div class="topbar">
+          <div class="tabs-wrap" style="position:relative;display:flex">
+            <button class="icon-button tabs-trigger" data-tabs-trigger title="Tabs" aria-expanded="false">
+              <svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6a2.5 2.5 0 0 0-2.5-2.5H6A2.5 2.5 0 0 0 3.5 6v7.5A2.5 2.5 0 0 0 6 16h2"/><text class="tabs-count" x="14" y="14" text-anchor="middle" dominant-baseline="central">4</text></svg>
+            </button>
+          </div>
+          <nav class="nav">
+            <button class="icon-button" title="Back"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+          </nav>
+          <form class="address-form" onsubmit="return false">
+            <button class="address-icon" tabindex="-1"><svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"/></svg></button>
+            <input data-addr value="metaid://idq1alice9f3k2" readonly />
+            <button class="address-submit"><svg viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M13 6l6 6-6 6"/></svg></button>
+          </form>
+          <button class="resource-chip"><span class="chip-avatar">R</span></button>
+          <button class="icon-button" data-menu-trigger><svg viewBox="0 0 24 24" style="stroke-width:3"><path d="M12 5.5h.01M12 12h.01M12 18.5h.01"/></svg></button>
+        </div>
+        <div class="viewport">
+          <div class="fake-page">
+            <div class="fake-card">
+              <div class="fake-avatar-row"><span class="fake-avatar">A</span><div><div class="fake-h">Alice's Page</div><div class="fake-sub">metaid://idq1alice9f3k2</div></div></div>
+              <div class="fake-line w85"></div><div class="fake-line w60"></div><div class="fake-line w45"></div>
+            </div>
+          </div>
+        </div>
+        <div class="status-strip"><span>ready</span><span style="flex:1"></span><span>TXID: 8f3a…c21d</span></div>
+      </div>
+    </div>
+    <div class="scene-caption">变体：tab 列表从底部弹出（更接近手机浏览器习惯、拇指可达）— 点 Tabs 按钮展开；遮罩点击关闭。若你偏好这个形态我们就用它</div>
+  </div>
+
+</div>
+
+<div class="notes">
+  <div class="note-card">
+    <h2>改动点</h2>
+    <ul>
+      <li><b>移除 .browser-tabstrip</b>（移动端 display:none 即可，DOM 保留供状态同步）→ chrome 高度从 ~96px 降到 ~58px，可视面积 +38px。</li>
+      <li><b>新增 Tabs 按钮</b>：放在后退按钮左侧（topbar 第一个元素），叠层方块图标 + 当前 tab 数量角标；仅 ≤768px 显示，桌面端隐藏。</li>
+      <li><b>Tab 面板</b>：fixed 全宽下拉（复用移动端 actor/owner 面板同款定位 top:56~60px, left/right:8px），行 = 标题 + URI + 关闭 ×，底部 “＋ New tab”。当前 tab 高亮。</li>
+      <li><b>隐藏元素选取按钮</b>（data-browser-picker-toggle）→ 功能仍在 ⋮ 菜单 “Select elements”（mobileOnly 项已存在）。</li>
+      <li><b>断点沿用 ≤768px</b>，桌面端 tab 栏、picker、菜单完全不变。</li>
+    </ul>
+  </div>
+  <div class="note-card">
+    <h2>待你确认</h2>
+    <ul>
+      <li><span class="q">Q1</span> 面板形态：<b>顶部全宽下拉</b>（方案 C，与现有移动端面板一致）还是 <b>底部弹出 sheet</b>（变体 D，拇指更近）？</li>
+      <li><span class="q">Q2</span> Tabs 按钮是否保留<b>数量角标</b>？（去掉也行，纯图标更干净）</li>
+      <li><span class="q">Q3</span> Pin / Rename / “Reopen closed tab” 等 tab 操作移动端本轮<b>不做</b>（桌面端右键菜单保留）；需要的话可加长按或行尾 ⋯ 菜单，另算一轮。</li>
+      <li><span class="q">Q4</span> 品牌位（地球 icon + Bot Browser 名）随 tabstrip 一并移除，移动端是否接受？</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+(function () {
+  var BASE_TABS = [
+    { id: 1, title: 'Agent Internet Browser', uri: 'builtin://welcome', pinned: false },
+    { id: 2, title: "Alice's Page", uri: 'metaid://idq1alice9f3k2', pinned: false, active: true },
+    { id: 3, title: 'Buzz — MetaWeb feed', uri: 'metaid://idq2buzz7x1m0', pinned: true },
+    { id: 4, title: 'whitepaper.pdf', uri: 'metafile://b5f2a9…/whitepaper.pdf', pinned: false }
+  ];
+  var nextId = 100;
+
+  var pinSvg = '<svg viewBox="0 0 24 24"><path d="M9 4h6l-1 7 3 3v2H7v-2l3-3-1-7z"/><path d="M12 16v5"/></svg>';
+  var checkSvg = '<svg viewBox="0 0 24 24" style="width:14px;height:14px;stroke:var(--browser-accent);fill:none;stroke-width:2.4"><path d="M4 12.5l5 5L20 7"/></svg>';
+
+  function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function initPhone(phone) {
+    var mode = phone.getAttribute('data-proto');
+    var shell = phone.querySelector('.shell');
+    var state = {
+      tabs: BASE_TABS.map(function (t) { return { id: t.id, title: t.title, uri: t.uri, pinned: t.pinned }; }),
+      activeId: 2
+    };
+
+    var trigger = phone.querySelector('[data-tabs-trigger]');
+    var addrInput = phone.querySelector('[data-addr]');
+
+    function renderList(listEl) {
+      var ordered = state.tabs.slice().sort(function (a, b) { return (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0); });
+      listEl.innerHTML = ordered.map(function (t) {
+        var active = t.id === state.activeId;
+        return '<button type="button" class="tab-row' + (active ? ' is-active' : '') + '" data-tab-id="' + t.id + '">' +
+          '<span class="tab-row-pin">' + (t.pinned ? pinSvg : (active ? checkSvg : '')) + '</span>' +
+          '<span class="tab-row-text"><span class="tab-row-title">' + esc(t.title) + '</span>' +
+          '<span class="tab-row-uri">' + esc(t.uri) + '</span></span>' +
+          '<span class="tab-row-close" data-close="' + t.id + '" role="button" aria-label="Close tab">×</span>' +
+        '</button>';
+      }).join('');
+      var total = phone.querySelector('[data-tabs-total]');
+      if (total) total.textContent = String(state.tabs.length);
+      var count = phone.querySelector('.tabs-count');
+      if (count) count.textContent = String(state.tabs.length);
+    }
+
+    function syncAddr() {
+      var t = state.tabs.filter(function (x) { return x.id === state.activeId; })[0];
+      if (t && addrInput) addrInput.value = t.uri;
+    }
+
+    function closePanel() {
+      var p = phone.querySelector('[data-tabs-panel]');
+      if (p) p.remove();
+      var s = phone.querySelector('.sheet-scrim'); if (s) s.remove();
+      var sh = phone.querySelector('.tabs-sheet'); if (sh) sh.remove();
+      if (trigger) trigger.setAttribute('aria-expanded', 'false');
+    }
+
+    function openDropdown() {
+      var panel = document.createElement('div');
+      panel.className = 'tabs-panel';
+      panel.setAttribute('data-tabs-panel', '');
+      panel.innerHTML = '<div class="tabs-panel-head"><span>Tabs</span><span data-tabs-total></span></div>' +
+        '<div data-tabs-list></div><div class="tabs-panel-divider"></div>' +
+        '<button class="tabs-panel-new" data-tabs-new>＋ New tab</button>';
+      shell.appendChild(panel);
+      renderList(panel.querySelector('[data-tabs-list]'));
+      bindPanel(panel);
+      if (trigger) trigger.setAttribute('aria-expanded', 'true');
+    }
+
+    function openSheet() {
+      var scrim = document.createElement('div');
+      scrim.className = 'sheet-scrim';
+      scrim.addEventListener('click', closePanel);
+      var sheet = document.createElement('div');
+      sheet.className = 'tabs-sheet';
+      sheet.innerHTML = '<div class="tabs-sheet-grabber"></div>' +
+        '<div class="tabs-panel-head"><span>Tabs</span><span data-tabs-total></span></div>' +
+        '<div data-tabs-list></div><div class="tabs-panel-divider"></div>' +
+        '<button class="tabs-panel-new" data-tabs-new>＋ New tab</button>';
+      shell.appendChild(scrim);
+      shell.appendChild(sheet);
+      renderList(sheet.querySelector('[data-tabs-list]'));
+      bindPanel(sheet);
+      if (trigger) trigger.setAttribute('aria-expanded', 'true');
+    }
+
+    function bindPanel(panel) {
+      panel.addEventListener('click', function (e) {
+        var closeBtn = e.target.closest('[data-close]');
+        if (closeBtn) {
+          e.stopPropagation();
+          var cid = Number(closeBtn.getAttribute('data-close'));
+          state.tabs = state.tabs.filter(function (t) { return t.id !== cid; });
+          if (!state.tabs.length) state.tabs.push({ id: nextId++, title: 'New Tab', uri: 'metaid://', pinned: false });
+          if (state.activeId === cid) state.activeId = state.tabs[0].id;
+          renderList(panel.querySelector('[data-tabs-list]'));
+          syncAddr();
+          return;
+        }
+        var row = e.target.closest('.tab-row');
+        if (row) {
+          state.activeId = Number(row.getAttribute('data-tab-id'));
+          syncAddr();
+          closePanel();
+          return;
+        }
+        if (e.target.closest('[data-tabs-new]')) {
+          var t = { id: nextId++, title: 'New Tab', uri: 'metaid://', pinned: false };
+          state.tabs.push(t);
+          state.activeId = t.id;
+          syncAddr();
+          closePanel();
+        }
+      });
+    }
+
+    if (trigger) {
+      trigger.addEventListener('click', function () {
+        var open = trigger.getAttribute('aria-expanded') === 'true';
+        if (open) { closePanel(); return; }
+        var menu = phone.querySelector('.chrome-menu'); if (menu) menu.remove();
+        if (mode === 'sheet') openSheet(); else openDropdown();
+      });
+    }
+
+    // pre-opened panel on phone C
+    var existing = phone.querySelector('[data-tabs-panel]');
+    if (existing) { renderList(existing.querySelector('[data-tabs-list]')); bindPanel(existing); }
+
+    // ⋮ chrome menu replica (proves Select elements survives in the menu)
+    var menuTrigger = phone.querySelector('[data-menu-trigger]');
+    if (menuTrigger) {
+      menuTrigger.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var old = phone.querySelector('.chrome-menu');
+        if (old) { old.remove(); return; }
+        var m = document.createElement('div');
+        m.className = 'chrome-menu';
+        m.innerHTML =
+          '<button><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg><span>Forward</span></button>' +
+          '<button><svg viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 5v6h-6"/></svg><span>Reload</span></button>' +
+          '<button><svg viewBox="0 0 24 24"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg><span>Bookmark this page</span></button>' +
+          '<button><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2v4.2M12 17.8V22M2 12h4.2M17.8 12H22"/></svg><span class="menu-hl">Select elements</span></button>' +
+          '<button><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M9 5v14M13 9h4M13 13h4"/></svg><span>Bookmarks and history</span></button>' +
+          '<button><svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="3.5"/><path d="M5 20c1.4-3.4 4-5 7-5s5.6 1.6 7 5"/></svg><span>Switch identity</span></button>';
+        shell.appendChild(m);
+        m.addEventListener('click', function (ev) { ev.stopPropagation(); });
+      });
+    }
+
+    // dismiss panels on outside tap
+    phone.addEventListener('click', function (e) {
+      if (!e.target.closest('[data-tabs-panel]') && !e.target.closest('.tabs-sheet') &&
+          !e.target.closest('[data-tabs-trigger]')) {
+        var t = phone.querySelector('[data-tabs-trigger]');
+        if (t && t.getAttribute('aria-expanded') === 'true') closePanel();
+      }
+      if (!e.target.closest('.chrome-menu') && !e.target.closest('[data-menu-trigger]')) {
+        var cm = phone.querySelector('.chrome-menu'); if (cm) cm.remove();
+      }
+    });
+  }
+
+  document.querySelectorAll('.phone[data-proto]').forEach(initPhone);
+})();
+</script>
+</body>
+</html>
