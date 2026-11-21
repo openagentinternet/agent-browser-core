@@ -2,6 +2,7 @@ import { buildBrowserPageDefinition, type BrowserPageDefinition } from './app.js
 import { BROWSER_DARK_THEME_CSS } from './darkThemeCss.js';
 import { BROWSER_INDEX_HTML } from './indexHtml.js';
 import { BROWSER_METAAPP_PANEL_CSS } from './metaAppPanelCss.js';
+import { BROWSER_TAB_DRAG_CSS } from './tabDragCss.js';
 import {
   buildBrowserThemeHeadScript,
   normalizeBrowserTheme,
@@ -62,7 +63,7 @@ export async function renderBrowserPageHtml(
   html = replaceTemplateValue(
     html,
     '__PAGE_THEME_CSS__',
-    `${BROWSER_METAAPP_PANEL_CSS}\n${BROWSER_DARK_THEME_CSS}`,
+    `${BROWSER_METAAPP_PANEL_CSS}\n${BROWSER_TAB_DRAG_CSS}\n${BROWSER_DARK_THEME_CSS}`,
   );
 
   html = replaceTemplateValue(html, '__PAGE_TITLE__', escapeHtml(definition.title));
