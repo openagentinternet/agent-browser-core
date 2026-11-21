@@ -1415,13 +1415,22 @@ function tabDisplayLabel(tab) {
 
 function renderTabs() {
   if (!elements.tabsContainer) return;
+  // Re-apply the saved tab order before painting the strip: a restore only
+  // rewrites state.tabs, the render below shows the result.
+  maybeRestoreTabOrder();
+  var canDrag = tabDragEnabled();
+  var dragAttribute = canDrag ? ' draggable="true"' : '';
+  // The close button stops a drag by being its own drag source: Chromium still
+  // starts the parent tab's drag from a draggable="false" child, while a
+  // button-sourced dragstart reports the button as the target so the strip
+  // handler can cancel it before any reorder happens.
   var tabsHtml = stripTabs().map(function (tab) {
     var isActive = tab.id === state.activeTabId;
     var label = tabDisplayLabel(tab);
     var activeClass = (isActive ? ' is-active' : '') + (tab.pinned ? ' is-pinned' : '');
-    return '<div class="browser-tab' + activeClass + '" data-tab-id="' + tab.id + '" role="tab">' +
+    return '<div class="browser-tab' + activeClass + '" data-tab-id="' + tab.id + '" role="tab"' + dragAttribute + '>' +
       '<span class="browser-tab-title" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
-      '<button type="button" class="browser-tab-close" data-tab-close="' + tab.id + '" aria-label="Close tab" tabindex="-1">×</button>' +
+      '<button type="button" class="browser-tab-close" data-tab-close="' + tab.id + '" draggable="true" aria-label="Close tab" tabindex="-1">×</button>' +
       '</div>';
   }).join('');
   // The new-tab "+" follows the last tab (Chrome-like), inside the container so
@@ -1430,6 +1439,541 @@ function renderTabs() {
   elements.tabsContainer.innerHTML = tabsHtml;
   if (elements.tabsCount) elements.tabsCount.textContent = String(state.tabs.length);
   if (state.tabsPanelOpen) renderTabsPanel();
+}
+
+// --- Tab drag reorder -------------------------------------------------------
+// Chrome-like left/right tab reordering. The strip is rendered here, so the
+// interaction is native: dragstart remembers the dragged tab, dragover derives
+// the insertion boundary from the pointer and paints a 1 px insertion line,
+// drop rewrites state.tabs and re-renders the strip.
+//
+// ORDER PERSISTENCE: tab ids are minted per page load, so what survives is the
+// URI order. It is stored through the same best-effort localStorage channel as
+// bookmarks/history and re-applied as a relative order when the same URIs come
+// back. Blank tabs ("New Tab") carry an occurrence token so two empty tabs keep
+// their relative slots.
+//
+// PINNED TABS: stripTabs() renders pinned tabs first, so an unpinned tab can
+// never be dropped into (or before) the pinned segment — the next render would
+// snap it back and the drop would silently do nothing. Both the insertion line
+// and the actual move clamp to that boundary. A pinned tab can be reordered
+// within the pinned segment but never leaves it, because the pinned-first sort
+// re-collects it.
+//
+// MOTION (owner-final, 2026-11-21 21:44): the dragged tab itself NEVER leaves
+// its layout position — relocating the drag source makes Chromium cancel the
+// native drag. It only fades to opacity .05 while the browser's own drag image
+// follows the pointer. The vacated slot is expressed by the neighbours: every
+// tab AFTER the dragged one slides left by one slot, and every remaining tab
+// at/after the pointer boundary slides right by one slot, both on the same
+// transform (net -slot / 0 / +slot) with a 150 ms cubic-bezier(.2,0,0,1)
+// transition. There is NO insertion line: the yielding IS the insertion point.
+// The drop settle is a FLIP (capture pre-drop lefts, re-render, write inverse
+// offsets with transitions off, force a reflow, release). Everything collapses
+// to an instant state change under prefers-reduced-motion.
+
+var TAB_ORDER_STORAGE_KEY = 'agent-browser:tab-order';
+var TAB_ORDER_MAX = 50;
+var TAB_ORDER_BLANK_PREFIX = 'blank#';
+var TAB_ORDER_UNKNOWN_RANK = 1e9;
+var TAB_DRAG_NARROW_QUERY = '(max-width: 768px)';
+
+var tabDragBound = false;
+var tabDragFromId = null;
+var tabDragOriginIndex = null;
+var tabDragPendingIndex = null;
+var tabDragYieldStep = 0;
+var tabDragPreviewBoundary = null;
+var tabOrderRestoreSignature = '';
+
+// Below 768px the strip is hidden upstream (mobile tab switcher takes over), so
+// drag is structurally unreachable there; refuse to arm it anyway so a resize
+// across the breakpoint cannot leave stale draggable tabs behind.
+function tabDragEnabled() {
+  try {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return false;
+    return !window.matchMedia(TAB_DRAG_NARROW_QUERY).matches;
+  } catch (error) {
+    return false;
+  }
+}
+
+function visibleTabIds() {
+  return stripTabs().map(function (tab) { return tab.id; });
+}
+
+function tabForId(id) {
+  for (var index = 0; index < state.tabs.length; index += 1) {
+    if (state.tabs[index].id === id) return state.tabs[index];
+  }
+  return null;
+}
+
+function tabElements() {
+  if (!elements.tabsContainer || typeof elements.tabsContainer.querySelectorAll !== 'function') return [];
+  return Array.prototype.slice.call(elements.tabsContainer.querySelectorAll('.browser-tab') || []);
+}
+
+function tabElementId(element) {
+  if (!element || typeof element.getAttribute !== 'function') return null;
+  var raw = element.getAttribute('data-tab-id');
+  if (raw === null || raw === undefined || raw === '') return null;
+  var id = Number(raw);
+  return isFinite(id) ? id : null;
+}
+
+// Stable identity for the persisted order: a tab's URI, or an occurrence token
+// for a tab that has no URI yet.
+function tabOrderKeys(ids) {
+  var keys = [];
+  var blanks = 0;
+  for (var index = 0; index < ids.length; index += 1) {
+    var tab = tabForId(ids[index]);
+    var uri = tab && tab.current ? textValue(tab.current.uri || tab.current.normalizedUri) : '';
+    if (uri) {
+      keys.push(uri);
+    } else {
+      blanks += 1;
+      keys.push(TAB_ORDER_BLANK_PREFIX + blanks);
+    }
+  }
+  return keys;
+}
+
+function loadSavedTabOrder() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return [];
+    var raw = window.localStorage.getItem(TAB_ORDER_STORAGE_KEY);
+    if (!raw) return [];
+    var parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    var keys = [];
+    for (var index = 0; index < parsed.length; index += 1) {
+      var key = typeof parsed[index] === 'string' ? textValue(parsed[index]) : '';
+      if (!key || keys.indexOf(key) !== -1) continue;
+      keys.push(key);
+    }
+    return keys;
+  } catch (error) {
+    return [];
+  }
+}
+
+function saveTabOrder(keys) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.setItem(TAB_ORDER_STORAGE_KEY, JSON.stringify(keys.slice(0, TAB_ORDER_MAX)));
+  } catch (error) {
+    /* best-effort persistence: the order stays session-local when storage is full */
+  }
+}
+
+function pinnedTabCount() {
+  var count = 0;
+  for (var index = 0; index < state.tabs.length; index += 1) {
+    if (state.tabs[index] && state.tabs[index].pinned) count += 1;
+  }
+  return count;
+}
+
+// Rewrite state.tabs to the given visible id order, keeping any tab the caller
+// did not mention (nothing is rendered outside the strip, but a rewrite must
+// never drop tabs). True when the order actually moved.
+function applyTabOrder(orderedIds) {
+  var seen = {};
+  var next = [];
+  var index;
+  for (index = 0; index < orderedIds.length; index += 1) {
+    var tab = tabForId(orderedIds[index]);
+    if (tab && !seen[tab.id]) {
+      next.push(tab);
+      seen[tab.id] = true;
+    }
+  }
+  for (index = 0; index < state.tabs.length; index += 1) {
+    var existing = state.tabs[index];
+    if (existing && !seen[existing.id]) next.push(existing);
+  }
+  if (next.length !== state.tabs.length) return false;
+  var moved = false;
+  for (index = 0; index < next.length; index += 1) {
+    if (next[index] !== state.tabs[index]) { moved = true; break; }
+  }
+  if (!moved) return false;
+  state.tabs.length = 0;
+  for (index = 0; index < next.length; index += 1) state.tabs.push(next[index]);
+  return true;
+}
+
+function persistTabOrder() {
+  var ids = visibleTabIds();
+  if (ids.length < 2) return;
+  var keys = tabOrderKeys(ids);
+  saveTabOrder(keys);
+  // The strip already shows this order; keep the restore pass from replaying
+  // the saved list against it on the render that follows the drop.
+  tabOrderRestoreSignature = keys.join('\\n');
+}
+
+// Re-apply the saved relative order once per distinct visible tab sequence.
+// Runs on every render (boot included), so tabs delivered after the page
+// loaded still land in their saved slots. A restore never writes the saved
+// list back; it only reads it.
+function maybeRestoreTabOrder() {
+  var ids = visibleTabIds();
+  if (ids.length < 2) {
+    tabOrderRestoreSignature = '';
+    return;
+  }
+  // The signature is keyed by URI, not tab id: a tab that was blank at open
+  // time becomes addressable once its navigation commits, and that transition
+  // must re-run the restore pass even though the id set did not change.
+  var keys = tabOrderKeys(ids);
+  var signature = keys.join('\\n');
+  if (signature === tabOrderRestoreSignature) return;
+  tabOrderRestoreSignature = signature;
+  // Pins are session state the saved list cannot speak for (pinned is not
+  // persisted). With a pinned segment present the live order wins instead of
+  // fighting the pinned-first sort.
+  if (pinnedTabCount() > 0) return;
+  var saved = loadSavedTabOrder();
+  if (saved.length < 2) return;
+  var rank = {};
+  for (var savedIndex = 0; savedIndex < saved.length; savedIndex += 1) {
+    rank[saved[savedIndex]] = savedIndex;
+  }
+  var scored = [];
+  for (var index = 0; index < ids.length; index += 1) {
+    var position = Object.prototype.hasOwnProperty.call(rank, keys[index])
+      ? rank[keys[index]]
+      : TAB_ORDER_UNKNOWN_RANK;
+    scored.push({ id: ids[index], rank: position, at: index });
+  }
+  scored.sort(function (a, b) {
+    if (a.rank === b.rank) return a.at - b.at;
+    return a.rank - b.rank;
+  });
+  var desired = [];
+  for (index = 0; index < scored.length; index += 1) desired.push(scored[index].id);
+  if (desired.join('\\n') === ids.join('\\n')) return;
+  if (!applyTabOrder(desired)) return;
+  tabOrderRestoreSignature = tabOrderKeys(desired).join('\\n');
+}
+
+// Insertion boundary for a pointer X: before the first tab whose midpoint the
+// pointer has not passed yet.
+function insertionTabIndexFor(clientX) {
+  var tabs = tabElements();
+  var remaining = 0;
+  for (var index = 0; index < tabs.length; index += 1) {
+    var id = tabElementId(tabs[index]);
+    if (id === null || id === tabDragFromId) continue;
+    if (typeof tabs[index].getBoundingClientRect !== 'function') continue;
+    var rect = tabs[index].getBoundingClientRect();
+    if (clientX < Number(rect.left) + Number(rect.width) / 2) return remaining;
+    remaining += 1;
+  }
+  return remaining;
+}
+
+function clampTabInsertIndex(index, draggedId) {
+  var tab = tabForId(draggedId);
+  if (!tab || tab.pinned) return index;
+  var floor = pinnedTabCount();
+  return index < floor ? floor : index;
+}
+
+function tabEventClientX(event) {
+  var value = Number(event && event.clientX);
+  if (isFinite(value)) return value;
+  var container = elements.tabsContainer;
+  var box = container && typeof container.getBoundingClientRect === 'function'
+    ? container.getBoundingClientRect()
+    : { left: 0 };
+  return Number(box.left) || 0;
+}
+
+function tabSetTransform(element, value) {
+  if (!element || !element.style) return;
+  element.style.transform = value || '';
+}
+
+// Clear every inline transform this layer may have written (yield previews and
+// FLIP residue). Called at dragstart so rapid consecutive drags never
+// accumulate a stale offset.
+function resetTabDragMotion() {
+  var tabs = tabElements();
+  for (var index = 0; index < tabs.length; index += 1) tabSetTransform(tabs[index], '');
+  tabDragOriginIndex = null;
+  tabDragYieldStep = 0;
+  tabDragPreviewBoundary = null;
+}
+
+function clearTabYieldTransforms() {
+  var tabs = tabElements();
+  for (var index = 0; index < tabs.length; index += 1) {
+    if (tabElementId(tabs[index]) !== tabDragFromId) tabSetTransform(tabs[index], '');
+  }
+}
+
+// One slot = tab width + the strip's inter-tab gap.
+function computeTabYieldStep(draggedElement) {
+  var tabs = tabElements();
+  if (!draggedElement || typeof draggedElement.getBoundingClientRect !== 'function') return 0;
+  var rect = draggedElement.getBoundingClientRect();
+  var gap = 0;
+  if (tabs.length > 1) {
+    var first = tabs[0].getBoundingClientRect();
+    var second = tabs[1].getBoundingClientRect();
+    gap = Math.max(0, Number(second.left) - Number(first.right));
+  }
+  return Math.max(0, Number(rect.width) + gap);
+}
+
+// Two visual quantities on the SAME transform: collapse (every tab after the
+// dragged one slides left one slot — the source itself keeps its layout place)
+// plus opening (every remaining tab at/after the pointer boundary slides right
+// one slot). Net transform is -slot / 0 / +slot. Nothing here touches state.
+function previewTabYield(boundary) {
+  if (tabDragFromId === null || tabDragOriginIndex === null) return;
+  if (boundary === tabDragPreviewBoundary) return;
+  tabDragPreviewBoundary = boundary;
+  var order = visibleTabIds();
+  var remaining = [];
+  var tabs = tabElements();
+  for (var index = 0; index < tabs.length; index += 1) {
+    var id = tabElementId(tabs[index]);
+    if (id === null) continue;
+    if (id === tabDragFromId) {
+      tabSetTransform(tabs[index], '');
+      continue;
+    }
+    remaining.push(tabs[index]);
+  }
+  for (var slot = 0; slot < remaining.length; slot += 1) {
+    var remainingId = tabElementId(remaining[slot]);
+    var afterOrigin = order.indexOf(remainingId) > tabDragOriginIndex;
+    var dx = (afterOrigin ? -tabDragYieldStep : 0) + (slot >= boundary ? tabDragYieldStep : 0);
+    tabSetTransform(remaining[slot], dx ? 'translateX(' + dx + 'px)' : '');
+  }
+}
+
+function captureTabLefts() {
+  var tabs = tabElements();
+  var lefts = {};
+  for (var index = 0; index < tabs.length; index += 1) {
+    var id = tabElementId(tabs[index]);
+    if (id === null || typeof tabs[index].getBoundingClientRect !== 'function') continue;
+    lefts[id] = tabs[index].getBoundingClientRect().left;
+  }
+  return lefts;
+}
+
+// Drop settle: every tab that changed place is first put back at its pre-drop
+// X with transitions off, then released, so the 150 ms curve plays from the old
+// geometry to the new one (FLIP). Under reduced motion the CSS disables the
+// transition and the final state lands instantly.
+function settleTabsFrom(before) {
+  var tabs = tabElements();
+  for (var index = 0; index < tabs.length; index += 1) {
+    var id = tabElementId(tabs[index]);
+    if (id === null || !Object.prototype.hasOwnProperty.call(before, id)) continue;
+    var element = tabs[index];
+    if (typeof element.getBoundingClientRect !== 'function') continue;
+    var dx = Number(before[id]) - Number(element.getBoundingClientRect().left);
+    if (!isFinite(dx) || Math.abs(dx) < 0.5) continue;
+    element.style.transition = 'none';
+    element.style.transform = 'translateX(' + dx + 'px)';
+    // Force the browser to read the inverse position before releasing it.
+    void element.getBoundingClientRect();
+    element.style.transition = '';
+    element.style.transform = '';
+  }
+}
+
+// The drop boundary is expressed ONLY by the neighbours' displacement; the
+// computed index is still remembered for the drop itself.
+function updateTabDropTarget(index) {
+  var clamped = tabDragFromId === null ? index : clampTabInsertIndex(index, tabDragFromId);
+  tabDragPendingIndex = clamped;
+  previewTabYield(clamped);
+}
+
+function clearTabDropTarget() {
+  tabDragPendingIndex = null;
+}
+
+function clearTabDragging() {
+  var tabs = tabElements();
+  for (var index = 0; index < tabs.length; index += 1) {
+    if (tabs[index].classList && tabs[index].classList.remove) tabs[index].classList.remove('is-dragging');
+  }
+  tabDragFromId = null;
+}
+
+// Move the dragged tab to boundary "targetIndex" of the visible order, persist
+// the new order and re-render. Returns true when the order actually moved.
+function moveStripTab(draggedId, targetIndex) {
+  if (draggedId === null || targetIndex === null) return false;
+  var order = visibleTabIds();
+  var from = order.indexOf(draggedId);
+  if (from === -1) return false;
+  var next = order.slice();
+  next.splice(from, 1);
+  var to = Math.max(0, Math.min(targetIndex, order.length));
+  // Removing the source shifts boundaries to its right by one.
+  if (from < to) to -= 1;
+  var dragged = tabForId(draggedId);
+  var floor = dragged && dragged.pinned ? 0 : pinnedTabCount();
+  if (to < floor) to = floor;
+  if (to === from) return false;
+  next.splice(to, 0, draggedId);
+  if (!applyTabOrder(next)) return false;
+  persistTabOrder();
+  renderTabs();
+  return true;
+}
+
+function isTabCloseTarget(target) {
+  return Boolean(closestWithAttribute(target, 'data-tab-close'));
+}
+
+function handleTabDragStart(event) {
+  if (!tabDragEnabled()) return;
+  var target = event && event.target;
+  if (isTabCloseTarget(target)) {
+    if (event && typeof event.preventDefault === 'function') event.preventDefault();
+    return;
+  }
+  var draggedElement = closestWithAttribute(target, 'data-tab-id');
+  var draggedId = tabElementId(draggedElement);
+  if (draggedId === null) return;
+  resetTabDragMotion();
+  tabDragFromId = draggedId;
+  tabDragOriginIndex = visibleTabIds().indexOf(draggedId);
+  tabDragYieldStep = computeTabYieldStep(draggedElement);
+  if (draggedElement.classList && draggedElement.classList.add) draggedElement.classList.add('is-dragging');
+  var transfer = event && event.dataTransfer;
+  if (transfer) {
+    try {
+      transfer.effectAllowed = 'move';
+      transfer.setData('text/plain', String(draggedId));
+    } catch (error) {
+      /* some embedders expose a read-only DataTransfer; the id is in memory */
+    }
+  }
+  var remainingCount = Math.max(0, tabElements().length - 1);
+  updateTabDropTarget(Math.min(tabDragOriginIndex, remainingCount));
+}
+
+// Chromium only establishes a drop target once dragenter is canceled, and it
+// honors that cancel from the bubble phase (a capture-phase listener on the
+// container is not enough — verified in a real Chromium session). Without this
+// the strip shows the preview line but the drop never fires.
+function handleTabDragEnter(event) {
+  if (!tabDragEnabled() || tabDragFromId === null) return;
+  if (event && typeof event.preventDefault === 'function') event.preventDefault();
+  if (event && event.dataTransfer) {
+    try {
+      event.dataTransfer.dropEffect = 'move';
+    } catch (error) {
+      /* effect hint only */
+    }
+  }
+}
+
+function handleTabDragOver(event) {
+  if (!tabDragEnabled() || tabDragFromId === null) return;
+  if (event && typeof event.preventDefault === 'function') event.preventDefault();
+  if (event && event.dataTransfer) {
+    try {
+      event.dataTransfer.dropEffect = 'move';
+    } catch (error) {
+      /* effect hint only */
+    }
+  }
+  if (!tabElements().length) return;
+  updateTabDropTarget(insertionTabIndexFor(tabEventClientX(event)));
+}
+
+function handleTabDrop(event) {
+  if (!tabDragEnabled() || tabDragFromId === null) return;
+  if (event && typeof event.preventDefault === 'function') event.preventDefault();
+  var boundary = tabDragPendingIndex === null
+    ? insertionTabIndexFor(tabEventClientX(event))
+    : tabDragPendingIndex;
+  var draggedId = tabDragFromId;
+  var from = tabDragOriginIndex === null ? visibleTabIds().indexOf(draggedId) : tabDragOriginIndex;
+  // The boundary indexes the REMAINING row; moveStripTab expects the full row.
+  var targetIndex = boundary <= from ? boundary : boundary + 1;
+  var before = captureTabLefts();
+  clearTabDropTarget();
+  clearTabYieldTransforms();
+  clearTabDragging();
+  if (moveStripTab(draggedId, targetIndex)) settleTabsFrom(before);
+  resetTabDragMotion();
+}
+
+function handleTabDragEnd() {
+  clearTabDropTarget();
+  clearTabYieldTransforms();
+  clearTabDragging();
+  resetTabDragMotion();
+}
+
+function handleTabDragLeave(event) {
+  // Leaving the container itself (not a child) returns the yielded neighbours.
+  var related = event && event.relatedTarget;
+  if (related && elements.tabsContainer && typeof elements.tabsContainer.contains === 'function' &&
+      elements.tabsContainer.contains(related)) return;
+  clearTabDropTarget();
+  clearTabYieldTransforms();
+  tabDragPreviewBoundary = null;
+}
+
+// Re-stamp "draggable" when the viewport crosses the strip breakpoint instead
+// of leaving the arming state from the other screen behind.
+function refreshTabDraggable() {
+  var enabled = tabDragEnabled();
+  var tabs = tabElements();
+  for (var index = 0; index < tabs.length; index += 1) {
+    if (typeof tabs[index].setAttribute === 'function') {
+      tabs[index].setAttribute('draggable', enabled ? 'true' : 'false');
+    }
+  }
+  if (!enabled) {
+    clearTabDropTarget();
+    clearTabDragging();
+    resetTabDragMotion();
+  }
+}
+
+function bindTabDrag() {
+  if (tabDragBound) return;
+  var container = elements.tabsContainer;
+  if (!container || typeof container.addEventListener !== 'function') return;
+  container.addEventListener('dragstart', handleTabDragStart, true);
+  container.addEventListener('dragenter', handleTabDragEnter, false);
+  container.addEventListener('dragover', handleTabDragOver, true);
+  container.addEventListener('drop', handleTabDrop, true);
+  container.addEventListener('dragend', handleTabDragEnd, true);
+  container.addEventListener('dragleave', handleTabDragLeave, true);
+  tabDragBound = true;
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('resize', refreshTabDraggable);
+  }
+  try {
+    if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+      var query = window.matchMedia(TAB_DRAG_NARROW_QUERY);
+      if (query && typeof query.addEventListener === 'function') {
+        query.addEventListener('change', refreshTabDraggable);
+      } else if (query && typeof query.addListener === 'function') {
+        query.addListener(refreshTabDraggable);
+      }
+    }
+  } catch (error) {
+    /* resize listener above still covers breakpoint changes */
+  }
 }
 
 // --- Mobile tab switcher panel ---------------------------------------------
@@ -9818,6 +10362,7 @@ async function initialize() {
   loadBookmarks();
   loadHistory();
   loadIdentityGrants();
+  bindTabDrag();
   renderBookmarkStar();
   if (elements.viewport) {
     elements.viewport.addEventListener('click', function (event) {
